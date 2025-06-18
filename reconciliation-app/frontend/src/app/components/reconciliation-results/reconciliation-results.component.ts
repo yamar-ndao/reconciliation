@@ -1,0 +1,2139 @@
+import { Component, Input, OnInit, ChangeDetectorRef, OnChanges, SimpleChanges } from '@angular/core';
+import { ReconciliationResponse, Match } from '../../models/reconciliation-response.model';
+import { AppStateService } from '../../services/app-state.service';
+import { Router } from '@angular/router';
+import { ReconciliationService } from '../../services/reconciliation.service';
+import * as ExcelJS from 'exceljs';
+import { saveAs } from 'file-saver';
+import { HttpClient } from '@angular/common/http';
+
+interface ApiError {
+    error?: {
+        message?: string;
+        details?: string;
+    };
+    message?: string;
+}
+
+@Component({
+    selector: 'app-reconciliation-results',
+    template: `
+        <div class="results-container">
+            <div class="service-selector">
+                <h3>🔍 Sélection du service</h3>
+                <div class="service-selector-content">
+                    <select [(ngModel)]="selectedService" class="service-select">
+                        <option value="">Tous les services</option>
+                        <option *ngFor="let service of getServiceTotalsArray()" [value]="service.name">
+                            {{service.name}}
+                        </option>
+                    </select>
+                    <button (click)="applyServiceFilter()" class="reconcile-button">
+                        Filtrer
+                    </button>
+                </div>
+            </div>
+            <div class="summary-section">
+                <h3>📊 Résumé de la réconciliation</h3>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-value">{{filteredMatches.length || 0}}</div>
+                        <div class="stat-label">Nombres de Transactions</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">{{filteredMatches.length || 0}}</div>
+                        <div class="stat-label">Transactions correspondantes</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">{{filteredBoOnly.length || 0}}</div>
+                        <div class="stat-label">Transactions non correspondantes BO</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">{{filteredPartnerOnly.length || 0}}</div>
+                        <div class="stat-label">Transactions non correspondantes Partenaire</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="results-tabs">
+                <div class="tab-buttons">
+                    <button 
+                        [class.active]="activeTab === 'matches'"
+                        (click)="setActiveTab('matches')">
+                        ✅ Correspondances ({{filteredMatches.length || 0}})
+                    </button>
+                    <button 
+                        [class.active]="activeTab === 'boOnly'"
+                        (click)="setActiveTab('boOnly')">
+                        ⚠️ Non correspondants BO ({{filteredBoOnly.length || 0}})
+                    </button>
+                    <button 
+                        [class.active]="activeTab === 'partnerOnly'"
+                        (click)="setActiveTab('partnerOnly')">
+                        ⚠️ Non correspondants Partenaire ({{filteredPartnerOnly.length || 0}})
+                    </button>
+                    <button 
+                        [class.active]="activeTab === 'agencySummary'"
+                        (click)="setActiveTab('agencySummary')">
+                        📊 Résumé par Agence
+                    </button>
+                </div>
+
+                <div class="tab-content">
+                    <!-- Résumé par Agence -->
+                    <div *ngIf="activeTab === 'agencySummary'" class="agency-summary-section">
+                        <div class="summary-header">
+                            <h3>Résumé des volumes par Agence et Service</h3>
+                            <div class="summary-actions">
+                                <div class="date-selector">
+                                    <label>Date:</label>
+                                    <input type="date" [(ngModel)]="selectedDate">
+                                </div>
+                                <button (click)="saveAgencySummary()" class="save-button">
+                                    💾 Sauvegarder
+                                </button>
+                                <button (click)="exportResults()" class="export-button">
+                                    📥 Exporter le résumé
+                                </button>
+                            </div>
+                            <div class="summary-stats">
+                                <div class="stat-item">
+                                    <span class="label">Nombres de Transactions:</span>
+                                    <span class="value">{{getTotalRecords() | number:'1.0-0'}}</span>
+                                </div>
+                                <div class="stat-item">
+                                    <span class="label">Volume total:</span>
+                                    <span class="value">{{getTotalVolume() | number:'1.0-0'}}</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="summary-tables-row">
+                            <div class="summary-table-agency">
+                                <h4>Volume par agence</h4>
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>Agence</th>
+                                            <th>Volume total</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr *ngFor="let agency of getAgencyTotalsArray()">
+                                            <td>{{agency.name}}</td>
+                                            <td>{{agency.volume | number:'1.0-0'}}</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div class="summary-table-service">
+                                <h4>Volume par service</h4>
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>Service</th>
+                                            <th>Volume total</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr *ngFor="let service of getServiceTotalsArray()">
+                                            <td>{{service.name}}</td>
+                                            <td>{{service.volume | number:'1.0-0'}}</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="summary-table">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Agence</th>
+                                        <th>Service</th>
+                                        <th>Pays</th>
+                                        <th>Volume Total</th>
+                                        <th>Nombres de Transactions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr *ngFor="let summary of getPagedAgencySummary()">
+                                        <td>{{summary.agency}}</td>
+                                        <td>{{summary.service}}</td>
+                                        <td>{{summary.country}}</td>
+                                        <td class="volume-cell">{{summary.totalVolume | number:'1.0-0'}}</td>
+                                        <td class="count-cell">{{summary.recordCount | number:'1.0-0'}}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="pagination-controls">
+                            <button (click)="prevAgencyPage()" [disabled]="agencyPage === 1">Précédent</button>
+                            <span>Page {{agencyPage}} / {{getTotalAgencyPages()}}</span>
+                            <button (click)="nextAgencyPage()" [disabled]="agencyPage === getTotalAgencyPages()">Suivant</button>
+                        </div>
+                    </div>
+
+                    <!-- Correspondances avec pagination -->
+                    <div *ngIf="activeTab === 'matches'" class="matches-section">
+                        <div class="search-section">
+                            <input 
+                                type="text" 
+                                [(ngModel)]="searchKey" 
+                                (input)="onSearch()"
+                                placeholder="Rechercher par clé..."
+                                class="search-input"
+                            >
+                            <button (click)="handleExport()" class="export-button">
+                                📥 Exporter les correspondances
+                            </button>
+                        </div>
+                        <div class="volume-summary">
+                            <h4>📊 Résumé des volumes</h4>
+                            <div class="volume-grid">
+                                <div class="volume-card">
+                                    <div class="volume-label">Volume total BO</div>
+                                    <div class="volume-value">{{calculateTotalVolume('bo') | number:'1.0-0'}}</div>
+                                </div>
+                                <div class="volume-card">
+                                    <div class="volume-label">Volume total Partenaire</div>
+                                    <div class="volume-value">{{calculateTotalVolume('partner') | number:'1.0-0'}}</div>
+                                </div>
+                                <div class="volume-card">
+                                    <div class="volume-label">Différence totale</div>
+                                    <div class="volume-value" [class.positive]="calculateVolumeDifference() > 0" [class.negative]="calculateVolumeDifference() < 0">
+                                        {{calculateVolumeDifference() | number:'1.0-0'}}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="pagination-controls">
+                            <button (click)="prevPage('matches')" [disabled]="matchesPage === 1">Précédent</button>
+                            <span>Page {{matchesPage}} / {{getTotalPages('matches')}}</span>
+                            <button (click)="nextPage('matches')" [disabled]="matchesPage === getTotalPages('matches')">Suivant</button>
+                        </div>
+                        <div class="match-card" *ngFor="let match of getPagedMatches()">
+                            <div class="match-header">
+                                <span class="key">Clé: {{match.key}}</span>
+                                <span class="status" [class.has-differences]="hasDifferences(match)">
+                                    {{hasDifferences(match) ? '⚠️ Différences détectées' : '✅ Correspondance parfaite'}}
+                                </span>
+                            </div>
+                            <div class="match-content">
+                                <div class="data-column">
+                                    <h4>🏢 BO</h4>
+                                    <div class="agency-service-info refined-info">
+                                        <div class="info-row">
+                                            <span class="label">Agence:</span>
+                                            <span class="value">{{getBoAgencyAndService(match).agency}}</span>
+                                        </div>
+                                        <div class="info-row">
+                                            <span class="label">Service:</span>
+                                            <span class="value">{{getBoAgencyAndService(match).service}}</span>
+                                        </div>
+                                        <div class="info-row">
+                                            <span class="label">Pays:</span>
+                                            <span class="value">{{getBoAgencyAndService(match).country}}</span>
+                                        </div>
+                                    </div>
+                                    <div class="data-grid refined-grid">
+                                        <div class="data-row" *ngFor="let key of getBoKeys(match)">
+                                            <span class="label">{{key}}:</span>
+                                            <span class="value">{{match.boData[key]}}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="data-column">
+                                    <h4>🤝 Partenaire</h4>
+                                    <div class="data-grid refined-grid">
+                                        <div class="data-row" *ngFor="let key of getPartnerKeys(match)">
+                                            <span class="label">{{key}}:</span>
+                                            <span class="value">{{match.partnerData[key]}}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="differences-section" *ngIf="hasDifferences(match)">
+                                <h4>📝 Différences détectées</h4>
+                                <div class="difference-card" *ngFor="let diff of match.differences">
+                                    <div class="diff-header">
+                                        <span class="column">{{diff.boColumn}} ↔ {{diff.partnerColumn}}</span>
+                                    </div>
+                                    <div class="diff-values">
+                                        <div class="value bo">
+                                            <span class="label">BO:</span>
+                                            <span class="content">{{diff.boValue}}</span>
+                                        </div>
+                                        <div class="value partner">
+                                            <span class="label">Partenaire:</span>
+                                            <span class="content">{{diff.partnerValue}}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Non correspondants BO avec pagination -->
+                    <div *ngIf="activeTab === 'boOnly'" class="bo-only-section">
+                        <div class="search-section">
+                            <input 
+                                type="text" 
+                                [(ngModel)]="searchKey" 
+                                (input)="onSearch()"
+                                placeholder="Rechercher par clé..."
+                                class="search-input"
+                            >
+                            <button (click)="exportResults()" class="export-button">
+                                📥 Exporter les non correspondants BO
+                            </button>
+                        </div>
+                        <div class="volume-summary">
+                            <h4>📊 Résumé des volumes</h4>
+                            <div class="volume-grid">
+                                <div class="volume-card">
+                                    <div class="volume-label">Volume total BO</div>
+                                    <div class="volume-value">{{calculateTotalVolumeBoOnly() | number:'1.0-0'}}</div>
+                                </div>
+                                <div class="volume-card">
+                                    <div class="volume-label">Nombre de Transactions</div>
+                                    <div class="volume-value">{{filteredBoOnly.length}}</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="pagination-controls">
+                            <button (click)="prevPage('boOnly')" [disabled]="boOnlyPage === 1">Précédent</button>
+                            <span>Page {{boOnlyPage}} / {{getTotalPages('boOnly')}}</span>
+                            <button (click)="nextPage('boOnly')" [disabled]="boOnlyPage === getTotalPages('boOnly')">Suivant</button>
+                        </div>
+                        <div class="unmatched-card" *ngFor="let record of getPagedBoOnly()">
+                            <div class="data-grid">
+                                <div class="info-row">
+                                    <span class="label">Volume:</span>
+                                    <span class="value">{{getBoOnlyAgencyAndService(record).volume | number:'1.0-0'}}</span>
+                                </div>
+                                <div class="info-row">
+                                    <span class="label">Date:</span>
+                                    <span class="value">{{getBoOnlyAgencyAndService(record).date}}</span>
+                                </div>
+                                <div class="data-row" *ngFor="let key of getRecordKeys(record)">
+                                    <span class="label">{{key}}:</span>
+                                    <span class="value">{{record[key]}}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Non correspondants Partenaire avec pagination -->
+                    <div *ngIf="activeTab === 'partnerOnly'" class="partner-only-section">
+                        <div class="search-section">
+                            <input 
+                                type="text" 
+                                [(ngModel)]="searchKey" 
+                                (input)="onSearch()"
+                                placeholder="Rechercher par clé..."
+                                class="search-input"
+                            >
+                            <button (click)="exportResults()" class="export-button">
+                                📥 Exporter les non correspondants Partenaire
+                            </button>
+                        </div>
+                        <div class="volume-summary">
+                            <h4>📊 Résumé des volumes</h4>
+                            <div class="volume-grid">
+                                <div class="volume-card">
+                                    <div class="volume-label">Volume total Partenaire</div>
+                                    <div class="volume-value">{{calculateTotalVolumePartnerOnly() | number:'1.0-0'}}</div>
+                                </div>
+                                <div class="volume-card">
+                                    <div class="volume-label">Nombre de Transactions</div>
+                                    <div class="volume-value">{{filteredPartnerOnly.length}}</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="pagination-controls">
+                            <button (click)="prevPage('partnerOnly')" [disabled]="partnerOnlyPage === 1">Précédent</button>
+                            <span>Page {{partnerOnlyPage}} / {{getTotalPages('partnerOnly')}}</span>
+                            <button (click)="nextPage('partnerOnly')" [disabled]="partnerOnlyPage === getTotalPages('partnerOnly')">Suivant</button>
+                        </div>
+                        <div class="unmatched-card" *ngFor="let record of getPagedPartnerOnly()">
+                            <div class="data-grid">
+                                <div class="info-row">
+                                    <span class="label">Volume:</span>
+                                    <span class="value">{{getPartnerOnlyVolume(record) | number:'1.0-0'}}</span>
+                                </div>
+                                <div class="info-row">
+                                    <span class="label">Date:</span>
+                                    <span class="value">{{getPartnerOnlyDate(record)}}</span>
+                                </div>
+                                <div class="data-row" *ngFor="let key of getRecordKeys(record)">
+                                    <span class="label">{{key}}:</span>
+                                    <span class="value">{{record[key]}}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="action-buttons">
+                <button class="export-btn" (click)="exportResults()">
+                    📥 Exporter les résultats
+                </button>
+                <button class="new-reconciliation-btn" (click)="nouvelleReconciliation()">
+                    🔄 Nouvelle réconciliation
+                </button>
+                <button class="stats-btn" (click)="goToStats()">
+                    📊 Voir les statistiques
+                </button>
+            </div>
+
+            <div *ngIf="isExporting" class="export-progress">
+                <div class="progress-bar">
+                    <div class="progress" [style.width.%]="exportProgress"></div>
+                </div>
+                <div class="progress-text">Export en cours... {{exportProgress}}%</div>
+            </div>
+        </div>
+    `,
+    styles: [`
+        .results-container {
+            padding: 20px;
+        }
+
+        .summary-section {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .stat-value {
+            font-size: 2em;
+            font-weight: bold;
+            color: #2196F3;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            color: #666;
+            font-size: 0.9em;
+        }
+
+        .results-tabs {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .tab-buttons {
+            display: flex;
+            background: #f8f9fa;
+            border-bottom: 1px solid #dee2e6;
+        }
+
+        .tab-buttons button {
+            padding: 15px 25px;
+            border: none;
+            background: none;
+            cursor: pointer;
+            font-size: 1em;
+            color: #666;
+            transition: all 0.3s ease;
+        }
+
+        .tab-buttons button.active {
+            background: #2196F3;
+            color: white;
+        }
+
+        .tab-content {
+            padding: 20px;
+            max-height: 600px;
+            overflow-y: auto;
+        }
+
+        .matches-section, .unmatched-section {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .match-card, .unmatched-card {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 15px;
+            border: 1px solid #dee2e6;
+        }
+
+        .match-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #dee2e6;
+        }
+
+        .key {
+            font-weight: bold;
+            color: #2196F3;
+        }
+
+        .status {
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+
+        .status.has-differences {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .match-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .data-column h4 {
+            margin: 0 0 10px;
+            color: #2196F3;
+        }
+
+        .data-grid {
+            display: grid;
+            gap: 8px;
+        }
+
+        .data-row {
+            display: grid;
+            grid-template-columns: 150px 1fr;
+            gap: 10px;
+        }
+
+        .label {
+            color: #666;
+            font-weight: 500;
+        }
+
+        .differences-section {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #dee2e6;
+        }
+
+        .differences-section h4 {
+            margin: 0 0 10px;
+            color: #dc3545;
+        }
+
+        .difference-card {
+            background: #fff3cd;
+            border-radius: 4px;
+            padding: 10px;
+            margin-bottom: 10px;
+        }
+
+        .diff-header {
+            font-weight: bold;
+            margin-bottom: 5px;
+            color: #856404;
+        }
+
+        .diff-values {
+            display: grid;
+            gap: 5px;
+        }
+
+        .value {
+            display: grid;
+            grid-template-columns: 80px 1fr;
+            gap: 10px;
+        }
+
+        .value .label {
+            font-weight: bold;
+        }
+
+        .export-section {
+            margin-top: 30px;
+            text-align: center;
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+        }
+
+        .export-btn, .new-reco-btn {
+            padding: 15px 30px;
+            border-radius: 8px;
+            font-size: 1.1em;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .export-btn {
+            background: linear-gradient(45deg, #2196F3, #1976D2);
+            color: white;
+            border: none;
+        }
+
+        .export-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(33, 150, 243, 0.3);
+        }
+
+        .new-reco-btn {
+            background: #f5f5f5;
+            color: #1976D2;
+            border: 1px solid #1976D2;
+        }
+
+        .new-reco-btn:hover {
+            background: #1976D2;
+            color: white;
+        }
+
+        .pagination-controls {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .volume-summary {
+            background: #fff;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .volume-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin-top: 10px;
+        }
+
+        .volume-card {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 6px;
+            text-align: center;
+        }
+
+        .volume-label {
+            color: #666;
+            font-size: 0.9em;
+            margin-bottom: 5px;
+        }
+
+        .volume-value {
+            font-size: 1.2em;
+            font-weight: bold;
+            color: #2196F3;
+        }
+
+        .volume-value.positive {
+            color: #4CAF50;
+        }
+
+        .volume-value.negative {
+            color: #f44336;
+        }
+
+        .search-section {
+            margin-bottom: 20px;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 10px 15px;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            font-size: 1em;
+            transition: all 0.3s ease;
+        }
+
+        .search-input:focus {
+            outline: none;
+            border-color: #2196F3;
+            box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.2);
+        }
+
+        .agency-service-info {
+            background: #e3f2fd;
+            border-radius: 6px;
+            padding: 10px;
+            margin-bottom: 15px;
+        }
+
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+        }
+
+        .info-row:last-child {
+            margin-bottom: 0;
+        }
+
+        .info-row .label {
+            font-weight: bold;
+            color: #1976D2;
+        }
+
+        .info-row .value {
+            color: #333;
+        }
+
+        .agency-summary-section {
+            padding: 20px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .summary-header {
+            margin-bottom: 20px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #dee2e6;
+        }
+
+        .summary-header h3 {
+            color: #1976D2;
+            margin: 0 0 15px 0;
+            font-size: 1.4em;
+        }
+
+        .summary-actions {
+            margin-bottom: 15px;
+            text-align: right;
+        }
+
+        .summary-stats {
+            display: flex;
+            gap: 30px;
+            margin-top: 15px;
+        }
+
+        .stat-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .stat-item .label {
+            color: #666;
+            font-weight: 500;
+        }
+
+        .stat-item .value {
+            font-size: 1.2em;
+            font-weight: bold;
+            color: #1976D2;
+        }
+
+        .summary-table {
+            margin: 20px 0;
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+        }
+
+        th {
+            background: #f8f9fa;
+            padding: 12px 15px;
+            text-align: left;
+            font-weight: 600;
+            color: #495057;
+            border-bottom: 2px solid #dee2e6;
+        }
+
+        td {
+            padding: 12px 15px;
+            border-bottom: 1px solid #dee2e6;
+        }
+
+        .volume-cell {
+            text-align: right;
+            font-weight: 500;
+            color: #1976D2;
+        }
+
+        .count-cell {
+            text-align: center;
+            font-weight: 500;
+        }
+
+        tbody tr:hover {
+            background-color: #f8f9fa;
+        }
+
+        .pagination-controls {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .pagination-controls button {
+            padding: 8px 16px;
+            border: 1px solid #dee2e6;
+            background: white;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .pagination-controls button:hover:not(:disabled) {
+            background: #1976D2;
+            color: white;
+            border-color: #1976D2;
+        }
+
+        .pagination-controls button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .pagination-controls span {
+            color: #666;
+        }
+
+        .summary-tables-row {
+            display: flex;
+            gap: 40px;
+            margin-bottom: 20px;
+        }
+        .summary-table-agency, .summary-table-service {
+            flex: 1;
+        }
+        .summary-table-agency table, .summary-table-service table {
+            width: 100%;
+            border-collapse: collapse;
+            background: #f8f9fa;
+        }
+        .summary-table-agency th, .summary-table-service th {
+            background: #e3f2fd;
+            padding: 8px 10px;
+            text-align: left;
+            font-weight: 600;
+            color: #1976D2;
+            border-bottom: 2px solid #dee2e6;
+        }
+        .summary-table-agency td, .summary-table-service td {
+            padding: 8px 10px;
+            border-bottom: 1px solid #dee2e6;
+        }
+
+        .non-matching-summary {
+            margin-top: 20px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .non-matching-section {
+            background: white;
+            border-radius: 8px;
+            padding: 15px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .non-matching-section h4 {
+            color: #1976D2;
+            margin: 0 0 15px 0;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #dee2e6;
+        }
+
+        .non-matching-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .non-matching-item {
+            background: #f8f9fa;
+            border-radius: 6px;
+            padding: 10px;
+            border: 1px solid #dee2e6;
+        }
+
+        .item-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+
+        .item-details {
+            font-size: 0.9em;
+            color: #666;
+        }
+
+        .detail-item {
+            display: block;
+            margin: 2px 0;
+        }
+
+        .view-more {
+            text-align: center;
+            margin-top: 10px;
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .view-more button {
+            background: #e3f2fd;
+            color: #1976D2;
+            border: 1px solid #1976D2;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .view-more button:hover {
+            background: #1976D2;
+            color: white;
+        }
+
+        .view-more .export-btn {
+            background: #4CAF50;
+            color: white;
+            border-color: #4CAF50;
+        }
+
+        .view-more .export-btn:hover {
+            background: #45a049;
+            border-color: #45a049;
+        }
+
+        .agency {
+            color: #1976D2;
+            font-weight: 500;
+        }
+
+        .service {
+            color: #666;
+        }
+
+        .volume {
+            color: #4CAF50;
+            font-weight: 500;
+        }
+
+        .date {
+            color: #666;
+            font-size: 0.9em;
+        }
+
+        .service-selector {
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .service-selector h3 {
+            margin: 0 0 1rem 0;
+            color: #2c3e50;
+        }
+
+        .service-selector-content {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+        }
+
+        .service-select {
+            flex: 1;
+            padding: 0.5rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 1rem;
+            background-color: white;
+        }
+
+        .reconcile-button {
+            padding: 0.5rem 1rem;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: background-color 0.2s;
+        }
+
+        .reconcile-button:hover {
+            background-color: #0056b3;
+        }
+
+        .save-button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: background-color 0.3s;
+        }
+
+        .save-button:hover {
+            background-color: #45a049;
+        }
+
+        .save-button:active {
+            background-color: #3d8b40;
+        }
+
+        .refined-info {
+            background: #f7f7f7;
+            border-radius: 6px;
+            padding: 8px 12px;
+            margin-bottom: 8px;
+            display: flex;
+            gap: 24px;
+            font-weight: 500;
+        }
+        .refined-info .info-row {
+            margin-bottom: 0;
+        }
+        .refined-grid .data-row {
+            padding: 2px 0;
+        }
+
+        .date-selector {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-right: 15px;
+        }
+
+        .date-selector label {
+            font-weight: 500;
+            color: #666;
+        }
+
+        .date-selector input {
+            padding: 8px;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+        }
+
+        .summary-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-top: 20px;
+        }
+
+        .export-btn, .new-reconciliation-btn, .stats-btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1em;
+            transition: all 0.3s ease;
+        }
+
+        .export-btn {
+            background: #2196F3;
+            color: white;
+        }
+
+        .export-btn:hover {
+            background: #1976D2;
+        }
+
+        .new-reconciliation-btn {
+            background: #4CAF50;
+            color: white;
+        }
+
+        .new-reconciliation-btn:hover {
+            background: #388E3C;
+        }
+
+        .stats-btn {
+            background: #FF9800;
+            color: white;
+        }
+
+        .stats-btn:hover {
+            background: #F57C00;
+        }
+
+        .export-btn:disabled, .new-reconciliation-btn:disabled, .stats-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .export-button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-left: 10px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            transition: background-color 0.3s;
+        }
+
+        .export-button:hover {
+            background-color: #45a049;
+        }
+
+        .export-button:active {
+            background-color: #3d8b40;
+        }
+
+        .search-section {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .export-progress {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            z-index: 1000;
+            text-align: center;
+        }
+
+        .progress-bar {
+            width: 300px;
+            height: 20px;
+            background-color: #f0f0f0;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-bottom: 10px;
+        }
+
+        .progress {
+            height: 100%;
+            background-color: #4CAF50;
+            transition: width 0.3s ease;
+        }
+
+        .progress-text {
+            font-size: 14px;
+            color: #666;
+        }
+    `]
+})
+export class ReconciliationResultsComponent implements OnInit, OnChanges {
+    @Input() response!: ReconciliationResponse;
+    activeTab: 'matches' | 'boOnly' | 'partnerOnly' | 'agencySummary' = 'matches';
+    matchesPage = 1;
+    boOnlyPage = 1;
+    partnerOnlyPage = 1;
+    readonly pageSize = 5;
+    searchKey: string = '';
+    filteredMatches: Match[] = [];
+    filteredBoOnly: Record<string, string>[] = [];
+    filteredPartnerOnly: Record<string, string>[] = [];
+    agencyPage = 1;
+    readonly agencyPageSize = 10;
+    selectedService: string = '';
+    selectedDate: string = new Date().toISOString().split('T')[0];
+    isSaving: boolean = false;
+    exportProgress = 0;
+    isExporting = false;
+
+    constructor(
+        private cdr: ChangeDetectorRef, 
+        private appStateService: AppStateService, 
+        private router: Router,
+        private reconciliationService: ReconciliationService,
+        private http: HttpClient
+    ) {}
+
+    ngOnInit() {
+        this.initializeFilteredData();
+    }
+
+    ngOnChanges(changes: SimpleChanges) {
+        if (changes['response']) {
+            this.matchesPage = 1;
+            this.boOnlyPage = 1;
+            this.partnerOnlyPage = 1;
+            this.initializeFilteredData();
+            this.cdr.detectChanges();
+        }
+    }
+
+    private initializeFilteredData() {
+        this.filteredMatches = this.getFilteredMatches();
+        this.filteredBoOnly = this.getFilteredBoOnly();
+        this.filteredPartnerOnly = this.getFilteredPartnerOnly();
+    }
+
+    onSearch() {
+        const searchTerm = this.searchKey.toLowerCase();
+        
+        if (this.activeTab === 'matches') {
+            this.filteredMatches = (this.response?.matches || []).filter(match => 
+                match.key.toLowerCase().includes(searchTerm)
+            );
+            this.matchesPage = 1;
+        } else if (this.activeTab === 'boOnly') {
+            this.filteredBoOnly = (this.response?.boOnly || []).filter(record => 
+                Object.values(record).some(value => 
+                    value.toString().toLowerCase().includes(searchTerm)
+                )
+            );
+            this.boOnlyPage = 1;
+        } else if (this.activeTab === 'partnerOnly') {
+            this.filteredPartnerOnly = (this.response?.partnerOnly || []).filter(record => 
+                Object.values(record).some(value => 
+                    value.toString().toLowerCase().includes(searchTerm)
+                )
+            );
+            this.partnerOnlyPage = 1;
+        }
+        
+        this.cdr.detectChanges();
+    }
+
+    // Modifier les méthodes de pagination pour utiliser les données filtrées
+    getPagedMatches(): Match[] {
+        const start = (this.matchesPage - 1) * this.pageSize;
+        return this.filteredMatches.slice(start, start + this.pageSize);
+    }
+
+    getPagedBoOnly(): Record<string, string>[] {
+        const start = (this.boOnlyPage - 1) * this.pageSize;
+        return this.filteredBoOnly.slice(start, start + this.pageSize);
+    }
+
+    getPagedPartnerOnly(): Record<string, string>[] {
+        const start = (this.partnerOnlyPage - 1) * this.pageSize;
+        return this.filteredPartnerOnly.slice(start, start + this.pageSize);
+    }
+
+    getTotalPages(type: 'matches' | 'boOnly' | 'partnerOnly') {
+        const data = type === 'matches' 
+            ? this.filteredMatches 
+            : type === 'boOnly' 
+                ? this.filteredBoOnly 
+                : this.filteredPartnerOnly;
+        return Math.max(1, Math.ceil(data.length / this.pageSize));
+    }
+
+    setActiveTab(tab: 'matches' | 'boOnly' | 'partnerOnly' | 'agencySummary') {
+        this.activeTab = tab;
+        this.agencyPage = 1;
+        this.cdr.detectChanges();
+    }
+
+    nextPage(type: 'matches' | 'boOnly' | 'partnerOnly') {
+        if (type === 'matches' && this.matchesPage < this.getTotalPages('matches')) this.matchesPage++;
+        if (type === 'boOnly' && this.boOnlyPage < this.getTotalPages('boOnly')) this.boOnlyPage++;
+        if (type === 'partnerOnly' && this.partnerOnlyPage < this.getTotalPages('partnerOnly')) this.partnerOnlyPage++;
+        this.cdr.detectChanges();
+    }
+
+    prevPage(type: 'matches' | 'boOnly' | 'partnerOnly') {
+        if (type === 'matches' && this.matchesPage > 1) this.matchesPage--;
+        if (type === 'boOnly' && this.boOnlyPage > 1) this.boOnlyPage--;
+        if (type === 'partnerOnly' && this.partnerOnlyPage > 1) this.partnerOnlyPage--;
+        this.cdr.detectChanges();
+    }
+
+    getBoKeys(match: Match): string[] {
+        return Object.keys(match.boData);
+    }
+
+    getPartnerKeys(match: Match): string[] {
+        return Object.keys(match.partnerData);
+    }
+
+    getRecordKeys(record: Record<string, string>): string[] {
+        return Object.keys(record);
+    }
+
+    hasDifferences(match: Match): boolean {
+        return match.differences && match.differences.length > 0;
+    }
+
+   async exportResults() {
+    console.log('Début de l\'export...');
+    console.log('Onglet actif:', this.activeTab);
+    
+    try {
+        this.isExporting = true;
+        this.exportProgress = 0;
+        this.cdr.detectChanges();
+
+        // Première étape : Génération des fichiers
+        console.log('Début de la génération des fichiers...');
+        const workbooks = await this.generateExcelFile();
+        console.log('Fichiers Excel générés avec succès');
+
+        // Deuxième étape : Téléchargement
+        console.log('Début du téléchargement...');
+        await this.downloadExcelFile(workbooks);
+        console.log('Téléchargement terminé avec succès');
+
+    } catch (error) {
+        console.error('Erreur lors de l\'export:', error);
+    } finally {
+        this.isExporting = false;
+        this.exportProgress = 0;
+        this.cdr.detectChanges();
+    }
+}
+
+private async generateExcelFile(): Promise<ExcelJS.Workbook[]> {
+    const workbooks: ExcelJS.Workbook[] = [];
+    const MAX_ROWS_PER_FILE = 50000;
+
+    if (this.activeTab === 'matches') {
+        console.log('Export des correspondances...');
+        const filteredMatches = this.getFilteredMatches();
+        console.log('Nombre de correspondances à exporter:', filteredMatches.length);
+        
+        if (filteredMatches.length > 0) {
+            // Récupérer toutes les clés des données BO et Partenaire
+            const allBoKeys = new Set<string>();
+            const allPartnerKeys = new Set<string>();
+            
+            filteredMatches.forEach(match => {
+                Object.keys(match.boData).forEach(key => allBoKeys.add(key));
+                Object.keys(match.partnerData).forEach(key => allPartnerKeys.add(key));
+            });
+            
+            const boKeysArray = Array.from(allBoKeys);
+            const partnerKeysArray = Array.from(allPartnerKeys);
+            
+            console.log('Colonnes BO:', boKeysArray);
+            console.log('Colonnes Partenaire:', partnerKeysArray);
+
+            // Calculer le nombre de fichiers nécessaires
+            const totalFiles = Math.ceil(filteredMatches.length / MAX_ROWS_PER_FILE);
+            console.log(`Division en ${totalFiles} fichiers`);
+
+            // Styles Excel
+            const headerStyle = {
+                font: { bold: true, color: { argb: 'FFFFFFFF' } },
+                fill: { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb: 'FF4472C4' } },
+                alignment: { vertical: 'middle' as const, horizontal: 'center' as const },
+                border: {
+                    top: { style: 'thin' as const },
+                    left: { style: 'thin' as const },
+                    bottom: { style: 'thin' as const },
+                    right: { style: 'thin' as const }
+                }
+            };
+
+            const dataStyle = {
+                border: {
+                    top: { style: 'thin' as const },
+                    left: { style: 'thin' as const },
+                    bottom: { style: 'thin' as const },
+                    right: { style: 'thin' as const }
+                }
+            };
+
+            // Créer un fichier pour chaque lot
+            for (let fileIndex = 0; fileIndex < totalFiles; fileIndex++) {
+                console.log(`Création du fichier ${fileIndex + 1}/${totalFiles}`);
+                const workbook = new ExcelJS.Workbook();
+                const worksheet = workbook.addWorksheet(`Correspondances_${fileIndex + 1}`);
+
+                // Définir les colonnes avec des largeurs appropriées
+                const columns = [
+                    { header: 'Clé', key: 'key', width: 20 },
+                    ...boKeysArray.map(k => ({ header: `BO_${k}`, key: `bo_${k}`, width: 15 })),
+                    ...partnerKeysArray.map(k => ({ header: `PARTENAIRE_${k}`, key: `partner_${k}`, width: 15 }))
+                ];
+
+                worksheet.columns = columns;
+
+                // Ajouter la ligne d'en-tête manuellement
+                const headerRow = worksheet.getRow(1);
+                headerRow.getCell(1).value = 'Clé';
+                
+                let colIndex = 2;
+                boKeysArray.forEach(key => {
+                    headerRow.getCell(colIndex).value = `BO_${key}`;
+                    colIndex++;
+                });
+                
+                partnerKeysArray.forEach(key => {
+                    headerRow.getCell(colIndex).value = `PARTENAIRE_${key}`;
+                    colIndex++;
+                });
+
+                // Appliquer le style d'en-tête
+                headerRow.eachCell((cell, cellNumber) => {
+                    if (cellNumber <= columns.length) {
+                        cell.style = headerStyle;
+                    }
+                });
+
+                // Calculer les indices de début et de fin pour ce fichier
+                const startIndex = fileIndex * MAX_ROWS_PER_FILE;
+                const endIndex = Math.min((fileIndex + 1) * MAX_ROWS_PER_FILE, filteredMatches.length);
+                const fileMatches = filteredMatches.slice(startIndex, endIndex);
+
+                // Traiter les données par petits lots
+                const batchSize = 100;
+                let currentRow = 2;
+
+                for (let i = 0; i < fileMatches.length; i += batchSize) {
+                    console.log(`Traitement du lot ${Math.floor(i/batchSize) + 1}/${Math.ceil(fileMatches.length/batchSize)} pour le fichier ${fileIndex + 1}`);
+                    const batch = fileMatches.slice(i, i + batchSize);
+                    
+                    batch.forEach(match => {
+                        const row = worksheet.getRow(currentRow);
+                        
+                        // Ajouter la clé
+                        row.getCell(1).value = match.key;
+                        
+                        // Ajouter les données BO
+                        let cellIndex = 2;
+                        boKeysArray.forEach(key => {
+                            const value = match.boData[key];
+                            row.getCell(cellIndex).value = value !== undefined && value !== null ? value : '';
+                            cellIndex++;
+                        });
+                        
+                        // Ajouter les données Partenaire
+                        partnerKeysArray.forEach(key => {
+                            const value = match.partnerData[key];
+                            row.getCell(cellIndex).value = value !== undefined && value !== null ? value : '';
+                            cellIndex++;
+                        });
+                        
+                        // Appliquer le style aux cellules de données
+                        row.eachCell((cell, cellNumber) => {
+                            if (cellNumber <= columns.length) {
+                                cell.style = dataStyle;
+                            }
+                        });
+                        
+                        currentRow++;
+                    });
+
+                    // Mettre à jour la progression
+                    this.exportProgress = Math.round(((fileIndex * MAX_ROWS_PER_FILE + i + batch.length) / filteredMatches.length) * 100);
+                    this.cdr.detectChanges();
+
+                    // Permettre au navigateur de respirer
+                    await new Promise(resolve => setTimeout(resolve, 10));
+                }
+
+                workbooks.push(workbook);
+                console.log(`Fichier ${fileIndex + 1} terminé avec ${currentRow - 1} lignes`);
+            }
+        }
+    } else if (this.activeTab === 'boOnly') {
+        console.log('Export des données BO uniquement...');
+        const filteredBoOnly = this.getFilteredBoOnly();
+        console.log('Nombre d\'enregistrements BO à exporter:', filteredBoOnly.length);
+        
+        if (filteredBoOnly.length > 0) {
+            const workbook = new ExcelJS.Workbook();
+            const worksheet = workbook.addWorksheet('BO Uniquement');
+            
+            // Récupérer toutes les clés
+            const allKeys = new Set<string>();
+            filteredBoOnly.forEach(record => {
+                Object.keys(record).forEach(key => allKeys.add(key));
+            });
+            const keysArray = Array.from(allKeys);
+            
+            // Définir les colonnes
+            const columns = keysArray.map(key => ({ header: key, key: key, width: 15 }));
+            worksheet.columns = columns;
+            
+            // Ajouter les données
+            filteredBoOnly.forEach(record => {
+                const rowData: any = {};
+                keysArray.forEach(key => {
+                    rowData[key] = record[key] || '';
+                });
+                worksheet.addRow(rowData);
+            });
+            
+            // Appliquer les styles
+            worksheet.getRow(1).eachCell(cell => {
+                cell.style = {
+                    font: { bold: true, color: { argb: 'FFFFFFFF' } },
+                    fill: { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb: 'FF4472C4' } },
+                    alignment: { vertical: 'middle' as const, horizontal: 'center' as const }
+                };
+            });
+            
+            workbooks.push(workbook);
+        }
+    } else if (this.activeTab === 'partnerOnly') {
+        console.log('Export des données Partenaire uniquement...');
+        const filteredPartnerOnly = this.getFilteredPartnerOnly();
+        console.log('Nombre d\'enregistrements Partenaire à exporter:', filteredPartnerOnly.length);
+        
+        if (filteredPartnerOnly.length > 0) {
+            const workbook = new ExcelJS.Workbook();
+            const worksheet = workbook.addWorksheet('Partenaire Uniquement');
+            
+            // Récupérer toutes les clés
+            const allKeys = new Set<string>();
+            filteredPartnerOnly.forEach(record => {
+                Object.keys(record).forEach(key => allKeys.add(key));
+            });
+            const keysArray = Array.from(allKeys);
+            
+            // Définir les colonnes
+            const columns = keysArray.map(key => ({ header: key, key: key, width: 15 }));
+            worksheet.columns = columns;
+            
+            // Ajouter les données
+            filteredPartnerOnly.forEach(record => {
+                const rowData: any = {};
+                keysArray.forEach(key => {
+                    rowData[key] = record[key] || '';
+                });
+                worksheet.addRow(rowData);
+            });
+            
+            // Appliquer les styles
+            worksheet.getRow(1).eachCell(cell => {
+                cell.style = {
+                    font: { bold: true, color: { argb: 'FFFFFFFF' } },
+                    fill: { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb: 'FF4472C4' } },
+                    alignment: { vertical: 'middle' as const, horizontal: 'center' as const }
+                };
+            });
+            
+            workbooks.push(workbook);
+        }
+    } else if (this.activeTab === 'agencySummary') {
+        console.log('Export du résumé par agence...');
+        const agencySummary = this.getAgencySummary();
+        console.log('Nombre d\'éléments du résumé à exporter:', agencySummary.length);
+        
+        if (agencySummary.length > 0) {
+            const workbook = new ExcelJS.Workbook();
+            const worksheet = workbook.addWorksheet('Résumé par Agence');
+            
+            // Définir les colonnes
+            worksheet.columns = [
+                { header: 'Agence', key: 'agency', width: 20 },
+                { header: 'Service', key: 'service', width: 20 },
+                { header: 'Pays', key: 'country', width: 15 },
+                { header: 'Date', key: 'date', width: 15 },
+                { header: 'Volume Total', key: 'totalVolume', width: 20 },
+                { header: 'Nombre d\'Enregistrements', key: 'recordCount', width: 25 }
+            ];
+            
+            // Ajouter les données
+            agencySummary.forEach(item => {
+                worksheet.addRow({
+                    agency: item.agency,
+                    service: item.service,
+                    country: item.country,
+                    date: item.date,
+                    totalVolume: item.totalVolume,
+                    recordCount: item.recordCount
+                });
+            });
+            
+            // Appliquer les styles à l'en-tête
+            worksheet.getRow(1).eachCell(cell => {
+                cell.style = {
+                    font: { bold: true, color: { argb: 'FFFFFFFF' } },
+                    fill: { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb: 'FF4472C4' } },
+                    alignment: { vertical: 'middle' as const, horizontal: 'center' as const }
+                };
+            });
+            
+            workbooks.push(workbook);
+        }
+    }
+
+    // Si aucun workbook n'a été créé, créer un fichier par défaut
+    if (workbooks.length === 0) {
+        console.log('Aucune donnée à exporter, création d\'un fichier vide');
+        const workbook = new ExcelJS.Workbook();
+        const worksheet = workbook.addWorksheet('Aucune Donnée');
+        worksheet.addRow(['Aucune donnée disponible pour l\'export']);
+        workbooks.push(workbook);
+    }
+
+    return workbooks;
+}
+
+private async downloadExcelFile(workbooks: ExcelJS.Workbook[]): Promise<void> {
+    for (let i = 0; i < workbooks.length; i++) {
+        const workbook = workbooks[i];
+        try {
+            console.log(`Début du téléchargement du fichier ${i + 1}/${workbooks.length}...`);
+            
+            // Générer le buffer avec des options optimisées
+            console.log('Génération du buffer...');
+            const buffer = await workbook.xlsx.writeBuffer({
+                useStyles: true,
+                useSharedStrings: false
+            });
+            
+            console.log('Buffer généré, taille:', buffer.byteLength, 'bytes');
+            
+            if (buffer.byteLength === 0) {
+                throw new Error('Le buffer généré est vide');
+            }
+
+            // Créer le blob
+            console.log('Création du blob...');
+            const blob = new Blob([buffer], { 
+                type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+            });
+            
+            console.log('Blob créé, taille:', blob.size, 'bytes');
+            
+            if (blob.size === 0) {
+                throw new Error('Le blob créé est vide');
+            }
+            
+            // Générer le nom de fichier approprié
+            let fileName = 'export.xlsx';
+            const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+            
+            switch (this.activeTab) {
+                case 'matches':
+                    fileName = workbooks.length > 1 ? 
+                        `correspondances_${i + 1}_${timestamp}.xlsx` : 
+                        `correspondances_${timestamp}.xlsx`;
+                    break;
+                case 'boOnly':
+                    fileName = `bo_uniquement_${timestamp}.xlsx`;
+                    break;
+                case 'partnerOnly':
+                    fileName = `partenaire_uniquement_${timestamp}.xlsx`;
+                    break;
+                case 'agencySummary':
+                    fileName = `resume_par_agence_${timestamp}.xlsx`;
+                    break;
+            }
+            
+            // Créer l'URL et le lien de téléchargement
+            console.log('Création de l\'URL...');
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = fileName;
+            a.style.display = 'none';
+            
+            // Ajouter le lien au DOM et déclencher le téléchargement
+            document.body.appendChild(a);
+            console.log('Déclenchement du téléchargement pour:', fileName);
+            a.click();
+            
+            // Attendre un peu avant de nettoyer
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+            // Nettoyer
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+            console.log(`Fichier ${i + 1} téléchargé avec succès`);
+            
+        } catch (error) {
+            console.error(`Erreur lors du téléchargement du fichier ${i + 1}:`, error);
+            throw error;
+        }
+    }
+}
+
+    nouvelleReconciliation() {
+        this.appStateService.setCurrentStep(1);
+    }
+
+    calculateTotalVolume(type: 'bo' | 'partner'): number {
+        if (!this.filteredMatches || this.filteredMatches.length === 0) return 0;
+        const amountColumn = this.findAmountColumn(type);
+        if (!amountColumn) return 0;
+        return this.filteredMatches.reduce((total, match) => {
+            const amount = type === 'bo' 
+                ? parseFloat(match.boData[amountColumn] || '0')
+                : parseFloat(match.partnerData[amountColumn] || '0');
+            return total + (isNaN(amount) ? 0 : amount);
+        }, 0);
+    }
+
+    private findAmountColumn(type: 'bo' | 'partner'): string | null {
+        if (!this.filteredMatches || this.filteredMatches.length === 0) return null;
+        
+        const firstMatch = this.filteredMatches[0];
+        const data = type === 'bo' ? firstMatch.boData : firstMatch.partnerData;
+        
+        // Liste des noms possibles pour la colonne de montant
+        const possibleAmountColumns = [
+            'montant', 'amount', 'valeur', 'value', 'somme', 'sum', 'total',
+            'credit', 'crédit', 'debit', 'débit', 'montant_credit', 'montant_débit',
+            'montant_credit', 'montant_debit', 'montant_crédit', 'montant_débit',
+            'montant_operation', 'montant_opération', 'montant_transaction',
+            'montant_credit_operation', 'montant_débit_operation'
+        ];
+        
+        // Chercher une colonne qui contient un des noms possibles
+        for (const column of Object.keys(data)) {
+            const lowerColumn = column.toLowerCase();
+            if (possibleAmountColumns.some(name => lowerColumn.includes(name))) {
+                return column;
+            }
+        }
+        
+        return null;
+    }
+
+    calculateVolumeDifference(): number {
+        return this.calculateTotalVolume('bo') - this.calculateTotalVolume('partner');
+    }
+
+    calculateTotalVolumeBoOnly(): number {
+        if (!this.filteredBoOnly || this.filteredBoOnly.length === 0) return 0;
+        const amountColumn = this.findAmountColumn('bo');
+        if (!amountColumn) return 0;
+        return this.filteredBoOnly.reduce((total, record) => {
+            const amount = parseFloat(record[amountColumn] || '0');
+            return total + (isNaN(amount) ? 0 : amount);
+        }, 0);
+    }
+
+    calculateTotalVolumePartnerOnly(): number {
+        if (!this.filteredPartnerOnly || this.filteredPartnerOnly.length === 0) return 0;
+        return this.filteredPartnerOnly.reduce((total, record) => {
+            const amount = this.getPartnerOnlyVolume(record);
+            return total + amount;
+        }, 0);
+    }
+
+    getPartnerOnlyVolume(record: Record<string, string>): number {
+        // Liste des noms possibles pour la colonne de montant
+        const possibleAmountColumns = [
+            'montant', 'amount', 'valeur', 'value', 'somme', 'sum', 'total',
+            'credit', 'crédit', 'debit', 'débit', 'montant_credit', 'montant_débit',
+            'montant_credit', 'montant_debit', 'montant_crédit', 'montant_débit',
+            'montant_operation', 'montant_opération', 'montant_transaction',
+            'montant_credit_operation', 'montant_débit_operation'
+        ];
+        
+        // Chercher directement dans le record
+        for (const column of Object.keys(record)) {
+            const lowerColumn = column.toLowerCase();
+            if (possibleAmountColumns.some(name => lowerColumn.includes(name))) {
+                const amount = parseFloat(record[column] || '0');
+                if (!isNaN(amount)) {
+                    return amount;
+                }
+            }
+        }
+        
+        return 0;
+    }
+
+    getBoAgencyAndService(match: Match): { agency: string; service: string; volume: number; date: string; country: string } {
+        const boData = match.boData;
+        const agency = boData['Agence'] || '';
+        const service = boData['Service'] || '';
+        const volume = boData['montant'] ? parseFloat(boData['montant'].toString().replace(',', '.')) : 0;
+        const date = boData['Date'] || '';
+        const countryColumn = this.findCountryColumn(boData);
+        const country = countryColumn ? boData[countryColumn] || 'Non spécifié' : 'Non spécifié';
+        return { agency, service, volume, date, country };
+    }
+
+    getBoOnlyAgencyAndService(record: Record<string, string>): { agency: string; service: string; volume: number; date: string; country: string } {
+        const agency = record['Agence'] || '';
+        const service = record['Service'] || '';
+        const volume = record['montant'] ? parseFloat(record['montant'].toString().replace(',', '.')) : 0;
+        const date = record['Date'] || '';
+        const countryColumn = this.findCountryColumn(record);
+        const country = countryColumn ? record[countryColumn] || 'Non spécifié' : 'Non spécifié';
+        return { agency, service, volume, date, country };
+    }
+
+    getPartnerOnlyDate(record: Record<string, string>): string {
+        const dateColumn = this.findDateColumn(record);
+        return dateColumn ? record[dateColumn] || 'Non spécifié' : 'Non spécifié';
+    }
+
+    private findDateColumn(data: Record<string, string>): string | null {
+        const dateKeywords = ['date', 'jour', 'day', 'created', 'creation', 'transaction'];
+        return this.findColumnByKeywords(data, dateKeywords);
+    }
+
+    private findCountryColumn(data: Record<string, string>): string | null {
+        const possibleColumns = ['Pays', 'PAYS', 'Country', 'COUNTRY'];
+        for (const column of possibleColumns) {
+            if (data[column]) {
+                return column;
+            }
+        }
+        // Si aucune colonne exacte n'est trouvée, chercher les colonnes qui contiennent les mots-clés
+        const keywords = ['pays', 'country', 'grx'];
+        for (const column of Object.keys(data)) {
+            const lowerColumn = column.toLowerCase();
+            if (keywords.some(keyword => lowerColumn.includes(keyword))) {
+                return column;
+            }
+        }
+        return null;
+    }
+
+    private findColumnByKeywords(data: Record<string, string>, keywords: string[]): string | null {
+        for (const column of Object.keys(data)) {
+            const lowerColumn = column.toLowerCase();
+            if (keywords.some(keyword => lowerColumn.includes(keyword))) {
+                return column;
+            }
+        }
+        return null;
+    }
+
+    // Mettre en cache le résumé
+    private cachedAgencySummary: Array<{agency: string; service: string; date: string; country: string; totalVolume: number; recordCount: number}> | null = null;
+    private lastResponseHash: string = '';
+
+    private getResponseHash(): string {
+        if (!this.response) return '';
+        return JSON.stringify({
+            matchesCount: this.response.matches?.length || 0,
+            boOnlyCount: this.response.boOnly?.length || 0
+        });
+    }
+
+    getAgencySummary(): Array<{agency: string; service: string; date: string; country: string; totalVolume: number; recordCount: number}> {
+        // Vérifier si nous avons déjà calculé le résumé pour cette réponse
+        const currentHash = this.getResponseHash();
+        if (this.cachedAgencySummary && this.lastResponseHash === currentHash) {
+            return this.cachedAgencySummary;
+        }
+
+        // Calculer le résumé
+        const summary = this.calculateAgencySummary();
+        
+        // Mettre en cache le résultat
+        this.cachedAgencySummary = summary;
+        this.lastResponseHash = currentHash;
+
+        return summary;
+    }
+
+    private calculateAgencySummary(): Array<{agency: string; service: string; date: string; country: string; totalVolume: number; recordCount: number}> {
+        const summaryMap = new Map<string, {agency: string; service: string; date: string; country: string; totalVolume: number; recordCount: number}>();
+
+        // Traiter les correspondances
+        this.filteredMatches.forEach(match => {
+            const boInfo = this.getBoAgencyAndService(match);
+            const key = `${boInfo.agency}-${boInfo.service}-${boInfo.country}`;
+            
+            if (!summaryMap.has(key)) {
+                summaryMap.set(key, {
+                    agency: boInfo.agency,
+                    service: boInfo.service,
+                    country: boInfo.country,
+                    date: boInfo.date,
+                    totalVolume: 0,
+                    recordCount: 0
+                });
+            }
+            
+            const summary = summaryMap.get(key)!;
+            summary.totalVolume += boInfo.volume;
+            summary.recordCount += 1;
+        });
+
+        // Traiter les données BO uniquement
+        this.filteredBoOnly.forEach(record => {
+            const boInfo = this.getBoOnlyAgencyAndService(record);
+            const key = `${boInfo.agency}-${boInfo.service}-${boInfo.country}`;
+            
+            if (!summaryMap.has(key)) {
+                summaryMap.set(key, {
+                    agency: boInfo.agency,
+                    service: boInfo.service,
+                    country: boInfo.country,
+                    date: boInfo.date,
+                    totalVolume: 0,
+                    recordCount: 0
+                });
+            }
+            
+            const summary = summaryMap.get(key)!;
+            summary.totalVolume += boInfo.volume;
+            summary.recordCount += 1;
+        });
+
+        // Convertir le Map en tableau et trier par agence puis par service
+        return Array.from(summaryMap.values()).sort((a, b) => {
+            if (a.agency !== b.agency) {
+                return a.agency.localeCompare(b.agency);
+            }
+            return a.service.localeCompare(b.service);
+        });
+    }
+
+    getPagedAgencySummary(): Array<{agency: string; service: string; date: string; country: string; totalVolume: number; recordCount: number}> {
+        const start = (this.agencyPage - 1) * this.agencyPageSize;
+        const summary = this.getAgencySummary();
+        console.log('Page actuelle:', this.agencyPage);
+        console.log('Taille de page:', this.agencyPageSize);
+        console.log('Début:', start);
+        console.log('Nombre total d\'éléments:', summary.length);
+        const result = summary.slice(start, start + this.agencyPageSize);
+        console.log('Éléments de la page:', result);
+        return result;
+    }
+
+    getTotalVolume(): number {
+        const summary = this.getAgencySummary();
+        const total = summary.reduce((total, summary) => total + summary.totalVolume, 0);
+        console.log('Volume total calculé:', total);
+        return total;
+    }
+
+    getTotalRecords(): number {
+        const summary = this.getAgencySummary();
+        const total = summary.reduce((total, summary) => total + summary.recordCount, 0);
+        console.log('Nombre total d\'enregistrements calculé:', total);
+        return total;
+    }
+
+    getTotalAgencyPages(): number {
+        return Math.max(1, Math.ceil(this.getAgencySummary().length / this.agencyPageSize));
+    }
+
+    nextAgencyPage() {
+        if (this.agencyPage < this.getTotalAgencyPages()) {
+            this.agencyPage++;
+            this.cdr.detectChanges();
+        }
+    }
+
+    prevAgencyPage() {
+        if (this.agencyPage > 1) {
+            this.agencyPage--;
+            this.cdr.detectChanges();
+        }
+    }
+
+    getAgencyTotalsArray(): Array<{name: string, volume: number}> {
+        const summary = this.getAgencySummary();
+        const agencyTotals = new Map<string, number>();
+        summary.forEach(item => {
+            agencyTotals.set(item.agency, (agencyTotals.get(item.agency) || 0) + item.totalVolume);
+        });
+        return Array.from(agencyTotals.entries()).map(([name, volume]) => ({name, volume}));
+    }
+
+    getServiceTotalsArray(): Array<{name: string, volume: number}> {
+        const summary = this.getAgencySummary();
+        const serviceTotals = new Map<string, number>();
+        summary.forEach(item => {
+            serviceTotals.set(item.service, (serviceTotals.get(item.service) || 0) + item.totalVolume);
+        });
+        return Array.from(serviceTotals.entries()).map(([name, volume]) => ({name, volume}));
+    }
+
+    // Filtre utilitaire pour ignorer les lignes où PAYS = 'CM'
+    private getFilteredMatches(): Match[] {
+        const matches = this.response?.matches || [];
+        if (!this.selectedService) return matches;
+        return matches.filter(match => {
+            const boService = match.boData['Service'] || '';
+            return boService === this.selectedService;
+        });
+    }
+
+    private getFilteredBoOnly(): Record<string, string>[] {
+        const boOnly = this.response?.boOnly || [];
+        if (!this.selectedService) return boOnly;
+        return boOnly.filter(record => (record['Service'] || '') === this.selectedService);
+    }
+
+    private getFilteredPartnerOnly(): Record<string, string>[] {
+        const partnerOnly = this.response?.partnerOnly || [];
+        if (!this.selectedService) return partnerOnly;
+        return partnerOnly.filter(record => (record['Service'] || '') === this.selectedService);
+    }
+
+    applyServiceFilter() {
+        // Appliquer le filtre seulement au clic
+        this.matchesPage = 1;
+        this.boOnlyPage = 1;
+        this.partnerOnlyPage = 1;
+        this.agencyPage = 1;
+        this.initializeFilteredData();
+        this.cdr.detectChanges();
+    }
+
+    startReconciliation() {
+        // Émettre un événement pour lancer la réconciliation avec le service sélectionné
+        this.appStateService.startReconciliation(this.selectedService);
+    }
+
+    async saveAgencySummary() {
+        if (this.isSaving) return;
+        this.isSaving = true;
+
+        try {
+            const summary = this.getAgencySummary().map(item => ({
+                ...item,
+                date: this.selectedDate
+            }));
+            await this.reconciliationService.saveSummary(summary).toPromise();
+            alert('Résumé sauvegardé en base avec succès !');
+        } catch (error: any) {
+            // Affichage détaillé du message d'erreur backend
+            let msg = 'Erreur lors de la sauvegarde en base.';
+            if (error && error.error) {
+                if (error.error.message) {
+                    msg = error.error.message;
+                }
+                if (error.error.details) {
+                    msg += '\n' + error.error.details;
+                }
+                if (error.error.duplicateRecords) {
+                    msg += '\nDoublons détectés :';
+                    for (const d of error.error.duplicateRecords) {
+                        msg += `\n- ${d.message}`;
+                    }
+                }
+                if (error.error.errorRecords && error.error.errorRecords.length > 0) {
+                    msg += '\nErreurs :';
+                    for (const e of error.error.errorRecords) {
+                        msg += `\n- ${e}`;
+                    }
+                }
+            } else if (error && error.message) {
+                msg = error.message;
+            }
+            alert(msg);
+        } finally {
+            this.isSaving = false;
+        }
+    }
+
+    goToStats() {
+        this.appStateService.setCurrentStep(4);
+        this.router.navigate(['/stats']);
+    }
+
+    handleExport() {
+        console.log('Bouton d\'export cliqué');
+        this.exportResults().catch(error => {
+            console.error('Erreur lors de l\'export:', error);
+        });
+    }
+
+    exporterResumeParAgence(data: any[]) {
+        const workbook = new ExcelJS.Workbook();
+        const worksheet = workbook.addWorksheet('Résumé par agence');
+
+        // Définir les colonnes
+        worksheet.columns = [
+            { header: 'Agence', key: 'agence', width: 30 },
+            { header: 'Nombre', key: 'nombre', width: 15 },
+            { header: 'Volume', key: 'volume', width: 20 },
+            // Ajoute d'autres colonnes selon tes besoins
+        ];
+
+        // Ajouter les données
+        data.forEach(item => {
+            worksheet.addRow({
+                agence: item.agence,
+                nombre: item.nombre,
+                volume: item.volume,
+                // autres champs...
+            });
+        });
+
+        // Appliquer des couleurs et styles au header
+        worksheet.getRow(1).eachCell(cell => {
+            cell.fill = {
+                type: 'pattern',
+                pattern: 'solid',
+                fgColor: { argb: 'FFB6D7A8' } // Vert clair, change la couleur si besoin
+            };
+            cell.font = { bold: true };
+            cell.alignment = { vertical: 'middle', horizontal: 'center' };
+            cell.border = {
+                top: { style: 'thin' },
+                left: { style: 'thin' },
+                bottom: { style: 'thin' },
+                right: { style: 'thin' }
+            };
+        });
+
+        // Appliquer un style aux lignes (exemple : alternance de couleurs)
+        worksheet.eachRow((row, rowNumber) => {
+            if (rowNumber > 1) {
+                row.eachCell(cell => {
+                    cell.fill = {
+                        type: 'pattern',
+                        pattern: 'solid',
+                        fgColor: { argb: rowNumber % 2 === 0 ? 'FFF9E79F' : 'FFFFFFFF' } // Jaune pâle ou blanc
+                    };
+                });
+            }
+        });
+
+        // Générer le fichier et le télécharger
+        workbook.xlsx.writeBuffer().then(buffer => {
+            const blob = new Blob([buffer], {
+                type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            });
+            saveAs(blob, 'resume_par_agence.xlsx');
+        });
+    }
+} 
