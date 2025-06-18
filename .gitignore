@@ -17,3 +17,7 @@ build/
 # OS files
 .DS_Store
 Thumbs.dbXX
+.angular/
+node_modules/
+dist/
+*.log
