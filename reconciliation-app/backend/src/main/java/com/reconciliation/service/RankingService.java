@@ -23,11 +23,21 @@ public class RankingService {
     /**
      * Récupérer le classement des agences par nombre de transactions (via recordCount)
      */
-    public List<Map<String, Object>> getAgencyRankingByTransactions(List<String> countries, String period) {
-        List<AgencySummaryEntity> summaries = countries != null && !countries.isEmpty()
-            ? agencySummaryRepository.findAll().stream().filter(s -> countries.contains(s.getCountry())).collect(Collectors.toList())
-            : agencySummaryRepository.findAll();
+    public List<Map<String, Object>> getAgencyRankingByTransactions(List<String> countries, String period, String startDate, String endDate) {
+        // Filtrer les données selon la période temporelle
+        List<AgencySummaryEntity> allSummaries = agencySummaryRepository.findAll();
+        List<AgencySummaryEntity> summaries = filterSummariesByPeriod(allSummaries, period, startDate, endDate);
+        
+        // Filtrer par pays si spécifié
+        if (countries != null && !countries.isEmpty()) {
+            summaries = summaries.stream().filter(s -> countries.contains(s.getCountry())).collect(Collectors.toList());
+        }
+        
         List<Operation> allOperations = operationService.getAllOperationsWithFrais();
+        // Filtrer les opérations selon la période temporelle
+        allOperations = filterOperationsByPeriod(allOperations, period, startDate, endDate);
+        
+        // Filtrer par pays si spécifié
         if (countries != null && !countries.isEmpty()) {
             allOperations = allOperations.stream().filter(op -> countries.contains(op.getPays())).collect(Collectors.toList());
         }
@@ -155,8 +165,8 @@ public class RankingService {
     /**
      * Récupérer le classement des agences par volume
      */
-    public List<Map<String, Object>> getAgencyRankingByVolume(List<String> countries, String period) {
-        List<Map<String, Object>> ranking = getAgencyRankingByTransactions(countries, period);
+    public List<Map<String, Object>> getAgencyRankingByVolume(List<String> countries, String period, String startDate, String endDate) {
+        List<Map<String, Object>> ranking = getAgencyRankingByTransactions(countries, period, startDate, endDate);
         ranking.sort((a, b) -> Double.compare((Double) b.get("totalVolume"), (Double) a.get("totalVolume")));
         return ranking;
     }
@@ -164,8 +174,8 @@ public class RankingService {
     /**
      * Récupérer le classement des agences par frais
      */
-    public List<Map<String, Object>> getAgencyRankingByFees(List<String> countries, String period) {
-        List<Map<String, Object>> ranking = getAgencyRankingByTransactions(countries, period);
+    public List<Map<String, Object>> getAgencyRankingByFees(List<String> countries, String period, String startDate, String endDate) {
+        List<Map<String, Object>> ranking = getAgencyRankingByTransactions(countries, period, startDate, endDate);
         ranking.sort((a, b) -> Double.compare((Double) b.get("totalFees"), (Double) a.get("totalFees")));
         return ranking;
     }
@@ -173,11 +183,21 @@ public class RankingService {
     /**
      * Récupérer le classement des services par nombre de transactions (via recordCount)
      */
-    public List<Map<String, Object>> getServiceRankingByTransactions(List<String> countries, String period) {
-        List<AgencySummaryEntity> summaries = countries != null && !countries.isEmpty()
-            ? agencySummaryRepository.findAll().stream().filter(s -> countries.contains(s.getCountry())).collect(Collectors.toList())
-            : agencySummaryRepository.findAll();
+    public List<Map<String, Object>> getServiceRankingByTransactions(List<String> countries, String period, String startDate, String endDate) {
+        // Filtrer les données selon la période temporelle
+        List<AgencySummaryEntity> allSummaries = agencySummaryRepository.findAll();
+        List<AgencySummaryEntity> summaries = filterSummariesByPeriod(allSummaries, period, startDate, endDate);
+        
+        // Filtrer par pays si spécifié
+        if (countries != null && !countries.isEmpty()) {
+            summaries = summaries.stream().filter(s -> countries.contains(s.getCountry())).collect(Collectors.toList());
+        }
+        
         List<Operation> allOperations = operationService.getAllOperationsWithFrais();
+        // Filtrer les opérations selon la période temporelle
+        allOperations = filterOperationsByPeriod(allOperations, period, startDate, endDate);
+        
+        // Filtrer par pays si spécifié
         if (countries != null && !countries.isEmpty()) {
             allOperations = allOperations.stream().filter(op -> countries.contains(op.getPays())).collect(Collectors.toList());
         }
@@ -289,8 +309,8 @@ public class RankingService {
     /**
      * Récupérer le classement des services par volume
      */
-    public List<Map<String, Object>> getServiceRankingByVolume(List<String> countries, String period) {
-        List<Map<String, Object>> ranking = getServiceRankingByTransactions(countries, period);
+    public List<Map<String, Object>> getServiceRankingByVolume(List<String> countries, String period, String startDate, String endDate) {
+        List<Map<String, Object>> ranking = getServiceRankingByTransactions(countries, period, startDate, endDate);
         ranking.sort((a, b) -> Double.compare((Double) b.get("totalVolume"), (Double) a.get("totalVolume")));
         return ranking;
     }
@@ -298,8 +318,8 @@ public class RankingService {
     /**
      * Récupérer le classement des services par frais
      */
-    public List<Map<String, Object>> getServiceRankingByFees(List<String> countries, String period) {
-        List<Map<String, Object>> ranking = getServiceRankingByTransactions(countries, period);
+    public List<Map<String, Object>> getServiceRankingByFees(List<String> countries, String period, String startDate, String endDate) {
+        List<Map<String, Object>> ranking = getServiceRankingByTransactions(countries, period, startDate, endDate);
         ranking.sort((a, b) -> Double.compare((Double) b.get("totalFees"), (Double) a.get("totalFees")));
         return ranking;
     }
@@ -309,12 +329,128 @@ public class RankingService {
      */
     public Map<String, Object> getAllRankings(String period) {
         Map<String, Object> rankings = new HashMap<>();
-        rankings.put("agenciesByTransactions", getAgencyRankingByTransactions(null, period));
-        rankings.put("agenciesByVolume", getAgencyRankingByVolume(null, period));
-        rankings.put("agenciesByFees", getAgencyRankingByFees(null, period));
-        rankings.put("servicesByTransactions", getServiceRankingByTransactions(null, period));
-        rankings.put("servicesByVolume", getServiceRankingByVolume(null, period));
-        rankings.put("servicesByFees", getServiceRankingByFees(null, period));
+        rankings.put("agenciesByTransactions", getAgencyRankingByTransactions(null, period, null, null));
+        rankings.put("agenciesByVolume", getAgencyRankingByVolume(null, period, null, null));
+        rankings.put("agenciesByFees", getAgencyRankingByFees(null, period, null, null));
+        rankings.put("servicesByTransactions", getServiceRankingByTransactions(null, period, null, null));
+        rankings.put("servicesByVolume", getServiceRankingByVolume(null, period, null, null));
+        rankings.put("servicesByFees", getServiceRankingByFees(null, period, null, null));
         return rankings;
+    }
+    
+    /**
+     * Filtrer les AgencySummaryEntity selon la période temporelle
+     */
+    private List<AgencySummaryEntity> filterSummariesByPeriod(List<AgencySummaryEntity> summaries, String period, String customStartDate, String customEndDate) {
+        LocalDate today = LocalDate.now();
+        LocalDate startDate;
+        LocalDate endDate;
+        
+        if ("custom".equals(period) && customStartDate != null && customEndDate != null) {
+            // Période personnalisée
+            try {
+                startDate = LocalDate.parse(customStartDate);
+                endDate = LocalDate.parse(customEndDate);
+            } catch (Exception e) {
+                // En cas d'erreur de parsing, utiliser le mois en cours
+                startDate = today.withDayOfMonth(1);
+                endDate = today.withDayOfMonth(today.lengthOfMonth());
+            }
+        } else {
+            switch (period != null ? period.toLowerCase() : "month") {
+                case "all":
+                    // Toute la période - pas de filtrage temporel
+                    return summaries; // Retourner toutes les données sans filtrage
+                case "day":
+                    // J-1 (hier)
+                    startDate = today.minusDays(1);
+                    endDate = today.minusDays(1);
+                    break;
+                case "week":
+                    // Dernière semaine (lundi au dimanche)
+                    startDate = today.minusWeeks(1).with(java.time.DayOfWeek.MONDAY);
+                    endDate = startDate.plusDays(6);
+                    break;
+                case "month":
+                default:
+                    // Mois en cours
+                    startDate = today.withDayOfMonth(1);
+                    endDate = today.withDayOfMonth(today.lengthOfMonth());
+                    break;
+            }
+        }
+        
+        final LocalDate finalStartDate = startDate;
+        final LocalDate finalEndDate = endDate;
+        
+        return summaries.stream()
+            .filter(s -> {
+                if (s.getDate() == null || s.getDate().isEmpty()) {
+                    return false;
+                }
+                try {
+                    LocalDate summaryDate = LocalDate.parse(s.getDate(), DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+                    return !summaryDate.isBefore(finalStartDate) && !summaryDate.isAfter(finalEndDate);
+                } catch (Exception e) {
+                    return false;
+                }
+            })
+            .collect(Collectors.toList());
+    }
+    
+    /**
+     * Filtrer les opérations selon la période temporelle
+     */
+    private List<Operation> filterOperationsByPeriod(List<Operation> operations, String period, String customStartDate, String customEndDate) {
+        LocalDate today = LocalDate.now();
+        LocalDate startDate;
+        LocalDate endDate;
+        
+        if ("custom".equals(period) && customStartDate != null && customEndDate != null) {
+            // Période personnalisée
+            try {
+                startDate = LocalDate.parse(customStartDate);
+                endDate = LocalDate.parse(customEndDate);
+            } catch (Exception e) {
+                // En cas d'erreur de parsing, utiliser le mois en cours
+                startDate = today.withDayOfMonth(1);
+                endDate = today.withDayOfMonth(today.lengthOfMonth());
+            }
+        } else {
+            switch (period != null ? period.toLowerCase() : "month") {
+                case "all":
+                    // Toute la période - pas de filtrage temporel
+                    return operations; // Retourner toutes les opérations sans filtrage
+                case "day":
+                    // J-1 (hier)
+                    startDate = today.minusDays(1);
+                    endDate = today.minusDays(1);
+                    break;
+                case "week":
+                    // Dernière semaine (lundi au dimanche)
+                    startDate = today.minusWeeks(1).with(java.time.DayOfWeek.MONDAY);
+                    endDate = startDate.plusDays(6);
+                    break;
+                case "month":
+                default:
+                    // Mois en cours
+                    startDate = today.withDayOfMonth(1);
+                    endDate = today.withDayOfMonth(today.lengthOfMonth());
+                    break;
+            }
+        }
+        
+        final LocalDate finalStartDate = startDate;
+        final LocalDate finalEndDate = endDate;
+        
+        return operations.stream()
+            .filter(op -> {
+                if (op.getDateOperation() == null) {
+                    return false;
+                }
+                LocalDate operationDate = op.getDateOperation().toLocalDate();
+                return !operationDate.isBefore(finalStartDate) && !operationDate.isAfter(finalEndDate);
+            })
+            .collect(Collectors.toList());
     }
 } 

@@ -58,9 +58,11 @@ public class RankingController {
     @GetMapping("/agencies/transactions")
     public ResponseEntity<List<Map<String, Object>>> getAgencyRankingByTransactions(
             @RequestParam(required = false) List<String> country,
-            @RequestParam(required = false, defaultValue = "month") String period) {
+            @RequestParam(required = false, defaultValue = "month") String period,
+            @RequestParam(required = false) String startDate,
+            @RequestParam(required = false) String endDate) {
         try {
-            List<Map<String, Object>> ranking = rankingService.getAgencyRankingByTransactions(country, period);
+            List<Map<String, Object>> ranking = rankingService.getAgencyRankingByTransactions(country, period, startDate, endDate);
             return ResponseEntity.ok(ranking);
         } catch (Exception e) {
             logger.error("Error getting agency ranking by transactions: {}", e.getMessage(), e);
@@ -74,9 +76,11 @@ public class RankingController {
     @GetMapping("/agencies/volume")
     public ResponseEntity<List<Map<String, Object>>> getAgencyRankingByVolume(
             @RequestParam(required = false) List<String> country,
-            @RequestParam(required = false, defaultValue = "month") String period) {
+            @RequestParam(required = false, defaultValue = "month") String period,
+            @RequestParam(required = false) String startDate,
+            @RequestParam(required = false) String endDate) {
         try {
-            List<Map<String, Object>> ranking = rankingService.getAgencyRankingByVolume(country, period);
+            List<Map<String, Object>> ranking = rankingService.getAgencyRankingByVolume(country, period, startDate, endDate);
             return ResponseEntity.ok(ranking);
         } catch (Exception e) {
             logger.error("Error getting agency ranking by volume: {}", e.getMessage(), e);
@@ -90,9 +94,11 @@ public class RankingController {
     @GetMapping("/agencies/fees")
     public ResponseEntity<List<Map<String, Object>>> getAgencyRankingByFees(
             @RequestParam(required = false) List<String> country,
-            @RequestParam(required = false, defaultValue = "month") String period) {
+            @RequestParam(required = false, defaultValue = "month") String period,
+            @RequestParam(required = false) String startDate,
+            @RequestParam(required = false) String endDate) {
         try {
-            List<Map<String, Object>> ranking = rankingService.getAgencyRankingByFees(country, period);
+            List<Map<String, Object>> ranking = rankingService.getAgencyRankingByFees(country, period, startDate, endDate);
             return ResponseEntity.ok(ranking);
         } catch (Exception e) {
             logger.error("Error getting agency ranking by fees: {}", e.getMessage(), e);
@@ -106,9 +112,11 @@ public class RankingController {
     @GetMapping("/services/transactions")
     public ResponseEntity<List<Map<String, Object>>> getServiceRankingByTransactions(
             @RequestParam(required = false) List<String> country,
-            @RequestParam(required = false, defaultValue = "month") String period) {
+            @RequestParam(required = false, defaultValue = "month") String period,
+            @RequestParam(required = false) String startDate,
+            @RequestParam(required = false) String endDate) {
         try {
-            List<Map<String, Object>> ranking = rankingService.getServiceRankingByTransactions(country, period);
+            List<Map<String, Object>> ranking = rankingService.getServiceRankingByTransactions(country, period, startDate, endDate);
             return ResponseEntity.ok(ranking);
         } catch (Exception e) {
             logger.error("Error getting service ranking by transactions: {}", e.getMessage(), e);
@@ -122,9 +130,11 @@ public class RankingController {
     @GetMapping("/services/volume")
     public ResponseEntity<List<Map<String, Object>>> getServiceRankingByVolume(
             @RequestParam(required = false) List<String> country,
-            @RequestParam(required = false, defaultValue = "month") String period) {
+            @RequestParam(required = false, defaultValue = "month") String period,
+            @RequestParam(required = false) String startDate,
+            @RequestParam(required = false) String endDate) {
         try {
-            List<Map<String, Object>> ranking = rankingService.getServiceRankingByVolume(country, period);
+            List<Map<String, Object>> ranking = rankingService.getServiceRankingByVolume(country, period, startDate, endDate);
             return ResponseEntity.ok(ranking);
         } catch (Exception e) {
             logger.error("Error getting service ranking by volume: {}", e.getMessage(), e);
@@ -138,9 +148,11 @@ public class RankingController {
     @GetMapping("/services/fees")
     public ResponseEntity<List<Map<String, Object>>> getServiceRankingByFees(
             @RequestParam(required = false) List<String> country,
-            @RequestParam(required = false, defaultValue = "month") String period) {
+            @RequestParam(required = false, defaultValue = "month") String period,
+            @RequestParam(required = false) String startDate,
+            @RequestParam(required = false) String endDate) {
         try {
-            List<Map<String, Object>> ranking = rankingService.getServiceRankingByFees(country, period);
+            List<Map<String, Object>> ranking = rankingService.getServiceRankingByFees(country, period, startDate, endDate);
             return ResponseEntity.ok(ranking);
         } catch (Exception e) {
             logger.error("Error getting service ranking by fees: {}", e.getMessage(), e);
