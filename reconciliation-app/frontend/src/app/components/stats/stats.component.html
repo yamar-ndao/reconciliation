@@ -1,81 +1,134 @@
 <div class="stats-container">
-    <div class="loading-overlay" *ngIf="isLoading">
-        <div class="spinner"></div>
-        <p>Traitement des données en cours...</p>
+    <h2>📊 Statistiques détaillées</h2>
+
+    <div *ngIf="isLoading" class="loading-message">
+        Chargement des données...
     </div>
 
+    <div *ngIf="!isLoading && agencySummaries.length > 0">
+        <!-- Filtres -->
     <div class="filters-section">
-        <mat-form-field>
-            <mat-label>Client</mat-label>
-            <input matInput [(ngModel)]="clientFilter" (keyup)="applyFilters()">
-        </mat-form-field>
+            <form [formGroup]="filterForm" class="filter-form">
+                <div class="filter-group">
+                    <app-autocomplete-input
+                        [options]="getFilteredAgencies()"
+                        formControlName="agency"
+                        placeholder="Saisir une agence..."
+                        label="Agence">
+                    </app-autocomplete-input>
+                </div>
 
-        <mat-form-field>
-            <mat-label>Service</mat-label>
-            <input matInput [(ngModel)]="serviceFilter" (keyup)="applyFilters()">
-        </mat-form-field>
+                <div class="filter-group">
+                    <app-autocomplete-input
+                        [options]="getFilteredServices()"
+                        formControlName="service"
+                        placeholder="Saisir un service..."
+                        label="Service">
+                    </app-autocomplete-input>
+                </div>
 
-        <mat-form-field>
-            <mat-label>Date</mat-label>
-            <input matInput [(ngModel)]="dateFilter" (keyup)="applyFilters()">
-        </mat-form-field>
+                <div class="filter-group">
+                    <app-autocomplete-input
+                        [options]="getFilteredCountries()"
+                        formControlName="country"
+                        placeholder="Saisir un pays..."
+                        label="Pays">
+                    </app-autocomplete-input>
+                </div>
+
+                <div class="filter-group">
+                    <label>Date de début</label>
+                    <input type="date" formControlName="startDate">
+                </div>
+
+                <div class="filter-group">
+                    <label>Date de fin</label>
+                    <input type="date" formControlName="endDate">
+                </div>
+
+                <button type="button" (click)="applyFilters()" class="apply-btn" [disabled]="isLoading">
+                    {{isLoading ? 'Traitement en cours...' : 'Appliquer les filtres'}}
+                </button>
+            </form>
+        </div>
+
+        <!-- Résultats -->
+        <div class="results-section">
+            <div class="stats-cards">
+                <div class="stat-card">
+                    <div class="stat-title">Nombre total de transactions</div>
+                    <div class="stat-value">{{getTotalRecords()}}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-title">Volume total</div>
+                    <div class="stat-value">{{getTotalVolume() | number:'1.0-0'}}</div>
+                </div>
+            </div>
+
+            <div class="details-table">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Agence</th>
+                            <th>Service</th>
+                            <th>Pays</th>
+                            <th>Date</th>
+                            <th>Volume Total</th>
+                            <th>Nombre de transactions</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr *ngFor="let summary of pagedStats">
+                            <td>{{summary.agency}}</td>
+                            <td>{{summary.service}}</td>
+                            <td>{{summary.country}}</td>
+                            <td>{{formatDateWithTime(summary.date)}}</td>
+                            <td>{{summary.totalVolume | number:'1.0-0'}}</td>
+                            <td>{{summary.recordCount}}</td>
+                            <td>
+                                <button (click)="deleteSummary(summary)" [disabled]="isLoading" title="Supprimer" class="btn icon-btn delete">
+                                    <i class="fas fa-trash" style="color: red;"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+                <div class="pagination-controls">
+                    <button (click)="prevStatsPage()" [disabled]="statsPage === 1 || isLoading">
+                        <i class="fas fa-chevron-left"></i> Précédent
+                    </button>
+                    
+                    <div class="pagination-indicators">
+                        <span *ngFor="let page of getVisibleStatsPages()" 
+                              class="page-indicator"
+                              [class.active]="statsPage === page"
+                              (click)="goToStatsPage(page)">
+                            {{ page }}
+                        </span>
+                    </div>
+                    
+                    <button (click)="nextStatsPage()" [disabled]="statsPage === totalPages || isLoading">
+                        Suivant <i class="fas fa-chevron-right"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
     </div>
 
-    <div class="stats-content" *ngIf="!isLoading">
-        <div class="stats-table">
-            <table mat-table [dataSource]="pagedStats">
-                <ng-container matColumnDef="client">
-                    <th mat-header-cell *matHeaderCellDef>Client</th>
-                    <td mat-cell *matCellDef="let stat">{{stat.client}}</td>
-                </ng-container>
+    <div *ngIf="!isLoading && agencySummaries.length === 0" class="no-data-message">
+        Aucune donnée disponible
+    </div>
 
-                <ng-container matColumnDef="service">
-                    <th mat-header-cell *matHeaderCellDef>Service</th>
-                    <td mat-cell *matCellDef="let stat">{{stat.service}}</td>
-                </ng-container>
-
-                <ng-container matColumnDef="date">
-                    <th mat-header-cell *matHeaderCellDef>Date</th>
-                    <td mat-cell *matCellDef="let stat">{{stat.date}}</td>
-                </ng-container>
-
-                <ng-container matColumnDef="recordCount">
-                    <th mat-header-cell *matHeaderCellDef>Nombre de transactions</th>
-                    <td mat-cell *matCellDef="let stat">{{stat.recordCount}}</td>
-                </ng-container>
-
-                <ng-container matColumnDef="totalVolume">
-                    <th mat-header-cell *matHeaderCellDef>Volume total</th>
-                    <td mat-cell *matCellDef="let stat">{{stat.totalVolume}}</td>
-                </ng-container>
-
-                <ng-container matColumnDef="averageVolume">
-                    <th mat-header-cell *matHeaderCellDef>Volume moyen</th>
-                    <td mat-cell *matCellDef="let stat">{{stat.averageVolume}}</td>
-                </ng-container>
-
-                <tr mat-header-row *matHeaderRowDef="['client', 'service', 'date', 'recordCount', 'totalVolume', 'averageVolume']"></tr>
-                <tr mat-row *matRowDef="let row; columns: ['client', 'service', 'date', 'recordCount', 'totalVolume', 'averageVolume'];"></tr>
-            </table>
-        </div>
-
-        <div class="pagination-controls">
-            <button mat-button [disabled]="statsPage === 1" (click)="prevStatsPage()">
-                Précédent
-            </button>
-            <span>Page {{statsPage}} sur {{totalPages}}</span>
-            <button mat-button [disabled]="statsPage === totalPages" (click)="nextStatsPage()">
-                Suivant
-            </button>
-        </div>
-
-        <div class="export-section">
-            <button mat-raised-button color="primary" (click)="exportStats()" [disabled]="isLoading || !pagedStats.length">
-                Exporter les statistiques
-            </button>
-            <button mat-raised-button color="accent" style="margin-left: 8px;" (click)="goToAgencySummary()">
-                Résumé par agence
-            </button>
-        </div>
+    <div class="action-buttons">
+        <button class="new-reconciliation-btn" (click)="startNewReconciliation()" [disabled]="isLoading">
+            🔄 Nouvelle Réconciliation
+        </button>
+        <button class="back-btn" (click)="goBack()" [disabled]="isLoading">
+            ← Retour aux résultats
+        </button>
+        <button class="export-btn" (click)="exportStats()" [disabled]="!agencySummaries.length || isLoading">
+            📥 Exporter les statistiques
+        </button>
     </div>
 </div> 

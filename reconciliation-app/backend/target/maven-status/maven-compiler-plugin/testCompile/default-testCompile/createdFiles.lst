@@ -1,1 +1,3 @@
+com\reconciliation\service\CsvReconciliationServiceTest.class
+com\reconciliation\controller\ReconciliationControllerTest.class
 com\reconciliation\config\WebConfigTest.class

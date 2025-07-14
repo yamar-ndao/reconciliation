@@ -1,8 +1,15 @@
 {
   "dependencies": {
     "@angular/cdk": "^19.2.18",
-    "@angular/localize": "^20.0.0",
+    "@angular/common": "^20.1.0",
+    "@angular/compiler": "^20.1.0",
+    "@angular/compiler-cli": "^20.1.0",
+    "@angular/core": "^20.1.0",
+    "@angular/forms": "^20.1.0",
+    "@angular/localize": "^20.1.0",
     "@angular/material": "^19.2.18",
+    "@angular/platform-browser": "^20.1.0",
+    "@angular/platform-browser-dynamic": "^20.1.0",
     "@prisma/client": "^6.9.0",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.3",
@@ -12,7 +19,8 @@
     "exceljs": "^4.4.0",
     "express": "^5.1.0",
     "file-saver": "^2.0.5",
-    "ng2-charts": "^3.0.0",
+    "jszip": "^3.10.1",
+    "ng2-charts": "^3.1.2",
     "ngx-papaparse": "^8.0.0",
     "xlsx": "^0.18.5"
   },
@@ -20,6 +28,7 @@
     "@types/file-saver": "^2.0.7",
     "@types/node": "^24.0.0",
     "@types/xlsx": "^0.0.36",
-    "prisma": "^6.9.0"
+    "prisma": "^6.9.0",
+    "typescript": "^5.8.2"
   }
 }

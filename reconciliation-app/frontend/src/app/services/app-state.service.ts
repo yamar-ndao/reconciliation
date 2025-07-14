@@ -3,6 +3,13 @@ import { BehaviorSubject, Observable } from 'rxjs';
 import { HttpClient } from '@angular/common/http';
 import { environment } from '../../environments/environment';
 import { DataNormalizationService } from './data-normalization.service';
+import { ReconciliationResponse } from '../models/reconciliation-response.model';
+
+export interface ReconciliationState {
+    isActive: boolean;
+    lastUpdate: Date | null;
+    needsRefresh: boolean;
+}
 
 @Injectable({
     providedIn: 'root'
@@ -16,6 +23,29 @@ export class AppStateService {
 
     private selectedServiceSubject = new BehaviorSubject<string>('');
     selectedService$ = this.selectedServiceSubject.asObservable();
+
+    // Données temporaires pour la réconciliation
+    private boDataSubject = new BehaviorSubject<Record<string, string>[]>([]);
+    boData$ = this.boDataSubject.asObservable();
+
+    private partnerDataSubject = new BehaviorSubject<Record<string, string>[]>([]);
+    partnerData$ = this.partnerDataSubject.asObservable();
+
+    // Données des résultats de la réconciliation
+    private reconciliationResultSubject = new BehaviorSubject<ReconciliationResponse | null>(null);
+    reconciliationResult$ = this.reconciliationResultSubject.asObservable();
+
+    // Gestion de la progression de la réconciliation
+    private reconciliationProgressSubject = new BehaviorSubject<boolean>(false);
+    private reconciliationStartTimeSubject = new BehaviorSubject<number>(0);
+
+    private reconciliationStateSubject = new BehaviorSubject<ReconciliationState>({
+        isActive: false,
+        lastUpdate: null,
+        needsRefresh: false
+    });
+
+    private dataUpdateSubject = new BehaviorSubject<boolean>(false);
 
     constructor(
         private http: HttpClient,
@@ -69,7 +99,7 @@ export class AppStateService {
             });
 
             console.log('Sending formatted data to backend:', JSON.stringify(formattedData, null, 2));
-            const response = await this.http.post(`${environment.apiUrl}/api/statistics/save`, formattedData).toPromise();
+            const response = await this.http.post(`${environment.apiUrl}/statistics/save`, formattedData).toPromise();
             console.log('Backend response:', response);
             this.statsDataSubject.next(normalizedData);
         } catch (error) {
@@ -91,9 +121,117 @@ export class AppStateService {
         console.log('Starting reconciliation for service:', service);
         this.selectedServiceSubject.next(service);
         this.setCurrentStep(2);
+        this.reconciliationStateSubject.next({
+            isActive: true,
+            lastUpdate: null,
+            needsRefresh: false // Ne pas rafraîchir automatiquement au début
+        });
     }
 
     getSelectedService(): string {
         return this.selectedServiceSubject.value;
+    }
+
+    // Méthodes pour les données de réconciliation
+    setReconciliationData(boData: Record<string, string>[], partnerData: Record<string, string>[]) {
+        console.log('Stockage des données de réconciliation:', {
+            boDataLength: boData.length,
+            partnerDataLength: partnerData.length
+        });
+        this.boDataSubject.next(boData);
+        this.partnerDataSubject.next(partnerData);
+    }
+
+    getBoData(): Record<string, string>[] {
+        return this.boDataSubject.value;
+    }
+
+    getPartnerData(): Record<string, string>[] {
+        return this.partnerDataSubject.value;
+    }
+
+    clearReconciliationData() {
+        this.boDataSubject.next([]);
+        this.partnerDataSubject.next([]);
+    }
+
+    // Méthodes pour les résultats de la réconciliation
+    setReconciliationResults(results: ReconciliationResponse) {
+        console.log('Stockage des résultats de la réconciliation:', results);
+        this.reconciliationResultSubject.next(results);
+    }
+
+    getReconciliationResults(): Observable<ReconciliationResponse | null> {
+        return this.reconciliationResult$;
+    }
+
+    clearReconciliationResults() {
+        this.reconciliationResultSubject.next(null);
+    }
+
+    // Gestion de la progression de la réconciliation
+    setReconciliationProgress(show: boolean) {
+        this.reconciliationProgressSubject.next(show);
+        if (show) {
+            this.reconciliationStartTimeSubject.next(Date.now());
+        }
+    }
+
+    getReconciliationProgress(): Observable<boolean> {
+        return this.reconciliationProgressSubject.asObservable();
+    }
+
+    getReconciliationStartTime(): number {
+        return this.reconciliationStartTimeSubject.value;
+    }
+
+    // Observable pour les changements d'état de réconciliation
+    get reconciliationState$(): Observable<ReconciliationState> {
+        return this.reconciliationStateSubject.asObservable();
+    }
+
+    // Observable pour les mises à jour de données
+    get dataUpdate$(): Observable<boolean> {
+        return this.dataUpdateSubject.asObservable();
+    }
+
+    // Méthodes pour gérer l'état de réconciliation
+    completeReconciliation() {
+        this.reconciliationStateSubject.next({
+            isActive: false,
+            lastUpdate: new Date(),
+            needsRefresh: false // Ne pas rafraîchir automatiquement
+        });
+    }
+
+    // Notifier quand le résumé est enregistré avec succès
+    notifySummarySaved() {
+        this.reconciliationStateSubject.next({
+            isActive: false,
+            lastUpdate: new Date(),
+            needsRefresh: true
+        });
+        
+        // Notifier que les données ont été mises à jour
+        this.notifyDataUpdate();
+    }
+
+    // Notifier une mise à jour de données
+    notifyDataUpdate() {
+        this.dataUpdateSubject.next(true);
+    }
+
+    // Marquer que les données ont été rafraîchies
+    markDataRefreshed() {
+        const currentState = this.reconciliationStateSubject.value;
+        this.reconciliationStateSubject.next({
+            ...currentState,
+            needsRefresh: false
+        });
+    }
+
+    // Obtenir l'état actuel
+    getCurrentState(): ReconciliationState {
+        return this.reconciliationStateSubject.value;
     }
 } 

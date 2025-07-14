@@ -21,3 +21,4 @@ Thumbs.dbXX
 node_modules/
 dist/
 *.log
+node_modules

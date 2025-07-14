@@ -1,8 +1,12 @@
-import { Component, Input, Output, EventEmitter, OnDestroy, OnChanges, SimpleChanges } from '@angular/core';
+import { Component, Input, Output, EventEmitter, OnDestroy, OnChanges, SimpleChanges, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { CommonModule } from '@angular/common';
+import { Router, ActivatedRoute } from '@angular/router';
 import { ColumnComparison } from '../../models/column-comparison.model';
 import { AppStateService } from '../../services/app-state.service';
+import { ReconciliationService } from '../../services/reconciliation.service';
+import { Subscription } from 'rxjs';
+import { ReconciliationRequest } from '../../models/reconciliation-request.model';
 
 @Component({
     selector: 'app-column-selection',
@@ -223,7 +227,7 @@ import { AppStateService } from '../../services/app-state.service';
         }
     `]
 })
-export class ColumnSelectionComponent implements OnDestroy, OnChanges {
+export class ColumnSelectionComponent implements OnDestroy, OnChanges, OnInit {
     @Input() boData: Record<string, string>[] = [];
     @Input() partnerData: Record<string, string>[] = [];
     @Output() selectionComplete = new EventEmitter<{
@@ -238,8 +242,13 @@ export class ColumnSelectionComponent implements OnDestroy, OnChanges {
     selectedPartnerKeyColumn: string = '';
     comparisonColumns: { boColumn: string, partnerColumn: string }[] = [{ boColumn: '', partnerColumn: '' }];
     isValid: boolean = false;
+    private subscription: Subscription = new Subscription();
 
-    constructor(private appStateService: AppStateService) {}
+    constructor(
+        private reconciliationService: ReconciliationService,
+        private appStateService: AppStateService,
+        private router: Router
+    ) {}
 
     ngOnChanges(changes: SimpleChanges) {
         console.log('Input data changed:', changes);
@@ -250,6 +259,25 @@ export class ColumnSelectionComponent implements OnDestroy, OnChanges {
 
     ngOnDestroy() {
         console.log('ColumnSelectionComponent destroyed');
+    }
+
+    ngOnInit() {
+        // Récupérer les données depuis le service d'état
+        this.boData = this.appStateService.getBoData();
+        this.partnerData = this.appStateService.getPartnerData();
+        
+        console.log('Données récupérées depuis le service:', {
+            boDataLength: this.boData.length,
+            partnerDataLength: this.partnerData.length
+        });
+        
+        if (this.boData.length > 0 && this.partnerData.length > 0) {
+            this.initializeColumns();
+        } else {
+            console.warn('Aucune donnée trouvée dans le service');
+            // Rediriger vers l'upload si pas de données
+            this.router.navigate(['/upload']);
+        }
     }
 
     private initializeColumns() {
@@ -312,16 +340,49 @@ export class ColumnSelectionComponent implements OnDestroy, OnChanges {
 
     proceedWithReconciliation() {
         if (this.isValid) {
-            console.log('Proceeding with reconciliation:', {
+            console.log('Lancement de la réconciliation avec les colonnes sélectionnées:', {
                 boKeyColumn: this.selectedBoKeyColumn,
                 partnerKeyColumn: this.selectedPartnerKeyColumn,
                 comparisonColumns: this.comparisonColumns
             });
 
-            this.selectionComplete.emit({
+            // Créer la requête de réconciliation
+            const request = {
+                boFileContent: this.boData,
+                partnerFileContent: this.partnerData,
                 boKeyColumn: this.selectedBoKeyColumn,
                 partnerKeyColumn: this.selectedPartnerKeyColumn,
                 comparisonColumns: this.comparisonColumns
+            };
+
+            // Activer l'affichage de progression
+            this.appStateService.setReconciliationProgress(true);
+
+            // Lancer la réconciliation
+            this.reconciliationService.reconcile(request).subscribe({
+                next: (response) => {
+                    console.log('Réconciliation terminée:', response);
+                    
+                    // Ajouter les informations de performance si elles ne sont pas déjà présentes
+                    if (!response.executionTimeMs) {
+                        response.executionTimeMs = Date.now() - this.appStateService.getReconciliationStartTime();
+                    }
+                    if (!response.processedRecords) {
+                        response.processedRecords = this.boData.length + this.partnerData.length;
+                    }
+                    if (!response.progressPercentage) {
+                        response.progressPercentage = 100;
+                    }
+                    
+                    this.appStateService.setReconciliationResults(response);
+                    this.appStateService.setReconciliationProgress(false);
+                    this.router.navigate(['/results']);
+                },
+                error: (error) => {
+                    console.error('Erreur lors de la réconciliation:', error);
+                    this.appStateService.setReconciliationProgress(false);
+                    alert('Erreur lors de la réconciliation: ' + (error.message || 'Erreur inconnue'));
+                }
             });
         }
     }

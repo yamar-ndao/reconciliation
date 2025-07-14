@@ -1,0 +1,13 @@
+<div class="autocomplete-container">
+  <label *ngIf="label" class="autocomplete-label">{{ label }}</label>
+  <select 
+    [value]="value"
+    (change)="onSelectChange($event)"
+    [disabled]="disabled"
+    class="autocomplete-select">
+    <option value="">{{ placeholder }}</option>
+    <option *ngFor="let option of options" [value]="option">
+      {{ option }}
+    </option>
+  </select>
+</div> 

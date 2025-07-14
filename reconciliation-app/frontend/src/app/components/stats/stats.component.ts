@@ -11,315 +11,8 @@ import * as FileSaver from 'file-saver';
 
 @Component({
     selector: 'app-stats',
-    template: `
-        <div class="stats-container">
-            <h2>📊 Statistiques détaillées</h2>
-
-            <div *ngIf="isLoading" class="loading-message">
-                Chargement des données...
-            </div>
-
-            <div *ngIf="!isLoading && agencySummaries.length > 0">
-                <!-- Filtres -->
-                <div class="filters-section">
-                    <form [formGroup]="filterForm" class="filter-form">
-                        <div class="filter-group">
-                            <label>Agence</label>
-                            <select formControlName="agency">
-                                <option value="">Toutes les agences</option>
-                                <option *ngFor="let agency of getFilteredAgencies()" [value]="agency">{{agency}}</option>
-                            </select>
-                        </div>
-
-                        <div class="filter-group">
-                            <label>Service</label>
-                            <select formControlName="service">
-                                <option value="">Tous les services</option>
-                                <option *ngFor="let service of getFilteredServices()" [value]="service">{{service}}</option>
-                            </select>
-                        </div>
-
-                        <div class="filter-group">
-                            <label>Pays</label>
-                            <select formControlName="country">
-                                <option value="">Tous les pays</option>
-                                <option *ngFor="let country of getFilteredCountries()" [value]="country">{{country}}</option>
-                            </select>
-                        </div>
-
-                        <div class="filter-group">
-                            <label>Date de début</label>
-                            <input type="date" formControlName="startDate">
-                        </div>
-
-                        <div class="filter-group">
-                            <label>Date de fin</label>
-                            <input type="date" formControlName="endDate">
-                        </div>
-
-                        <button type="button" (click)="applyFilters()" class="apply-btn" [disabled]="isLoading">
-                            {{isLoading ? 'Traitement en cours...' : 'Appliquer les filtres'}}
-                        </button>
-                    </form>
-                </div>
-
-                <!-- Résultats -->
-                <div class="results-section">
-                    <div class="stats-cards">
-                        <div class="stat-card">
-                            <div class="stat-title">Nombre total de transactions</div>
-                            <div class="stat-value">{{getTotalRecords()}}</div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-title">Volume total</div>
-                            <div class="stat-value">{{getTotalVolume() | number:'1.0-0'}}</div>
-                        </div>
-                    </div>
-
-                    <div class="details-table">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Agence</th>
-                                    <th>Service</th>
-                                    <th>Pays</th>
-                                    <th>Date</th>
-                                    <th>Volume Total</th>
-                                    <th>Nombre de transactions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr *ngFor="let summary of pagedStats">
-                                    <td>{{summary.agency}}</td>
-                                    <td>{{summary.service}}</td>
-                                    <td>{{summary.country}}</td>
-                                    <td>{{summary.date}}</td>
-                                    <td>{{summary.totalVolume | number:'1.0-0'}}</td>
-                                    <td>{{summary.recordCount}}</td>
-                                </tr>
-                            </tbody>
-                        </table>
-                        <div class="pagination-controls">
-                            <button (click)="prevStatsPage()" [disabled]="statsPage === 1 || isLoading">Précédent</button>
-                            <span>Page {{statsPage}} / {{totalPages}}</span>
-                            <button (click)="nextStatsPage()" [disabled]="statsPage === totalPages || isLoading">Suivant</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div *ngIf="!isLoading && agencySummaries.length === 0" class="no-data-message">
-                Aucune donnée disponible
-            </div>
-
-            <div class="action-buttons">
-                <button class="back-btn" (click)="goBack()" [disabled]="isLoading">
-                    ← Retour aux résultats
-                </button>
-                <button class="export-btn" (click)="exportStats()" [disabled]="!agencySummaries.length || isLoading">
-                    📥 Exporter les statistiques
-                </button>
-            </div>
-        </div>
-    `,
-    styles: [`
-        .stats-container {
-            padding: 20px;
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-
-        .loading-message, .no-data-message {
-            text-align: center;
-            padding: 40px;
-            font-size: 1.2em;
-            color: #666;
-        }
-
-        h2 {
-            color: #1976D2;
-            margin-bottom: 30px;
-            text-align: center;
-        }
-
-        .filters-section {
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            margin-bottom: 30px;
-        }
-
-        .filter-form {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px;
-            align-items: end;
-        }
-
-        .filter-group {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-        }
-
-        .filter-group label {
-            font-weight: 500;
-            color: #666;
-        }
-
-        .filter-group select,
-        .filter-group input {
-            padding: 8px 12px;
-            border: 1px solid #dee2e6;
-            border-radius: 4px;
-            font-size: 1em;
-        }
-
-        .apply-btn {
-            background: #2196F3;
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 4px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-
-        .apply-btn:hover {
-            background: #1976D2;
-        }
-
-        .stats-cards {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 20px;
-            margin-bottom: 30px;
-        }
-
-        .stat-card {
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            text-align: center;
-        }
-
-        .stat-title {
-            color: #666;
-            font-size: 0.9em;
-            margin-bottom: 10px;
-        }
-
-        .stat-value {
-            font-size: 1.8em;
-            font-weight: bold;
-            color: #1976D2;
-        }
-
-        .details-table {
-            background: white;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            overflow: hidden;
-        }
-
-        .details-table table {
-            width: 100%;
-            border-collapse: collapse;
-            background: #fff;
-            border-radius: 8px;
-            overflow: hidden;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-        }
-
-        .details-table th, .details-table td {
-            padding: 12px 16px;
-            border-bottom: 1px solid #f0f0f0;
-            text-align: left;
-        }
-
-        .details-table th {
-            background: #f7f9fa;
-            color: #1976D2;
-            font-weight: 600;
-        }
-
-        .details-table tr:nth-child(even) {
-            background: #f9fbfc;
-        }
-
-        .details-table tr:hover {
-            background: #e3f2fd;
-        }
-
-        .pagination-controls {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            gap: 20px;
-            padding: 20px;
-            background: white;
-            border-top: 1px solid #dee2e6;
-        }
-
-        .pagination-controls button {
-            padding: 8px 16px;
-            border: 1px solid #dee2e6;
-            border-radius: 4px;
-            background: white;
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-
-        .pagination-controls button:hover:not(:disabled) {
-            background: #f8f9fa;
-        }
-
-        .pagination-controls button:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-
-        .action-buttons {
-            display: flex;
-            gap: 10px;
-            justify-content: center;
-            margin-top: 20px;
-        }
-
-        .back-btn, .export-btn {
-            padding: 10px 20px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 1em;
-            transition: all 0.3s ease;
-        }
-
-        .back-btn {
-            background: #f5f5f5;
-            color: #666;
-        }
-
-        .back-btn:hover {
-            background: #e0e0e0;
-        }
-
-        .export-btn {
-            background: #2196F3;
-            color: white;
-        }
-
-        .export-btn:hover {
-            background: #1976D2;
-        }
-
-        .back-btn:disabled, .export-btn:disabled {
-            background: #ccc;
-            cursor: not-allowed;
-        }
-    `]
+    templateUrl: './stats.component.html',
+    styleUrls: ['./stats.component.scss']
 })
 export class StatsComponent implements OnInit, OnDestroy {
     private readonly BATCH_SIZE = 1000;
@@ -332,7 +25,7 @@ export class StatsComponent implements OnInit, OnDestroy {
     statsPage: number = 1;
     statsPageSize: number = 10;
     isLoading: boolean = false;
-    pagedStats: any[] = [];
+    // Supprimer la propriété pagedStats et la méthode updatePagedStats
     totalPages: number = 1;
     errorMessage: string | null = null;
 
@@ -362,6 +55,20 @@ export class StatsComponent implements OnInit, OnDestroy {
     }
 
     async ngOnInit() {
+        console.log('StatsComponent initialisé');
+        this.filterForm = this.fb.group({
+            agency: [''],
+            service: [''],
+            country: [''],
+            startDate: [''],
+            endDate: ['']
+        });
+
+        // Ajouter des listeners pour les changements de filtres
+        this.filterForm.valueChanges.subscribe(() => {
+            this.applyFilters();
+        });
+
         this.loadData();
     }
 
@@ -394,7 +101,8 @@ export class StatsComponent implements OnInit, OnDestroy {
         if (this.filterForm.value.country) {
             data = data.filter(s => s.country === this.filterForm.value.country);
         }
-        return [...new Set(data.map(s => s.agency))];
+        const agencies = [...new Set(data.map(s => s.agency))];
+        return agencies.sort();
     }
 
     getFilteredServices(): string[] {
@@ -405,7 +113,8 @@ export class StatsComponent implements OnInit, OnDestroy {
         if (this.filterForm.value.country) {
             data = data.filter(s => s.country === this.filterForm.value.country);
         }
-        return [...new Set(data.map(s => s.service))];
+        const services = [...new Set(data.map(s => s.service))];
+        return services.sort();
     }
 
     getFilteredCountries(): string[] {
@@ -416,7 +125,8 @@ export class StatsComponent implements OnInit, OnDestroy {
         if (this.filterForm.value.service) {
             data = data.filter(s => s.service === this.filterForm.value.service);
         }
-        return [...new Set(data.map(s => s.country))];
+        const countries = [...new Set(data.map(s => s.country))];
+        return countries.sort();
     }
 
     applyFilters() {
@@ -431,43 +141,163 @@ export class StatsComponent implements OnInit, OnDestroy {
                    afterStart && beforeEnd;
         });
         console.log('Données après filtrage:', this.filteredData);
-        this.updatePagedStats();
+        this.totalPages = Math.ceil(this.filteredData.length / this.statsPageSize);
     }
 
+    /**
+     * Agrège les statistiques en soustrayant les annulations des types d'origine
+     */
+    getAggregatedStats() {
+        // Map: { [type]: { volume: number, count: number, agency, service, country, date }[] }
+        const aggregation: { [key: string]: any[] } = {};
+        // On regroupe par type/service/pays/agence/date
+        for (const summary of this.filteredData) {
+            const type = summary.service;
+            const isAnnulation = type && type.startsWith('annulation_');
+            let typeOrigine = type;
+            if (isAnnulation) {
+                typeOrigine = type.replace('annulation_', '');
+            }
+            // Clé d'agrégation : type d'origine + agence + pays + date
+            const key = `${typeOrigine}|${summary.agency}|${summary.country}|${summary.date}`;
+            if (!aggregation[key]) {
+                aggregation[key] = [];
+            }
+            aggregation[key].push({
+                ...summary,
+                isAnnulation
+            });
+        }
+        // Calculer les totaux corrigés
+        const result: any[] = [];
+        for (const key in aggregation) {
+            const group = aggregation[key];
+            const type = group[0].service;
+            // Exclure les annulations des types spécifiques
+            const excludedAnnulationTypes = [
+                'annulation_total_paiement',
+                'annulation_total_cashin',
+                'annulation_annulation_bo',
+                'annulation_annulation_partenaire',
+                'annulation_FRAIS_TRANSACTION',
+                'annulation_compense',
+                'annulation_ajustement',
+                'annulation_approvisionnement'
+            ];
+            if (excludedAnnulationTypes.includes(type)) continue;
+            
+
+            // On additionne les volumes et nombres, puis on soustrait les annulations
+            let totalVolume = 0;
+            let recordCount = 0;
+            let agency = group[0].agency;
+            let service = group[0].service;
+            let country = group[0].country;
+            let date = group[0].date;
+            for (const item of group) {
+                if (item.isAnnulation) {
+                    totalVolume -= item.totalVolume;
+                    recordCount -= item.recordCount;
+                } else {
+                    totalVolume += item.totalVolume;
+                    recordCount += item.recordCount;
+                }
+            }
+            // On n'affiche que si le total est positif ou non nul
+            if (recordCount !== 0 || totalVolume !== 0) {
+                result.push({ agency, service, country, date, totalVolume, recordCount });
+            }
+        }
+        // Trier par date décroissante
+        return result.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    }
+
+    // Remplacer pagedStats par l'agrégation intelligente
+    get pagedStats() {
+        const aggregated = this.getAggregatedStats();
+        const start = (this.statsPage - 1) * this.statsPageSize;
+        const end = start + this.statsPageSize;
+        return aggregated.slice(start, end);
+    }
+
+    // Adapter les totaux globaux
     getTotalRecords(): number {
-        return this.filteredData.reduce((total, summary) => total + summary.recordCount, 0);
+        return this.getAggregatedStats().reduce((total, summary) => total + summary.recordCount, 0);
     }
 
     getTotalVolume(): number {
-        return this.filteredData.reduce((total, summary) => total + summary.totalVolume, 0);
-    }
-
-    private updatePagedStats() {
-        // Trie les données filtrées par date décroissante
-        const sorted = [...this.filteredData].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-        const start = (this.statsPage - 1) * this.statsPageSize;
-        const end = start + this.statsPageSize;
-        this.pagedStats = sorted.slice(start, end);
-        this.totalPages = Math.ceil(this.filteredData.length / this.statsPageSize);
+        return this.getAggregatedStats().reduce((total, summary) => total + summary.totalVolume, 0);
     }
 
     nextStatsPage() {
         if (this.statsPage < this.totalPages) {
             this.statsPage++;
-            this.updatePagedStats();
         }
     }
 
     prevStatsPage() {
         if (this.statsPage > 1) {
             this.statsPage--;
-            this.updatePagedStats();
         }
     }
 
+    goToStatsPage(page: number) {
+        if (page >= 1 && page <= this.totalPages) {
+            this.statsPage = page;
+        }
+    }
+
+    getVisibleStatsPages(): number[] {
+        const maxVisible = 5;
+        const pages: number[] = [];
+        
+        if (this.totalPages <= maxVisible) {
+            // Si moins de 5 pages, afficher toutes
+            for (let i = 1; i <= this.totalPages; i++) {
+                pages.push(i);
+            }
+        } else {
+            // Si plus de 5 pages, afficher intelligemment
+            let start = Math.max(1, this.statsPage - 2);
+            let end = Math.min(this.totalPages, start + maxVisible - 1);
+            
+            // Ajuster si on est près de la fin
+            if (end - start < maxVisible - 1) {
+                start = Math.max(1, end - maxVisible + 1);
+            }
+            
+            for (let i = start; i <= end; i++) {
+                pages.push(i);
+            }
+        }
+        
+        return pages;
+    }
+
     goBack() {
-        this.appStateService.setCurrentStep(3);
-        this.router.navigate(['/results']);
+        console.log('Navigation vers /results');
+        try {
+            this.router.navigate(['/results']).then(() => {
+                console.log('Navigation vers /results réussie');
+            }).catch(error => {
+                console.error('Erreur lors de la navigation vers /results:', error);
+            });
+        } catch (error) {
+            console.error('Erreur dans goBack():', error);
+        }
+    }
+
+    startNewReconciliation() {
+        console.log('Navigation vers /upload');
+        try {
+            this.router.navigate(['/upload']).then(() => {
+                console.log('Navigation vers /upload réussie');
+            }).catch(error => {
+                console.error('Erreur lors de la navigation vers /upload:', error);
+            });
+        } catch (error) {
+            console.error('Erreur dans startNewReconciliation():', error);
+        }
     }
 
     async exportStats() {
@@ -477,7 +307,7 @@ export class StatsComponent implements OnInit, OnDestroy {
                 Client: item.agency,
                 Service: item.service,
                 Pays: item.country,
-                Date: item.date,
+                Date: this.formatDateWithTime(item.date),
                 Volume: Number(item.totalVolume),
                 Transactions: Number(item.recordCount)
             }));
@@ -494,7 +324,7 @@ export class StatsComponent implements OnInit, OnDestroy {
                 { header: 'Client', key: 'Client', width: 20 },
                 { header: 'Service', key: 'Service', width: 20 },
                 { header: 'Pays', key: 'Pays', width: 20 },
-                { header: 'Date', key: 'Date', width: 15 },
+                { header: 'Date', key: 'Date', width: 20 },
                 { header: 'Volume', key: 'Volume', width: 15, style: { numFmt: '#,##0' } },
                 { header: 'Transactions', key: 'Transactions', width: 18, style: { numFmt: '#,##0' } }
             ];
@@ -558,6 +388,51 @@ export class StatsComponent implements OnInit, OnDestroy {
             this.errorMessage = 'Erreur lors de l\'export des données';
         } finally {
             this.isLoading = false;
+        }
+    }
+
+    formatDateWithTime(date: string): string {
+        try {
+            const dateObj = new Date(date);
+            if (isNaN(dateObj.getTime())) {
+                return date; // Retourne la date originale si elle n'est pas valide
+            }
+            
+            const formattedDate = dateObj.toLocaleDateString('fr-FR', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit'
+            });
+            
+            const formattedTime = dateObj.toLocaleTimeString('fr-FR', {
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+            
+            return `${formattedDate} ${formattedTime}`;
+        } catch (error) {
+            console.error('Erreur lors du formatage de la date:', error);
+            return date; // Retourne la date originale en cas d'erreur
+        }
+    }
+
+    deleteSummary(summary: any) {
+        if (confirm(`Voulez-vous vraiment supprimer le résumé de l'agence "${summary.agency}" du ${this.formatDateWithTime(summary.date)} ?`)) {
+            this.isLoading = true;
+            this.agencySummaryService.deleteSummary(summary.id).subscribe({
+                next: () => {
+                    // Retirer le résumé supprimé de la liste locale
+                    this.agencySummaries = this.agencySummaries.filter(s => s.id !== summary.id);
+                    this.applyFilters();
+                    this.isLoading = false;
+                },
+                error: (error) => {
+                    console.error('Erreur lors de la suppression:', error);
+                    this.isLoading = false;
+                    alert('Erreur lors de la suppression.');
+                }
+            });
         }
     }
 } 

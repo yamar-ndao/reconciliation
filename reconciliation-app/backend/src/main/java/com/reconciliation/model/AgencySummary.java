@@ -1,6 +1,7 @@
 package com.reconciliation.model;
 
 public class AgencySummary {
+    private Long id;
     private String agency;
     private String service;
     private String country;
@@ -8,6 +9,8 @@ public class AgencySummary {
     private double totalVolume;
     private int recordCount;
 
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
     public String getAgency() { return agency; }
     public void setAgency(String agency) { this.agency = agency; }
     public String getService() { return service; }

@@ -1,0 +1,188 @@
+<div class="ranking-container">
+  <div class="ranking-header">
+    <h1 class="ranking-title">🏆 Classements</h1>
+    <p>Découvrez les meilleures performances par agence et par service</p>
+  </div>
+
+  <div class="ranking-filter-bar" style="margin-bottom: 24px;">
+    <div style="display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start;">
+      <!-- Filtre par pays -->
+      <div style="flex: 1; min-width: 300px;">
+        <label style="display: block; margin-bottom: 8px; font-weight: bold;">Filtrer par pays :</label>
+        <div style="display: flex; flex-wrap: wrap; gap: 12px;">
+          <div *ngFor="let country of countries" style="display: flex; align-items: center; gap: 4px;">
+            <input 
+              type="checkbox" 
+              [id]="'country-' + country"
+              [checked]="isCountrySelected(country)"
+              (change)="toggleCountry(country)"
+              style="margin: 0;">
+            <label [for]="'country-' + country" style="margin: 0; cursor: pointer;">{{ country }}</label>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Filtre par période -->
+      <div style="min-width: 200px;">
+        <label style="display: block; margin-bottom: 8px; font-weight: bold;">Période de calcul :</label>
+        <select 
+          [(ngModel)]="selectedPeriod" 
+          (change)="onPeriodChange()"
+          class="ranking-select"
+          style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #ddd;">
+          <option value="day">Par Jour</option>
+          <option value="week">Par Semaine</option>
+          <option value="month">Par Mois</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div class="ranking-content">
+    <!-- Classement des Agences -->
+    <div class="ranking-section">
+      <div class="section-header">
+        <h2 class="section-title">🏢 {{ getAgencyRankingTitle() }}</h2>
+        <div class="ranking-controls">
+          <label for="agency-ranking-type">Trier par :</label>
+          <select 
+            id="agency-ranking-type" 
+            [(ngModel)]="agencyRankingType" 
+            (change)="onAgencyRankingTypeChange()"
+            class="ranking-select control-same-width">
+            <option value="transactions">Nombre de Transactions</option>
+            <option value="volume">Volume Total</option>
+            <option value="fees">Frais Totaux</option>
+          </select>
+          <button (click)="exportAgencyCSV()" class="export-btn control-same-width">Exporter CSV</button>
+          <button (click)="exportAgencyExcel()" class="export-btn control-same-width">Exporter Excel</button>
+        </div>
+      </div>
+
+      <div class="ranking-table-container">
+        <div *ngIf="loadingAgencies" class="loading">
+          <div class="spinner"></div>
+          <p>Chargement des classements...</p>
+        </div>
+
+        <div *ngIf="errorAgencies" class="error-message">
+          <p>{{ errorAgencies }}</p>
+          <button (click)="loadAgencyRankings()" class="retry-btn">Réessayer</button>
+        </div>
+
+        <table *ngIf="!loadingAgencies && !errorAgencies && paginatedAgencyRankings.length > 0" class="ranking-table">
+          <thead>
+            <tr>
+              <th class="position">Position</th>
+              <th class="agency-name">Agence</th>
+              <th class="transaction-count">Transactions</th>
+              <th class="total-volume">Volume Total</th>
+              <th class="total-fees">Frais Totaux</th>
+              <th class="average-volume">Volume Moyen/{{ getPeriodLabel() }}</th>
+              <th class="average-fees">Frais Moyens/{{ getPeriodLabel() }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let item of paginatedAgencyRankings; let i = index" [class]="getPositionClass((agencyPage-1)*agencyPageSize + i + 1)">
+              <td class="position">
+                <span class="position-number">{{ (agencyPage-1)*agencyPageSize + i + 1 }}</span>
+                <span *ngIf="((agencyPage-1)*agencyPageSize + i) < 3" class="medal">🏅</span>
+              </td>
+              <td class="agency-name">{{ item.agency }}</td>
+              <td class="transaction-count">{{ formatNumber(item.transactionCount) }}</td>
+              <td class="total-volume">{{ formatAmount(item.totalVolume) }}</td>
+              <td class="total-fees">{{ formatAmount(item.totalFees) }}</td>
+              <td class="average-volume">{{ formatAmount(item.averageVolume) }}</td>
+              <td class="average-fees">{{ formatAmount(item.averageFees) }}</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <!-- Pagination agences -->
+        <div *ngIf="agencyTotalPages > 1" class="pagination">
+          <button (click)="prevAgencyPage()" [disabled]="agencyPage === 1">&lt;</button>
+          <button *ngFor="let p of [].constructor(agencyTotalPages); let idx = index" (click)="setAgencyPage(idx+1)" [class.active]="agencyPage === (idx+1)">{{ idx+1 }}</button>
+          <button (click)="nextAgencyPage()" [disabled]="agencyPage === agencyTotalPages">&gt;</button>
+        </div>
+
+        <div *ngIf="!loadingAgencies && !errorAgencies && agencyRankings.length === 0" class="no-data">
+          <p>Aucune donnée d'agence disponible</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Classement des Services -->
+    <div class="ranking-section">
+      <div class="section-header">
+        <h2 class="section-title">🔧 {{ getServiceRankingTitle() }}</h2>
+        <div class="ranking-controls">
+          <label for="service-ranking-type">Trier par :</label>
+          <select 
+            id="service-ranking-type" 
+            [(ngModel)]="serviceRankingType" 
+            (change)="onServiceRankingTypeChange()"
+            class="ranking-select control-same-width">
+            <option value="transactions">Nombre de Transactions</option>
+            <option value="volume">Volume Total</option>
+            <option value="fees">Frais Totaux</option>
+          </select>
+          <button (click)="exportServiceCSV()" class="export-btn control-same-width">Exporter CSV</button>
+          <button (click)="exportServiceExcel()" class="export-btn control-same-width">Exporter Excel</button>
+        </div>
+      </div>
+
+      <div class="ranking-table-container">
+        <div *ngIf="loadingServices" class="loading">
+          <div class="spinner"></div>
+          <p>Chargement des classements...</p>
+        </div>
+
+        <div *ngIf="errorServices" class="error-message">
+          <p>{{ errorServices }}</p>
+          <button (click)="loadServiceRankings()" class="retry-btn">Réessayer</button>
+        </div>
+
+        <table *ngIf="!loadingServices && !errorServices && paginatedServiceRankings.length > 0" class="ranking-table">
+          <thead>
+            <tr>
+              <th class="position">Position</th>
+              <th class="service-name">Service</th>
+              <th class="transaction-count">Transactions</th>
+              <th class="total-volume">Volume Total</th>
+              <th class="total-fees">Frais Totaux</th>
+              <th class="unique-agencies">Agences</th>
+              <th class="average-volume">Volume Moyen/{{ getPeriodLabel() }}</th>
+              <th class="average-fees">Frais Moyens/{{ getPeriodLabel() }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let item of paginatedServiceRankings; let i = index" [class]="getPositionClass((servicePage-1)*servicePageSize + i + 1)">
+              <td class="position">
+                <span class="position-number">{{ (servicePage-1)*servicePageSize + i + 1 }}</span>
+                <span *ngIf="((servicePage-1)*servicePageSize + i) < 3" class="medal">🏅</span>
+              </td>
+              <td class="service-name">{{ item.service }}</td>
+              <td class="transaction-count">{{ formatNumber(item.transactionCount) }}</td>
+              <td class="total-volume">{{ formatAmount(item.totalVolume) }}</td>
+              <td class="total-fees">{{ formatAmount(item.totalFees) }}</td>
+              <td class="unique-agencies">{{ formatNumber(item.uniqueAgencies || 0) }}</td>
+              <td class="average-volume">{{ formatAmount(item.averageVolume) }}</td>
+              <td class="average-fees">{{ formatAmount(item.averageFees) }}</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <!-- Pagination services -->
+        <div *ngIf="serviceTotalPages > 1" class="pagination">
+          <button (click)="prevServicePage()" [disabled]="servicePage === 1">&lt;</button>
+          <button *ngFor="let p of [].constructor(serviceTotalPages); let idx = index" (click)="setServicePage(idx+1)" [class.active]="servicePage === (idx+1)">{{ idx+1 }}</button>
+          <button (click)="nextServicePage()" [disabled]="servicePage === serviceTotalPages">&gt;</button>
+        </div>
+
+        <div *ngIf="!loadingServices && !errorServices && serviceRankings.length === 0" class="no-data">
+          <p>Aucune donnée de service disponible</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div> 

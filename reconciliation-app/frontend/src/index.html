@@ -2,11 +2,47 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <title>CSV Reconciliation Tool</title>
+    <title>ReconciliationApp</title>
     <base href="/">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="icon" type="image/x-icon" href="favicon.ico">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <script>
+        // Script simple pour assurer le scroll sur Chrome
+        document.addEventListener('DOMContentLoaded', function() {
+            // Détecter Chrome
+            const isChrome = /Chrome/.test(navigator.userAgent) && /Google Inc/.test(navigator.vendor);
+            
+            if (isChrome) {
+                // Forcer le scroll sur Chrome
+                document.documentElement.style.overflowY = 'auto';
+                document.body.style.overflowY = 'auto';
+                
+                // S'assurer que tous les éléments scrollables fonctionnent
+                const scrollableElements = document.querySelectorAll('.main-content, .app-container, [class*="-container"], .table-responsive, .table-container');
+                scrollableElements.forEach(function(element) {
+                    if (element) {
+                        element.style.overflowY = 'auto';
+                    }
+                });
+                
+                // Correction après le chargement d'Angular
+                setTimeout(function() {
+                    document.documentElement.style.overflowY = 'auto';
+                    document.body.style.overflowY = 'auto';
+                    
+                    // Réappliquer aux éléments qui pourraient avoir été modifiés
+                    const allElements = document.querySelectorAll('*');
+                    allElements.forEach(function(element) {
+                        if (element.style.overflowY === 'hidden') {
+                            element.style.overflowY = 'auto';
+                        }
+                    });
+                }, 2000);
+            }
+        });
+    </script>
 </head>
 <body>
     <app-root></app-root>

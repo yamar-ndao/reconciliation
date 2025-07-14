@@ -1,0 +1,447 @@
+<div class="operations-container">
+    <!-- En-tête -->
+    <div class="header">
+        <h1>Gestion des Opérations</h1>
+        <button class="btn-primary" (click)="showAddForm = true" *ngIf="!showAddForm && !showEditForm">
+            <i class="fas fa-plus"></i> Ajouter une opération
+        </button>
+    </div>
+
+    <!-- Statistiques -->
+    <div class="stats-section">
+        <div *ngIf="isLoadingStats" class="loading-stats">
+            <i class="fas fa-spinner fa-spin"></i> Chargement des statistiques...
+        </div>
+        
+        <div *ngIf="!isLoadingStats && statsByType" class="stats-by-type">
+            <div class="stats-header">
+                <h3>Statistiques par Type d'Opération</h3>
+                
+                <!-- Filtres -->
+                <div class="stats-filters">
+                    <div class="filter-group">
+                        <app-autocomplete-input
+                            [options]="paysList"
+                            [(ngModel)]="selectedPays"
+                            (valueChange)="applyStatsFilters()"
+                            placeholder="Saisir un pays..."
+                            label="Pays:">
+                        </app-autocomplete-input>
+                    </div>
+                    
+                    <div class="filter-group">
+                        <app-autocomplete-input
+                            [options]="comptesNumeros"
+                            [(ngModel)]="selectedCompteNumero"
+                            (optionSelected)="applyStatsFilters()"
+                            placeholder="Saisir un numéro de compte..."
+                            label="Compte:">
+                        </app-autocomplete-input>
+                    </div>
+                    
+                    <button class="btn-secondary" (click)="clearStatsFilters()">
+                        <i class="fas fa-times"></i> Effacer les filtres
+                    </button>
+                </div>
+            </div>
+            
+            <div *ngIf="getOperationTypes().length === 0" class="no-stats-message">
+                <i class="fas fa-info-circle"></i>
+                <p>Aucune opération trouvée avec les filtres actuels.</p>
+                <p>Les types d'opérations disponibles incluent : Total Cash-in, Total Paiement, Approvisionnement, Ajustement, Compense, et Frais Transaction.</p>
+            </div>
+            
+            <div *ngIf="getOperationTypes().length > 0" class="stats-grid">
+                <div *ngFor="let type of getPagedOperationTypes()" 
+                     class="stat-type-card" 
+                     [class.empty]="!statsByType[type] || (statsByType[type]?.count === 0 && statsByType[type]?.totalAmount === 0)">
+                    <div class="stat-type-header">
+                        <h4>{{ getTypeDisplayName(type) }}</h4>
+                    </div>
+                    <div class="stat-type-content">
+                        <div class="stat-item">
+                            <span class="stat-label">Nombre AG:</span>
+                            <span class="stat-value">{{ statsByType[type]?.count || 0 }}</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Montant Total:</span>
+                            <span class="stat-value">{{ (statsByType[type]?.totalAmount || 0) | number:'1.0-2' }}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Pagination des cartes de statistiques -->
+            <div *ngIf="totalStatsPages > 1" class="stats-pagination">
+                <button class="btn-pagination" 
+                        [disabled]="currentStatsPage === 1"
+                        (click)="prevStatsPage()">
+                    <i class="fas fa-chevron-left"></i> Précédent
+                </button>
+                
+                <div class="pagination-indicators">
+                    <span *ngFor="let page of getVisibleStatsPages()" 
+                          class="page-indicator"
+                          [class.active]="currentStatsPage === page"
+                          (click)="goToStatsPage(page)">
+                        {{ page }}
+                    </span>
+                </div>
+                
+                <button class="btn-pagination" 
+                        [disabled]="currentStatsPage === totalStatsPages"
+                        (click)="nextStatsPage()">
+                    Suivant <i class="fas fa-chevron-right"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Formulaire d'ajout -->
+    <div *ngIf="showAddForm" class="add-form-section">
+        <h3>Ajouter une nouvelle opération</h3>
+        <form [formGroup]="addForm" (ngSubmit)="addOperation()" class="form">
+            <div class="form-row">
+                <div class="form-group">
+                    <app-autocomplete-input
+                        [options]="typeOperations"
+                        formControlName="typeOperation"
+                        placeholder="Saisir ou sélectionner un type..."
+                        label="Type d'opération *">
+                    </app-autocomplete-input>
+                    <div *ngIf="addForm.get('typeOperation')?.invalid && addForm.get('typeOperation')?.touched" class="error-message">
+                        Le type d'opération est requis
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Date d'opération *</label>
+                    <input type="date" formControlName="dateOperation">
+                    <div *ngIf="addForm.get('dateOperation')?.invalid && addForm.get('dateOperation')?.touched" class="error-message">
+                        La date d'opération est requise
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Montant * <span class="help-text">(Utilisez des valeurs négatives pour les ajustements)</span></label>
+                    <input type="number" formControlName="montant" placeholder="0.00" step="0.01">
+                    <div *ngIf="addForm.get('montant')?.invalid && addForm.get('montant')?.touched" class="error-message">
+                        Le montant est requis
+                    </div>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <app-autocomplete-input
+                        [options]="comptesNumeros"
+                        formControlName="compteId"
+                        (valueChange)="onCompteChange()"
+                        placeholder="Saisir ou sélectionner un compte..."
+                        label="Compte">
+                    </app-autocomplete-input>
+                    <div *ngIf="addForm.get('compteId')?.invalid && addForm.get('compteId')?.touched" class="error-message">
+                        Le compte est requis
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Code propriétaire (automatique)</label>
+                    <input type="text" formControlName="codeProprietaire" readonly [style.background-color]="'#f5f5f5'">
+                </div>
+                <div class="form-group">
+                    <label>Service</label>
+                    <input type="text" formControlName="service" placeholder="Ex: CASHIN, PAIEMENT">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Pays (automatique)</label>
+                    <input type="text" formControlName="pays" readonly [style.background-color]="'#f5f5f5'">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Banque</label>
+                    <input type="text" formControlName="banque" placeholder="Ex: BNP Paribas">
+                </div>
+                <div class="form-group">
+                    <label>Solde avant (automatique)</label>
+                    <input type="number" formControlName="soldeAvant" readonly [style.background-color]="'#f5f5f5'">
+                </div>
+                <div class="form-group">
+                    <label>Solde après (calculé automatiquement)</label>
+                    <input type="number" formControlName="soldeApres" readonly [style.background-color]="'#f5f5f5'">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Nom du bordereau</label>
+                    <input type="text" formControlName="nomBordereau" placeholder="Ex: Bordereau_2024_001">
+                </div>
+            </div>
+            <div class="form-actions">
+                <button type="submit" [disabled]="!addForm.valid || isAdding">
+                    {{ isAdding ? 'Ajout en cours...' : 'Ajouter' }}
+                </button>
+                <button type="button" (click)="cancelAdd()">Annuler</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Formulaire de modification -->
+    <div *ngIf="showEditForm && editingOperation" class="edit-form-section">
+        <h3>Modifier l'opération #{{ editingOperation.id }}</h3>
+        <form [formGroup]="editForm" (ngSubmit)="updateOperation()" class="form">
+            <!-- Display non-editable info -->
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Compte</label>
+                    <input type="text" [value]="editingOperation.codeProprietaire" readonly
+                        [style.background-color]="'#f5f5f5'">
+                </div>
+                <div class="form-group">
+                    <label>Pays</label>
+                    <input type="text" [value]="editingOperation.pays" readonly [style.background-color]="'#f5f5f5'">
+                </div>
+            </div>
+
+            <!-- Editable fields -->
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Type d'opération *</label>
+                    <select formControlName="typeOperation">
+                        <option value="">Sélectionner un type</option>
+                        <option *ngFor="let type of typeOperations" [value]="type">
+                            {{ getTypeDisplayName(type) }} ({{ getTypeImpact(type) }})
+                        </option>
+                    </select>
+                    <div *ngIf="editForm.get('typeOperation')?.invalid && editForm.get('typeOperation')?.touched"
+                        class="error-message">
+                        Le type d'opération est requis
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Date d'opération *</label>
+                    <input type="date" formControlName="dateOperation">
+                    <div *ngIf="editForm.get('dateOperation')?.invalid && editForm.get('dateOperation')?.touched"
+                        class="error-message">
+                        La date d'opération est requise
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Montant * <span class="help-text">(Utilisez des valeurs négatives pour les ajustements)</span></label>
+                    <input type="number" formControlName="montant" placeholder="0.00" step="0.01">
+                    <div *ngIf="editForm.get('montant')?.invalid && editForm.get('montant')?.touched"
+                        class="error-message">
+                        Le montant est requis
+                    </div>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Banque</label>
+                    <input type="text" formControlName="banque" placeholder="Ex: BNP Paribas">
+                </div>
+                <div class="form-group">
+                    <label>Service</label>
+                    <input type="text" formControlName="service" placeholder="Ex: CASHIN, PAIEMENT">
+                </div>
+                <div class="form-group">
+                    <label>Nom du bordereau</label>
+                    <input type="text" formControlName="nomBordereau" placeholder="Ex: Bordereau_2024_001">
+                </div>
+            </div>
+            <div class="form-actions">
+                <button type="submit" [disabled]="!editForm.valid">
+                    Mettre à jour
+                </button>
+                <button type="button" (click)="cancelEdit()">Annuler</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Filtres -->
+    <div class="filters-section">
+        <h3>Filtres</h3>
+        <form [formGroup]="filterForm" (ngSubmit)="applyFilters()" class="filters-form">
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Type d'opération</label>
+                    <select formControlName="typeOperation">
+                        <option *ngFor="let opt of filterTypeOptions" [value]="opt.value">{{ opt.label }}</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <app-autocomplete-input
+                        [options]="paysList"
+                        formControlName="pays"
+                        placeholder="Saisir un pays..."
+                        label="Pays">
+                    </app-autocomplete-input>
+                </div>
+                <div class="form-group">
+                    <app-autocomplete-input
+                        [options]="statutList"
+                        formControlName="statut"
+                        placeholder="Saisir un statut..."
+                        label="Statut">
+                    </app-autocomplete-input>
+                </div>
+                <div class="form-group">
+                    <app-autocomplete-input
+                        [options]="banqueList"
+                        formControlName="banque"
+                        placeholder="Saisir une banque..."
+                        label="Banque">
+                    </app-autocomplete-input>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <app-autocomplete-input
+                        [options]="codeProprietaireList"
+                        formControlName="codeProprietaire"
+                        placeholder="Saisir un code propriétaire..."
+                        label="Code propriétaire">
+                    </app-autocomplete-input>
+                </div>
+                <div class="form-group">
+                    <app-autocomplete-input
+                        [options]="serviceList"
+                        formControlName="service"
+                        placeholder="Saisir un service..."
+                        label="Service">
+                    </app-autocomplete-input>
+                </div>
+                <div class="form-group">
+                    <label>Date début</label>
+                    <input type="date" formControlName="dateDebut">
+                </div>
+                <div class="form-group">
+                    <label>Date fin</label>
+                    <input type="date" formControlName="dateFin">
+                </div>
+            </div>
+            <div class="form-actions">
+                <button type="submit">Appliquer les filtres</button>
+                <button type="button" (click)="clearFilters()">Effacer les filtres</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Liste des opérations -->
+    <div class="operations-list">
+        <div class="list-header">
+            <h3>Liste des Opérations</h3>
+            <button class="btn-secondary" (click)="exportOperations()" [disabled]="isExporting">
+                {{ isExporting ? 'Export en cours...' : 'Exporter Excel' }}
+            </button>
+        </div>
+
+        <div *ngIf="isLoading" class="loading">
+            <p>Chargement des opérations...</p>
+        </div>
+
+        <div *ngIf="!isLoading && pagedOperations.length === 0" class="no-data">
+            <p>Aucune opération trouvée</p>
+        </div>
+
+        <div *ngIf="!isLoading && pagedOperations.length > 0" class="table-container">
+            <table class="operations-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Type</th>
+                        <th>Compte</th>
+                        <th>Service</th>
+                        <th>Débit</th>
+                        <th>Crédit</th>
+                        <th>Solde Avant</th>
+                        <th>Solde Après</th>
+                        <th>Statut</th>
+                        <th>Pays</th>
+                        <th>Banque</th>
+                        <th>Bordereau</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr *ngFor="let op of pagedOperations">
+                        <td>{{ op.dateOperation | date:'dd/MM/yyyy HH:mm' }}</td>
+                        <td>
+                            <span class="badge type-{{ op.typeOperation.replace(' ', '_') | lowercase }}">
+                                {{ op.typeOperation | uppercase }}
+                            </span>
+                        </td>
+                        <td>{{ op.codeProprietaire }}</td>
+                        <td>{{ op.service || '-' }}</td>
+                        <td>
+                          {{ getDebitCreditForOperation(op).debit ? (getDebitCreditForOperation(op).debit | number:'1.2-2') : '' }}
+                        </td>
+                        <td>
+                          {{ getDebitCreditForOperation(op).credit ? (getDebitCreditForOperation(op).credit | number:'1.2-2') : '' }}
+                        </td>
+                        <td>{{ op.soldeAvant | number:'1.2-2' }}</td>
+                        <td>
+                            <span *ngIf="op.statut === 'Validée'; else notCalculated">
+                                {{ op.soldeApres | number:'1.2-2' }}
+                            </span>
+                            <ng-template #notCalculated>
+                                <span class="non-calcule">Non calculé</span>
+                            </ng-template>
+                        </td>
+                        <td>
+                            <span class="badge status-{{ op.statut.replace(' ', '_') | lowercase }}">
+                                {{ op.statut }}
+                            </span>
+                        </td>
+                        <td>{{ op.pays }}</td>
+                        <td>{{ op.banque }}</td>
+                        <td>{{ op.nomBordereau }}</td>
+                        <td class="actions">
+                            <button (click)="editOperation(op)" class="btn icon-btn edit" title="Modifier">
+                                <i class="fas fa-edit" style="color: green;"></i>
+                            </button>
+                            <button class="btn-icon btn-validate" 
+                                    (click)="validateOperation(op.id!)" 
+                                    [disabled]="op.statut === 'Validée'"
+                                    [class.disabled]="op.statut === 'Validée'"
+                                    *ngIf="op.id">
+                                <i class="fas fa-check"></i>
+                            </button>
+                            <button (click)="annulerOperation(op.id!)" [disabled]="isLoading" title="Annuler" class="btn icon-btn delete">
+                                <i class="fas fa-ban" style="color: orange;"></i>
+                            </button>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination -->
+        <div class="pagination" *ngIf="totalPages > 1">
+            <button (click)="prevPage()" [disabled]="currentPage === 1">
+                <i class="fas fa-chevron-left"></i> Précédent
+            </button>
+            
+            <div class="pagination-indicators">
+                <span *ngFor="let page of getVisiblePages()" 
+                      class="page-indicator"
+                      [class.active]="currentPage === page"
+                      (click)="goToPage(page)">
+                    {{ page }}
+                </span>
+            </div>
+            
+            <button (click)="nextPage()" [disabled]="currentPage === totalPages">
+                Suivant <i class="fas fa-chevron-right"></i>
+            </button>
+        </div>
+    </div>
+</div> 
+
+<!-- Ajout du sous-menu Log utilisateur dans les paramètres -->
+<nav class="settings-menu">
+  <ul>
+    <li><a routerLink="/settings/profile">Profil</a></li>
+    <li><a routerLink="/settings/security">Sécurité</a></li>
+    <li><a routerLink="/settings/log-utilisateur">Log utilisateur</a></li>
+  </ul>
+</nav> 

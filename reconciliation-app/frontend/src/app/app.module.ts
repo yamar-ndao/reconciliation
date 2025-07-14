@@ -9,21 +9,48 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatTableModule } from '@angular/material/table';
 import { MatPaginatorModule } from '@angular/material/paginator';
+import { MatAutocompleteModule } from '@angular/material/autocomplete';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { NgChartsModule } from 'ng2-charts';
 
 import { AppComponent } from './app.component';
 import { FileUploadComponent } from './components/file-upload/file-upload.component';
-import { ColumnSelectionComponent } from './components/column-selection/column-selection.component';
 import { ReconciliationResultsComponent } from './components/reconciliation-results/reconciliation-results.component';
+import { ReconciliationComponent } from './components/reconciliation/reconciliation.component';
 import { StatsComponent } from './components/stats/stats.component';
+import { DashboardComponent } from './components/dashboard/dashboard.component';
+import { ColumnSelectionComponent } from './components/column-selection/column-selection.component';
 import { AgencySummaryComponent } from './components/stats/agency-summary/agency-summary.component';
+import { ComptesComponent } from './components/comptes/comptes.component';
+import { OperationsComponent } from './components/operations/operations.component';
+import { FraisComponent } from './components/frais/frais.component';
+import { AutocompleteInputComponent } from './components/shared/autocomplete-input.component';
+import { UsersComponent } from './components/users/users.component';
+import { RankingComponent } from './components/ranking/ranking.component';
 import { AppRoutingModule } from './app-routing.module';
+import { SidebarComponent } from './components/sidebar/sidebar.component';
+import { ReconciliationService } from './services/reconciliation.service';
+import { Observable, of } from 'rxjs';
+import { LoginComponent } from './login/login.component';
+import { TraitementComponent } from './components/traitement/traitement.component';
 
 @NgModule({
     declarations: [
         AppComponent,
         FileUploadComponent,
         ReconciliationResultsComponent,
-        StatsComponent
+        ReconciliationComponent,
+        StatsComponent,
+        DashboardComponent,
+        ComptesComponent,
+        OperationsComponent,
+        FraisComponent,
+        SidebarComponent,
+        AutocompleteInputComponent,
+        UsersComponent,
+        RankingComponent,
+        LoginComponent,
+        TraitementComponent
     ],
     imports: [
         BrowserModule,
@@ -39,9 +66,13 @@ import { AppRoutingModule } from './app-routing.module';
         MatPaginatorModule,
         ColumnSelectionComponent,
         AgencySummaryComponent,
-        AppRoutingModule
+        AppRoutingModule,
+        MatAutocompleteModule,
+        ReactiveFormsModule,
+        MatProgressSpinnerModule,
+        NgChartsModule
     ],
-    providers: [],
+    providers: [ReconciliationService],
     bootstrap: [AppComponent]
 })
 export class AppModule { } 

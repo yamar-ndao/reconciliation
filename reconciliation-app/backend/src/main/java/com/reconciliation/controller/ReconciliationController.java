@@ -12,6 +12,9 @@ import jakarta.servlet.http.HttpServletRequest;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
 
 @Slf4j
 @RestController
@@ -67,5 +70,22 @@ public class ReconciliationController {
             log.error("Erreur lors de la lecture du fichier: {}", e.getMessage());
             return ResponseEntity.badRequest().body("Erreur lors de la lecture du fichier: " + e.getMessage());
         }
+    }
+
+    @PostMapping("/start")
+    public ResponseEntity<Map<String, String>> startReconciliation(@RequestBody ReconciliationRequest req) {
+        String jobId = UUID.randomUUID().toString();
+        // reconciliationService.reconcileAsync(jobId, req); // Lancer en asynchrone (méthode non implémentée)
+        Map<String, String> resp = new HashMap<>();
+        resp.put("jobId", jobId);
+        return ResponseEntity.ok(resp);
+    }
+
+    @GetMapping("/progress")
+    public ResponseEntity<Map<String, Integer>> getProgress(@RequestParam String jobId) {
+        int progress = reconciliationService.getProgress(jobId);
+        Map<String, Integer> resp = new HashMap<>();
+        resp.put("progress", progress);
+        return ResponseEntity.ok(resp);
     }
 } 

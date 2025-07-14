@@ -1,0 +1,80 @@
+<div class="sidebar">
+    <div class="logo-container">
+        <i class="fas fa-sync-alt logo-icon"></i>
+        <h2 class="title">Réconciliation</h2>
+    </div>
+    <ul class="nav-list">
+        <li>
+            <a routerLink="/dashboard" routerLinkActive="active">
+                <i class="fas fa-tachometer-alt"></i>
+                <span>Dashboard</span>
+            </a>
+        </li>
+        <li>
+            <a routerLink="/traitement" routerLinkActive="active">
+                <i class="fas fa-tools"></i>
+                <span>Traitement</span>
+            </a>
+        </li>
+        <li>
+            <a routerLink="/upload" routerLinkActive="active">
+                <i class="fas fa-file-upload"></i>
+                <span>Réconciliation</span>
+            </a>
+        </li>
+        <li>
+            <a routerLink="/results" routerLinkActive="active">
+                <i class="fas fa-poll"></i>
+                <span>Résultats</span>
+            </a>
+        </li>
+        <li>
+            <a routerLink="/stats" routerLinkActive="active">
+                <i class="fas fa-chart-bar"></i>
+                <span>Statistiques</span>
+            </a>
+        </li>
+        <li>
+            <a routerLink="/ranking" routerLinkActive="active">
+                <i class="fas fa-trophy"></i>
+                <span>Classements</span>
+            </a>
+        </li>
+        <li>
+            <a routerLink="/comptes" routerLinkActive="active">
+                <i class="fas fa-wallet"></i>
+                <span>Comptes</span>
+            </a>
+        </li>
+        <li>
+            <a routerLink="/operations" routerLinkActive="active">
+                <i class="fas fa-exchange-alt"></i>
+                <span>Opérations</span>
+            </a>
+        </li>
+        <li>
+            <a routerLink="/frais" routerLinkActive="active">
+                <i class="fas fa-money-bill-wave"></i>
+                <span>Frais</span>
+            </a>
+        </li>
+        <li>
+            <a href="#" class="has-submenu" (click)="toggleParamSubmenu(); $event.preventDefault()">
+                <i class="fas fa-cog"></i>
+                <span>Paramètre</span>
+                <span class="submenu-arrow">{{ showParamSubmenu ? '▲' : '▼' }}</span>
+            </a>
+            <ul class="submenu" *ngIf="showParamSubmenu">
+                <li><a routerLink="/users"><i class="fas fa-user"></i> Utilisateur</a></li>
+                <li><a routerLink="/profil"><i class="fas fa-id-badge"></i> Profil</a></li>
+                <li><a routerLink="/log-utilisateur"><i class="fas fa-history"></i> Log utilisateur</a></li>
+            </ul>
+        </li>
+    </ul>
+    <div class="sidebar-logout">
+        <a href="#" class="logout-link" (click)="logout(); $event.preventDefault()">
+            <i class="fas fa-sign-out-alt"></i>
+            <span>Logout</span>
+        </a>
+    </div>
+</div> 

@@ -1,0 +1,95 @@
+<!-- Popup de performance -->
+<div *ngIf="showPerformancePopup" class="performance-popup-overlay">
+    <div class="performance-popup">
+        <div class="performance-header">
+            <h3>📊 Performance de la réconciliation</h3>
+        </div>
+        <div class="performance-details">
+            <div class="performance-item">
+                <i class="fas fa-clock"></i>
+                <span>Temps d'exécution: {{ formatTime(executionTime) }}</span>
+            </div>
+            <div class="performance-item">
+                <i class="fas fa-database"></i>
+                <span>Enregistrements traités: {{ processedRecords | number }}</span>
+            </div>
+            <div class="performance-item">
+                <i class="fas fa-tachometer-alt"></i>
+                <span>Vitesse: {{ (processedRecords / (executionTime / 1000)) | number:'1.0-0' }} enregistrements/seconde</span>
+            </div>
+        </div>
+        <button class="close-popup-btn" (click)="closePerformancePopup()">Fermer</button>
+    </div>
+</div>
+
+<div class="reconciliation-container">
+    <!-- Affichage de la progression -->
+    <div *ngIf="showProgress" class="progress-modal">
+        <div class="progress-bar">
+            <div class="progress-bar-inner" [style.width.%]="progressPercentage"></div>
+        </div>
+        <div class="progress-text">
+            Réconciliation en cours... {{progressPercentage}}%
+        </div>
+    </div>
+
+    <!-- Affichage des résultats -->
+    <div *ngIf="reconciliationResponse && !isLoading" class="results-container">
+        <div class="results-header">
+            <h2>Réconciliation terminée</h2>
+            <div class="execution-summary">
+                <div class="summary-item">
+                    <i class="fas fa-clock"></i>
+                    <span>Temps d'exécution: {{ formatTime(executionTime) }}</span>
+                </div>
+                <div class="summary-item">
+                    <i class="fas fa-database"></i>
+                    <span>Enregistrements traités: {{ processedRecords | number }}</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="results-grid">
+            <div class="result-card matches">
+                <div class="card-header">
+                    <i class="fas fa-check-circle"></i>
+                    <h3>Correspondances</h3>
+                </div>
+                <div class="card-value">{{ getSafeValue(reconciliationResponse.totalMatches) | number }}</div>
+            </div>
+            
+            <div class="result-card mismatches">
+                <div class="card-header">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <h3>Différences</h3>
+                </div>
+                <div class="card-value">{{ getSafeValue(reconciliationResponse.totalMismatches) | number }}</div>
+            </div>
+            
+            <div class="result-card bo-only">
+                <div class="card-header">
+                    <i class="fas fa-file-alt"></i>
+                    <h3>Uniquement BO</h3>
+                </div>
+                <div class="card-value">{{ getSafeValue(reconciliationResponse.totalBoOnly) | number }}</div>
+            </div>
+            
+            <div class="result-card partner-only">
+                <div class="card-header">
+                    <i class="fas fa-file-alt"></i>
+                    <h3>Uniquement Partenaire</h3>
+                </div>
+                <div class="card-value">{{ getSafeValue(reconciliationResponse.totalPartnerOnly) | number }}</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Affichage des erreurs -->
+    <div *ngIf="error" class="error-container">
+        <div class="error-card">
+            <i class="fas fa-exclamation-circle"></i>
+            <h3>Erreur lors de la réconciliation</h3>
+            <p>{{ error }}</p>
+        </div>
+    </div>
+</div> 

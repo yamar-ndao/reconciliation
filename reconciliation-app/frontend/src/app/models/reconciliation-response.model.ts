@@ -9,6 +9,9 @@ export interface ReconciliationResponse {
     totalMismatches: number;
     totalBoOnly: number;
     totalPartnerOnly: number;
+    executionTimeMs?: number;
+    processedRecords?: number;
+    progressPercentage?: number;
 }
 
 export interface Match {

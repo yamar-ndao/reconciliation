@@ -1,0 +1,391 @@
+<div class="frais-container">
+    <!-- En-tête -->
+    <div class="header">
+        <h1>Gestion des Frais de Transaction</h1>
+        <button class="btn-primary" (click)="showAddForm = true" *ngIf="!showAddForm && !showEditForm">
+            <i class="fas fa-plus"></i> Ajouter un frais
+        </button>
+    </div>
+
+    <!-- Formulaire d'ajout -->
+    <div *ngIf="showAddForm" class="add-form-section">
+        <h3>Ajouter un nouveau frais de transaction</h3>
+        <form [formGroup]="addForm" (ngSubmit)="addFraisTransaction()" class="form">
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Service *</label>
+                    <app-autocomplete-input
+                        [options]="services"
+                        formControlName="service"
+                        placeholder="Saisir ou sélectionner un service...">
+                    </app-autocomplete-input>
+                    <div *ngIf="addForm.get('service')?.invalid && addForm.get('service')?.touched" class="error-message">
+                        Le service est requis
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Agence *</label>
+                    <app-autocomplete-input
+                        [options]="agences"
+                        formControlName="agence"
+                        placeholder="Saisir ou sélectionner une agence...">
+                    </app-autocomplete-input>
+                    <div *ngIf="addForm.get('agence')?.invalid && addForm.get('agence')?.touched" class="error-message">
+                        L'agence est requise
+                    </div>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Type de calcul *</label>
+                    <select formControlName="typeCalcul" (change)="onTypeCalculChange()">
+                        <option value="NOMINAL">Frais fixe</option>
+                        <option value="POURCENTAGE">Frais en pourcentage</option>
+                    </select>
+                    <div *ngIf="addForm.get('typeCalcul')?.invalid && addForm.get('typeCalcul')?.touched" class="error-message">
+                        Le type de calcul est requis
+                    </div>
+                </div>
+                <div class="form-group" *ngIf="addForm.get('typeCalcul')?.value === 'NOMINAL'">
+                    <label>Montant du frais (FCFA) *</label>
+                    <input type="number" formControlName="montantFrais" placeholder="0.00" step="0.01" min="0">
+                    <div *ngIf="addForm.get('montantFrais')?.invalid && addForm.get('montantFrais')?.touched" class="error-message">
+                        Le montant est requis et doit être positif
+                    </div>
+                </div>
+                <div class="form-group" *ngIf="addForm.get('typeCalcul')?.value === 'POURCENTAGE'">
+                    <label>Pourcentage (%) *</label>
+                    <input type="number" formControlName="pourcentage" placeholder="0.00" step="0.01" min="0" max="100">
+                    <div *ngIf="addForm.get('pourcentage')?.invalid && addForm.get('pourcentage')?.touched" class="error-message">
+                        Le pourcentage est requis et doit être entre 0 et 100
+                    </div>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Description</label>
+                    <input type="text" formControlName="description" placeholder="Description du frais">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" formControlName="actif">
+                        Actif
+                    </label>
+                </div>
+            </div>
+            <div class="form-actions">
+                <button type="submit" [disabled]="!addForm.valid || isAdding">
+                    {{ isAdding ? 'Ajout en cours...' : 'Ajouter' }}
+                </button>
+                <button type="button" (click)="cancelAdd()">Annuler</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Formulaire de modification -->
+    <div *ngIf="showEditForm && editingFrais" class="edit-form-section">
+        <h3>Modifier le frais</h3>
+        <form [formGroup]="editForm" (ngSubmit)="updateFraisTransaction()" class="form">
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Service *</label>
+                    <app-autocomplete-input
+                        [options]="services"
+                        formControlName="service"
+                        placeholder="Saisir ou sélectionner un service...">
+                    </app-autocomplete-input>
+                    <div *ngIf="editForm.get('service')?.invalid && editForm.get('service')?.touched" class="error-message">
+                        Le service est requis
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Agence *</label>
+                    <app-autocomplete-input
+                        [options]="agences"
+                        formControlName="agence"
+                        placeholder="Saisir ou sélectionner une agence...">
+                    </app-autocomplete-input>
+                    <div *ngIf="editForm.get('agence')?.invalid && editForm.get('agence')?.touched" class="error-message">
+                        L'agence est requise
+                    </div>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Type de calcul *</label>
+                    <select formControlName="typeCalcul" (change)="onTypeCalculChange()">
+                        <option value="NOMINAL">Frais fixe</option>
+                        <option value="POURCENTAGE">Frais en pourcentage</option>
+                    </select>
+                    <div *ngIf="editForm.get('typeCalcul')?.invalid && editForm.get('typeCalcul')?.touched" class="error-message">
+                        Le type de calcul est requis
+                    </div>
+                </div>
+                <div class="form-group" *ngIf="editForm.get('typeCalcul')?.value === 'NOMINAL'">
+                    <label>Montant du frais (FCFA) *</label>
+                    <input type="number" formControlName="montantFrais" placeholder="0.00" step="0.01" min="0">
+                    <div *ngIf="editForm.get('montantFrais')?.invalid && editForm.get('montantFrais')?.touched" class="error-message">
+                        Le montant est requis et doit être positif
+                    </div>
+                </div>
+                <div class="form-group" *ngIf="editForm.get('typeCalcul')?.value === 'POURCENTAGE'">
+                    <label>Pourcentage (%) *</label>
+                    <input type="number" formControlName="pourcentage" placeholder="0.00" step="0.01" min="0" max="100">
+                    <div *ngIf="editForm.get('pourcentage')?.invalid && editForm.get('pourcentage')?.touched" class="error-message">
+                        Le pourcentage est requis et doit être entre 0 et 100
+                    </div>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Description</label>
+                    <input type="text" formControlName="description" placeholder="Description du frais">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" formControlName="actif">
+                        Actif
+                    </label>
+                </div>
+            </div>
+            <div class="form-actions">
+                <button type="submit" [disabled]="!editForm.valid">
+                    Mettre à jour
+                </button>
+                <button type="button" (click)="cancelEdit()">Annuler</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Filtres -->
+    <div class="filters-section">
+        <h3>Filtres</h3>
+        <form [formGroup]="filterForm" (ngSubmit)="applyFilters()" class="filters-form">
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Service</label>
+                    <app-autocomplete-input
+                        [options]="services"
+                        formControlName="service"
+                        placeholder="Tous les services">
+                    </app-autocomplete-input>
+                </div>
+                <div class="form-group">
+                    <label>Agence</label>
+                    <app-autocomplete-input
+                        [options]="agences"
+                        formControlName="agence"
+                        placeholder="Toutes les agences">
+                    </app-autocomplete-input>
+                </div>
+                <div class="form-group">
+                    <label>Statut</label>
+                    <select formControlName="actif">
+                        <option value="">Tous</option>
+                        <option [value]="true">Actif</option>
+                        <option [value]="false">Inactif</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-actions">
+                <button type="submit">Appliquer les filtres</button>
+                <button type="button" (click)="clearFilters()">Effacer les filtres</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Liste des frais -->
+    <div class="frais-list">
+        <div class="list-header">
+            <h3>Liste des Frais de Transaction</h3>
+            <div class="export-buttons" *ngIf="!isLoading && pagedFrais.length > 0">
+                <button class="btn-export btn-csv" (click)="exportToCSV()" [disabled]="isExporting">
+                    <i class="fas fa-file-csv"></i>
+                    {{ isExporting ? 'Export en cours...' : 'Exporter CSV' }}
+                </button>
+                <button class="btn-export btn-excel" (click)="exportToExcel()" [disabled]="isExporting">
+                    <i class="fas fa-file-excel"></i>
+                    {{ isExporting ? 'Export en cours...' : 'Exporter Excel' }}
+                </button>
+                <button class="btn-export btn-api" (click)="exportViaAPI()" [disabled]="isExporting">
+                    <i class="fas fa-download"></i>
+                    {{ isExporting ? 'Export en cours...' : 'Export API' }}
+                </button>
+            </div>
+        </div>
+
+        <div *ngIf="isLoading" class="loading">
+            <p>Chargement des frais de transaction...</p>
+        </div>
+
+        <div *ngIf="!isLoading && pagedFrais.length === 0" class="no-data">
+            <p>Aucun frais de transaction trouvé</p>
+        </div>
+
+        <div *ngIf="!isLoading && pagedFrais.length > 0" class="table-container">
+            <table class="frais-table">
+                <thead>
+                    <tr>
+                        <th>Service</th>
+                        <th>Agence</th>
+                        <th>Type</th>
+                        <th>Valeur Paramétrée</th>
+                        <th>Description</th>
+                        <th>Statut</th>
+                        <th>Date Création</th>
+                        <th>Date Modification</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr *ngFor="let frais of pagedFrais">
+                        <td>
+                            <span class="badge service-{{ frais.service.toLowerCase() }}">
+                                {{ frais.service }}
+                            </span>
+                        </td>
+                        <td>{{ frais.agence }}</td>
+                        <td>
+                            <span class="badge type-{{ frais.typeCalcul?.toLowerCase() || 'nominal' }}">
+                                {{ frais.typeCalcul === 'POURCENTAGE' ? 'Frais en %' : 'Frais fixe' }}
+                            </span>
+                        </td>
+                        <td>
+                            <span *ngIf="frais.typeCalcul === 'POURCENTAGE'">
+                                {{ frais.pourcentage | number:'1.2-2' }}%
+                            </span>
+                            <span *ngIf="frais.typeCalcul !== 'POURCENTAGE'">
+                                {{ frais.montantFrais | number:'1.2-2' }} FCFA
+                            </span>
+                        </td>
+                        <td>{{ frais.description || '-' }}</td>
+                        <td>
+                            <span class="badge status-{{ frais.actif ? 'actif' : 'inactif' }}">
+                                {{ frais.actif ? 'Actif' : 'Inactif' }}
+                            </span>
+                        </td>
+                        <td>{{ frais.dateCreation | date:'dd/MM/yyyy HH:mm' }}</td>
+                        <td>{{ frais.dateModification | date:'dd/MM/yyyy HH:mm' }}</td>
+                        <td class="actions">
+                            <button class="btn-icon" (click)="editFraisTransaction(frais)">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button class="btn-icon btn-toggle" (click)="toggleFraisTransaction(frais.id)" *ngIf="frais.id">
+                                <i class="fas" [class.fa-toggle-on]="frais.actif" [class.fa-toggle-off]="!frais.actif"></i>
+                            </button>
+                            <button class="btn-icon btn-danger" (click)="deleteFraisTransaction(frais.id)" *ngIf="frais.id">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination -->
+        <div class="pagination" *ngIf="totalPages > 1">
+            <button (click)="prevPage()" [disabled]="currentPage === 1">
+                <i class="fas fa-chevron-left"></i> Précédent
+            </button>
+            
+            <div class="pagination-indicators">
+                <span *ngFor="let page of getVisiblePages()" 
+                      class="page-indicator"
+                      [class.active]="currentPage === page"
+                      (click)="goToPage(page)">
+                    {{ page }}
+                </span>
+            </div>
+            
+            <button (click)="nextPage()" [disabled]="currentPage === totalPages">
+                Suivant <i class="fas fa-chevron-right"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- Section d'information sur la logique de calcul -->
+    <div class="info-section">
+        <h3>ℹ️ Logique de calcul des frais</h3>
+        <div class="info-content">
+            <div class="info-card">
+                <h4>💰 Frais fixes (NOMINAL)</h4>
+                <p><strong>Formule:</strong> Montant configuré × Nombre de transactions</p>
+                <p><strong>Source du nombre de transactions:</strong> Données réelles de l'AgencySummary</p>
+                <p><strong>Exemple:</strong> Si le montant configuré est 500 FCFA et qu'il y a 10 transactions, les frais = 500 × 10 = 5 000 FCFA</p>
+            </div>
+            <div class="info-card">
+                <h4>📊 Frais en pourcentage (POURCENTAGE)</h4>
+                <p><strong>Formule:</strong> Volume total de l'opération × Pourcentage</p>
+                <p><strong>Source du volume:</strong> Montant de l'opération principale</p>
+                <p><strong>Exemple:</strong> Si le volume est 10 000 FCFA et le pourcentage 2.5%, les frais = 10 000 × 2.5% = 250 FCFA</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Section de test du calcul des frais -->
+    <div class="test-section">
+        <h3>🧪 Test du calcul des frais</h3>
+        <div class="test-form">
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Service</label>
+                    <input type="text" [(ngModel)]="testService" placeholder="Ex: AIRTIME">
+                </div>
+                <div class="form-group">
+                    <label>Agence</label>
+                    <input type="text" [(ngModel)]="testAgence" placeholder="Ex: AG001">
+                </div>
+                <div class="form-group">
+                    <label>Type de calcul</label>
+                    <select [(ngModel)]="testTypeCalcul" (change)="onTestTypeChange()">
+                        <option value="NOMINAL">Frais fixe</option>
+                        <option value="POURCENTAGE">Frais en pourcentage</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group" *ngIf="testTypeCalcul === 'NOMINAL'">
+                    <label>Montant du frais (FCFA)</label>
+                    <input type="number" [(ngModel)]="testMontantFrais" placeholder="Ex: 100">
+                </div>
+                <div class="form-group" *ngIf="testTypeCalcul === 'POURCENTAGE'">
+                    <label>Pourcentage (%)</label>
+                    <input type="number" [(ngModel)]="testPourcentage" placeholder="Ex: 2.5">
+                </div>
+                <div class="form-group">
+                    <label>Volume de l'opération (FCFA)</label>
+                    <input type="number" [(ngModel)]="testVolumeOperation" placeholder="Ex: 10000">
+                </div>
+                <div class="form-group" *ngIf="testTypeCalcul === 'NOMINAL'">
+                    <label>Nombre de transactions</label>
+                    <input type="number" [(ngModel)]="testNombreTransactions" placeholder="Ex: 50">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <button type="button" (click)="testFraisCalculation()" class="btn btn-primary">
+                        🧪 Tester le calcul
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Résultat du test -->
+            <div *ngIf="testResult" class="test-result">
+                <h4>📊 Résultat du test</h4>
+                <div class="result-details">
+                    <p><strong>Type:</strong> {{ testResult.type }}</p>
+                    <p><strong>Formule:</strong> {{ testResult.formule }}</p>
+                    <p *ngIf="testResult.volumeTotal"><strong>Volume total:</strong> {{ testResult.volumeTotal | number:'1.2-2' }} FCFA</p>
+                    <p *ngIf="testResult.pourcentage"><strong>Pourcentage:</strong> {{ testResult.pourcentage }}%</p>
+                    <p *ngIf="testResult.montantParametre"><strong>Montant paramétré:</strong> {{ testResult.montantParametre | number:'1.2-2' }} FCFA</p>
+                    <p *ngIf="testResult.nombreTransactions"><strong>Nombre de transactions:</strong> {{ testResult.nombreTransactions }}</p>
+                    <p class="result-total"><strong>Montant des frais calculé:</strong> <span class="highlight">{{ testResult.montantFraisCalcule | number:'1.2-2' }} FCFA</span></p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div> 

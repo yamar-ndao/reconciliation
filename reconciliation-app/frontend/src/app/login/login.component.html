@@ -1,0 +1,32 @@
+<div class="login-container">
+  <form (ngSubmit)="onSubmit()" [formGroup]="loginForm" class="login-form">
+    <div class="logo-section">
+      <i class="fas fa-sync-alt logo-icon"></i>
+      <h2>Connexion</h2>
+      <p class="subtitle">Système de Réconciliation</p>
+    </div>
+    
+    <mat-form-field appearance="outline" class="login-field">
+      <mat-label>Nom d'utilisateur</mat-label>
+      <input matInput formControlName="username" autocomplete="username" required>
+      <mat-icon matSuffix>person</mat-icon>
+    </mat-form-field>
+    
+    <mat-form-field appearance="outline" class="login-field">
+      <mat-label>Mot de passe</mat-label>
+      <input matInput type="password" formControlName="password" autocomplete="current-password" required>
+      <mat-icon matSuffix>lock</mat-icon>
+    </mat-form-field>
+    
+    <button mat-raised-button color="primary" type="submit" [disabled]="loginForm.invalid || loading">
+      <mat-icon *ngIf="!loading">login</mat-icon>
+      <mat-spinner *ngIf="loading" diameter="20"></mat-spinner>
+      {{ loading ? 'Connexion...' : 'Se connecter' }}
+    </button>
+    
+    <div *ngIf="error" class="login-error">
+      <mat-icon>error</mat-icon>
+      {{ error }}
+    </div>
+  </form>
+</div>

@@ -18,6 +18,11 @@ public class ReconciliationResponse {
     private int totalMismatches;
     private int totalBoOnly;
     private int totalPartnerOnly;
+    
+    // Ajout des propriétés de performance
+    private long executionTimeMs;
+    private int processedRecords;
+    private double progressPercentage;
 
     @Data
     public static class Match {

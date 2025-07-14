@@ -1,0 +1,247 @@
+<div class="dashboard-container">
+    <div class="dashboard-header">
+        <h1>📊 Dashboard - Vue d'ensemble</h1>
+        <p class="subtitle">Bienvenue dans votre outil de réconciliation de données</p>
+        <div class="header-actions">
+            <div class="last-update">
+                <span *ngIf="!loading">Dernière mise à jour : {{ lastActivity }}</span>
+                <span *ngIf="loading">Mise à jour en cours...</span>
+            </div>
+            <button class="refresh-btn" (click)="refreshMetrics()" [disabled]="loading">
+                <span *ngIf="loading">🔄 Chargement...</span>
+                <span *ngIf="!loading">🔄 Actualiser</span>
+            </button>
+        </div>
+    </div>
+
+    <div class="dashboard-info">
+        <div class="info-section">
+            <h3>💡 Fonctionnalités principales</h3>
+            <ul>
+                <li>Upload et comparaison de fichiers CSV/Excel</li>
+                <li>Réconciliation automatique des données</li>
+                <li>Analyse des différences et correspondances</li>
+                <li>Génération de rapports détaillés</li>
+                <li>Export des résultats en Excel</li>
+            </ul>
+        </div>
+
+        <div class="info-section">
+            <h3>📊 Métriques rapides</h3>
+            <div *ngIf="error" class="error-message">
+                {{ error }}
+            </div>
+            <div class="metrics-grid">
+                <div class="metric">
+                    <div class="metric-value">{{totalReconciliations}}</div>
+                    <div class="metric-label">Total réconciliations</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-value">{{totalFiles}}</div>
+                    <div class="metric-label">Fichiers traités</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-value">{{todayReconciliations}}</div>
+                    <div class="metric-label">Réconciliations aujourd'hui</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-value">{{lastActivity}}</div>
+                    <div class="metric-label">Dernière activité</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Nouvelle section pour les métriques détaillées -->
+    <div class="detailed-metrics-section">
+        <div class="detailed-metrics-header">
+            <h3>📈 Métriques détaillées</h3>
+            <div class="metric-select" style="margin-bottom: 16px; text-align: right;">
+              <label for="metricSelect">Afficher&nbsp;:</label>
+              <select id="metricSelect" [(ngModel)]="selectedMetric" (change)="updateBarChartData()">
+                <option value="volume">Volume total</option>
+                <option value="transactions">Nombre de transactions</option>
+                <option value="frais">Volume des frais</option>
+              </select>
+            </div>
+            <div class="chart-type-select" style="margin-bottom: 12px; text-align: right;">
+              <label for="chartTypeSelect">Vue :</label>
+              <select id="chartTypeSelect" [(ngModel)]="selectedChartType">
+                <option value="bar">Barres</option>
+                <option value="line">Courbe</option>
+              </select>
+            </div>
+            <!-- Espace réservé pour les futurs graphiques placé ici -->
+            <div class="graph-placeholder">
+              <canvas *ngIf="selectedChartType === 'bar' && barChartData && barChartData.labels?.length" baseChart
+                [data]="barChartData"
+                [options]="barChartOptions"
+                [type]="'bar'">
+              </canvas>
+              <canvas *ngIf="selectedChartType === 'line' && lineChartData && lineChartData.labels?.length" baseChart
+                [data]="lineChartData"
+                [options]="barChartOptions"
+                [type]="'line'">
+              </canvas>
+              <div *ngIf="(!barChartData || !barChartData.labels?.length) && (!lineChartData || !lineChartData.labels?.length)" class="text">Aucune donnée à afficher</div>
+            </div>
+            <button class="export-btn" (click)="exportDetailedMetricsExcel()">Exporter Excel</button>
+            <div class="filters-container">
+                <div class="filter-group">
+                    <label for="agency-select">Agence:</label>
+                    <select 
+                        id="agency-select" 
+                        [(ngModel)]="selectedAgency"
+                        (change)="onAgencyChange()"
+                        class="filter-select">
+                        <option value="Tous">Toutes les agences</option>
+                        <option *ngFor="let agency of filterOptions?.agencies || []" [value]="agency">
+                            {{ agency }}
+                        </option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label for="service-select">Service:</label>
+                    <select 
+                        id="service-select" 
+                        [(ngModel)]="selectedService"
+                        (change)="onServiceChange()"
+                        class="filter-select">
+                        <option value="Tous">Tous les services</option>
+                        <option *ngFor="let service of filterOptions?.services || []" [value]="service">
+                            {{ service }}
+                        </option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label for="country-select">Pays:</label>
+                    <select 
+                        id="country-select" 
+                        [(ngModel)]="selectedCountry"
+                        (change)="onCountryChange()"
+                        class="filter-select">
+                        <option value="Tous">Tous les pays</option>
+                        <option *ngFor="let country of filterOptions?.countries || []" [value]="country">
+                            {{ country }}
+                        </option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label for="timeFilter">Période:</label>
+                    <select [(ngModel)]="selectedTimeFilter" (change)="onTimeFilterChange()" class="filter-select">
+                        <option *ngFor="let timeFilter of filterOptions?.timeFilters" [value]="timeFilter">
+                            {{ timeFilter }}
+                        </option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <button type="button" (click)="resetFilters()" class="reset-btn">
+                        <i class="fas fa-undo"></i> Réinitialiser
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Champs de dates personnalisées -->
+        <div *ngIf="showCustomDateInputs" class="custom-date-inputs">
+            <div class="date-input-group">
+                <label for="startDate">Date de début:</label>
+                <input type="date" id="startDate" [(ngModel)]="startDate" (change)="onFilterChange()" class="date-input">
+            </div>
+            <div class="date-input-group">
+                <label for="endDate">Date de fin:</label>
+                <input type="date" id="endDate" [(ngModel)]="endDate" (change)="onFilterChange()" class="date-input">
+            </div>
+        </div>
+
+        <div *ngIf="detailedError" class="error-message">
+            {{ detailedError }}
+        </div>
+
+        <div *ngIf="detailedLoading" class="loading-message">
+            Chargement des métriques détaillées...
+        </div>
+
+        <div *ngIf="!detailedLoading && detailedMetrics" class="detailed-metrics-content">
+            <!-- Métriques principales -->
+            <div class="main-metrics-grid">
+                <div class="main-metric">
+                    <div class="main-metric-icon">💰</div>
+                    <div class="main-metric-value">{{detailedMetrics.totalVolume | number:'1.0-0'}}</div>
+                    <div class="main-metric-label">Volume Total</div>
+                </div>
+                <div class="main-metric">
+                    <div class="main-metric-icon">📊</div>
+                    <div class="main-metric-value">{{detailedMetrics.totalTransactions}}</div>
+                    <div class="main-metric-label">Transactions</div>
+                </div>
+                <div class="main-metric">
+                    <div class="main-metric-icon">👥</div>
+                    <div class="main-metric-value">{{detailedMetrics.totalClients}}</div>
+                    <div class="main-metric-label">Clients</div>
+                </div>
+                <div class="main-metric">
+                    <div class="main-metric-icon">📈</div>
+                    <div class="main-metric-value">{{ getAverageTransactionsPerPeriod() }}</div>
+                    <div class="main-metric-label">Transaction moyenne/Jour</div>
+                </div>
+                <div class="main-metric">
+                    <div class="main-metric-icon">💎</div>
+                    <div class="main-metric-value">{{detailedMetrics.averageVolume | number:'1.0-0'}}</div>
+                    <div class="main-metric-label">Volume Moyen/Jour</div>
+                </div>
+                <div class="main-metric">
+                    <div class="main-metric-icon">💸</div>
+                    <div class="main-metric-value">{{detailedMetrics.averageFeesPerDay | number:'1.0-0'}}</div>
+                    <div class="main-metric-label">Frais moyen/Jour</div>
+                </div>
+            </div>
+
+            <!-- Statistiques par type d'opération -->
+            <div class="operation-stats-section">
+                <h4>📋 Statistiques par type d'opération</h4>
+                <div class="operation-stats-grid">
+                    <div *ngFor="let stat of detailedMetrics.operationStats" class="operation-stat-card">
+                        <div class="operation-stat-header">
+                            <span class="operation-type">{{stat.operationType}}</span>
+                        </div>
+                        <div class="operation-stat-content">
+                            <div class="operation-stat-item">
+                                <span class="stat-label">Transactions:</span>
+                                <span class="stat-value">{{stat.transactionCount}}</span>
+                            </div>
+                            <div class="operation-stat-item">
+                                <span class="stat-label">Volume:</span>
+                                <span class="stat-value">{{stat.totalVolume | number:'1.0-0'}}</span>
+                            </div>
+                            <div class="operation-stat-item">
+                                <span class="stat-label">Moyenne:</span>
+                                <span class="stat-value">{{stat.averageVolume | number:'1.0-0'}}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Fréquence par type d'opération -->
+            <div class="frequency-stats-section">
+                <h4>📊 Fréquence par type d'opération</h4>
+                <div class="frequency-stats-grid">
+                    <div *ngFor="let freq of detailedMetrics.frequencyStats" class="frequency-stat-card">
+                        <div class="frequency-stat-header">
+                            <span class="operation-type">{{freq.operationType}}</span>
+                        </div>
+                        <div class="frequency-stat-content">
+                            <div class="frequency-bar">
+                                <div class="frequency-fill" [style.width.%]="getFrequencyPercentage(freq.frequency)"></div>
+                            </div>
+                            <span class="frequency-value">{{freq.frequency}}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Espace réservé pour les futurs graphiques supprimé de la fin du fichier -->
+</div> 

@@ -12,6 +12,8 @@ import org.springframework.web.bind.annotation.*;
 import jakarta.servlet.http.HttpServletRequest;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
 
 @RestController
 @RequestMapping("/api/statistics")
@@ -98,6 +100,66 @@ public class StatisticsController {
             logger.error("Error fetching statistics with filters: {}", e.getMessage(), e);
             return ResponseEntity.internalServerError()
                 .body("Failed to fetch statistics: " + e.getMessage());
+        }
+    }
+
+    @GetMapping("/dashboard-metrics")
+    public ResponseEntity<?> getDashboardMetrics(HttpServletRequest request) {
+        logger.info("=== DASHBOARD METRICS REQUEST RECEIVED ===");
+        logger.info("Method: {}", request.getMethod());
+        logger.info("Origin: {}", request.getHeader("Origin"));
+        
+        try {
+            Map<String, Object> metrics = statisticsService.getDashboardMetrics();
+            logger.info("Dashboard metrics calculated successfully");
+            return ResponseEntity.ok(metrics);
+        } catch (Exception e) {
+            logger.error("Error fetching dashboard metrics: {}", e.getMessage(), e);
+            return ResponseEntity.internalServerError()
+                .body("Failed to fetch dashboard metrics: " + e.getMessage());
+        }
+    }
+
+    @GetMapping("/filter-options")
+    public ResponseEntity<?> getFilterOptions(HttpServletRequest request) {
+        logger.info("=== FILTER OPTIONS REQUEST RECEIVED ===");
+        logger.info("Method: {}", request.getMethod());
+        logger.info("Origin: {}", request.getHeader("Origin"));
+        
+        try {
+            Map<String, Object> filterOptions = statisticsService.getFilterOptions();
+            logger.info("Filter options retrieved successfully");
+            return ResponseEntity.ok(filterOptions);
+        } catch (Exception e) {
+            logger.error("Error fetching filter options: {}", e.getMessage(), e);
+            return ResponseEntity.internalServerError()
+                .body("Failed to fetch filter options: " + e.getMessage());
+        }
+    }
+
+    @GetMapping("/detailed-metrics")
+    public ResponseEntity<?> getDetailedMetrics(
+            @RequestParam(required = false) List<String> agency,
+            @RequestParam(required = false) List<String> service,
+            @RequestParam(required = false) List<String> country,
+            @RequestParam(required = false) String timeFilter,
+            @RequestParam(required = false) String startDate,
+            @RequestParam(required = false) String endDate,
+            HttpServletRequest request) {
+        logger.info("=== DETAILED METRICS REQUEST RECEIVED ===");
+        logger.info("Method: {}", request.getMethod());
+        logger.info("Origin: {}", request.getHeader("Origin"));
+        logger.info("Filters: agency={}, service={}, country={}, timeFilter={}, startDate={}, endDate={}", 
+            agency, service, country, timeFilter, startDate, endDate);
+        
+        try {
+            Map<String, Object> metrics = statisticsService.getDetailedMetrics(agency, service, country, timeFilter, startDate, endDate);
+            logger.info("Detailed metrics calculated successfully");
+            return ResponseEntity.ok(metrics);
+        } catch (Exception e) {
+            logger.error("Error fetching detailed metrics: {}", e.getMessage(), e);
+            return ResponseEntity.internalServerError()
+                .body("Failed to fetch detailed metrics: " + e.getMessage());
         }
     }
 } 

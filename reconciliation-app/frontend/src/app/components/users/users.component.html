@@ -1,0 +1,138 @@
+<div class="users-container">
+  <div class="header">
+    <h2>Gestion des utilisateurs</h2>
+    <button class="btn btn-primary" (click)="isCreating = !isCreating">
+      {{ isCreating ? 'Annuler' : 'Nouvel utilisateur' }}
+    </button>
+  </div>
+
+  <!-- Messages d'erreur et de succès -->
+  <div *ngIf="errorMessage" class="alert alert-danger">
+    {{ errorMessage }}
+  </div>
+  <div *ngIf="successMessage" class="alert alert-success">
+    {{ successMessage }}
+  </div>
+
+  <!-- Formulaire de création -->
+  <div *ngIf="isCreating" class="form-section">
+    <h3>Créer un nouvel utilisateur</h3>
+    <form (ngSubmit)="createUser()" #createForm="ngForm">
+      <div class="form-group">
+        <label for="newUsername">Nom d'utilisateur *</label>
+        <input 
+          type="text" 
+          id="newUsername" 
+          name="username" 
+          [(ngModel)]="newUser.username" 
+          required 
+          class="form-control"
+          placeholder="Entrez le nom d'utilisateur">
+      </div>
+      
+      <div class="form-group">
+        <label for="newPassword">Mot de passe *</label>
+        <input 
+          type="password" 
+          id="newPassword" 
+          name="password" 
+          [(ngModel)]="newUser.password" 
+          required 
+          class="form-control"
+          placeholder="Entrez le mot de passe">
+      </div>
+      
+      <div class="form-actions">
+        <button type="submit" class="btn btn-success" [disabled]="isCreating">
+          {{ isCreating ? 'Création...' : 'Créer' }}
+        </button>
+        <button type="button" class="btn btn-secondary" (click)="isCreating = false">
+          Annuler
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Formulaire de modification -->
+  <div *ngIf="isEditing && editingUser" class="form-section">
+    <h3>Modifier l'utilisateur</h3>
+    <form (ngSubmit)="updateUser()" #editForm="ngForm">
+      <div class="form-group">
+        <label for="editUsername">Nom d'utilisateur *</label>
+        <input 
+          type="text" 
+          id="editUsername" 
+          name="username" 
+          [(ngModel)]="editingUser.username" 
+          required 
+          class="form-control"
+          placeholder="Entrez le nom d'utilisateur">
+      </div>
+      
+      <div class="form-group">
+        <label for="editPassword">Nouveau mot de passe (optionnel)</label>
+        <input 
+          type="password" 
+          id="editPassword" 
+          name="password" 
+          [(ngModel)]="editingUser.password" 
+          class="form-control"
+          placeholder="Laissez vide pour ne pas changer">
+      </div>
+      
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">
+          Mettre à jour
+        </button>
+        <button type="button" class="btn btn-secondary" (click)="cancelEdit()">
+          Annuler
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Liste des utilisateurs -->
+  <div class="users-list">
+    <h3>Liste des utilisateurs ({{ users.length }})</h3>
+    
+    <div *ngIf="users.length === 0" class="no-users">
+      <p>Aucun utilisateur trouvé.</p>
+    </div>
+    
+    <div *ngIf="users.length > 0" class="table-responsive">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Nom d'utilisateur</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let user of users">
+            <td>{{ user.id }}</td>
+            <td>
+              <span class="username">{{ user.username }}</span>
+              <span *ngIf="user.username === 'admin'" class="badge badge-primary">Admin</span>
+            </td>
+            <td class="actions">
+              <button 
+                class="btn btn-sm btn-outline-primary" 
+                (click)="editUser(user)"
+                [disabled]="isEditing">
+                Modifier
+              </button>
+              <button 
+                class="btn btn-sm btn-outline-danger" 
+                (click)="deleteUser(user)"
+                [disabled]="user.username === 'admin'"
+                [title]="user.username === 'admin' ? 'Impossible de supprimer l\'administrateur' : 'Supprimer'">
+                Supprimer
+              </button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div> 

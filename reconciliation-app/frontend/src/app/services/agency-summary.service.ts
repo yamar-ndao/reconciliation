@@ -18,4 +18,8 @@ export class AgencySummaryService {
   exportAllSummaries(): Observable<any> {
     return this.http.get(`${this.apiUrl}/export`);
   }
+
+  deleteSummary(id: number): Observable<any> {
+    return this.http.delete(`${this.apiUrl}/${id}`);
+  }
 } 

@@ -14,7 +14,7 @@ import { AppStateService } from '../../services/app-state.service';
                     <div class="file-icon">🏢</div>
                     <h4>BO (Back Office)</h4>
                     <p>Cliquez pour sélectionner le fichier CSV du BO</p>
-                    <input #boFileInput type="file" (change)="onBoFileSelected($event)" accept=".csv, .xlsx" style="display: none">
+                    <input #boFileInput type="file" (change)="onBoFileSelected($event)" accept=".csv, .xls, .xlsx, .xlsm, .xlsb" style="display: none">
                     <div class="file-info" [class.loaded]="boFile">
                         {{ boFile ? boFile.name : 'Aucun fichier sélectionné' }}
                     </div>
@@ -24,7 +24,7 @@ import { AppStateService } from '../../services/app-state.service';
                     <div class="file-icon">🤝</div>
                     <h4>Partenaire</h4>
                     <p>Cliquez pour sélectionner le fichier CSV du partenaire</p>
-                    <input #partnerFileInput type="file" (change)="onPartnerFileSelected($event)" accept=".csv, .xlsx" style="display: none">
+                    <input #partnerFileInput type="file" (change)="onPartnerFileSelected($event)" accept=".csv, .xls, .xlsx, .xlsm, .xlsb" style="display: none">
                     <div class="file-info" [class.loaded]="partnerFile">
                         {{ partnerFile ? partnerFile.name : 'Aucun fichier sélectionné' }}
                     </div>
@@ -54,12 +54,19 @@ import { AppStateService } from '../../services/app-state.service';
                 </div>
             </div>
 
-            <button class="btn" [disabled]="!canProceed()" (click)="onProceed()">
+            <div class="button-container">
+                <button class="btn proceed-btn" [disabled]="!canProceed()" (click)="onProceed()">
                 Continuer
+                </button>
+                <div class="action-buttons">
+                    <button class="btn dashboard-btn" (click)="goToDashboard()">
+                        📈 Dashboard
             </button>
             <button class="btn stats-btn" (click)="goToStats()">
-                Voir les statistiques
+                        📊 Statistiques
             </button>
+                </div>
+            </div>
         </div>
     `,
     styles: [`
@@ -136,38 +143,56 @@ import { AppStateService } from '../../services/app-state.service';
             font-weight: 600;
         }
 
+        .button-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .action-buttons {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+            margin-top: 10px;
+        }
+
         .btn {
-            background: linear-gradient(45deg, #4CAF50, #45a049);
-            color: white;
+            padding: 10px 20px;
             border: none;
-            padding: 15px 30px;
-            border-radius: 8px;
-            font-size: 1.1em;
+            border-radius: 5px;
             cursor: pointer;
+            font-weight: 500;
             transition: all 0.3s ease;
-            display: block;
-            margin: 30px auto 0;
-            min-width: 200px;
         }
 
-        .btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(76, 175, 80, 0.3);
+        .proceed-btn {
+            background-color: #4CAF50;
+            color: white;
+            width: 200px;
         }
 
-        .btn:disabled {
-            background: #ccc;
+        .proceed-btn:disabled {
+            background-color: #cccccc;
             cursor: not-allowed;
-            transform: none;
-            box-shadow: none;
+        }
+
+        .dashboard-btn {
+            background-color: #2196F3;
+            color: white;
+            min-width: 150px;
         }
 
         .stats-btn {
-            background: linear-gradient(45deg, #1976D2, #2196F3);
-            margin: 20px 0 0 auto;
-            display: block;
-            min-width: 200px;
-            text-align: right;
+            background-color: #FF9800;
+            color: white;
+            min-width: 150px;
+        }
+
+        .btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
         }
     `]
 })
@@ -312,15 +337,25 @@ export class FileUploadComponent {
 
     onProceed(): void {
         if (this.canProceed()) {
-            this.filesLoaded.emit({
-                boData: this.boData,
-                partnerData: this.partnerData
-            });
+            console.log('Navigation vers la sélection des colonnes...');
+            console.log('Données BO:', this.boData.length, 'lignes');
+            console.log('Données Partenaire:', this.partnerData.length, 'lignes');
+            
+            // Sauvegarder les données dans le service d'état
+            this.appStateService.setReconciliationData(this.boData, this.partnerData);
+            this.appStateService.setCurrentStep(2);
+            
+            // Naviguer vers la page de sélection des colonnes
+            this.router.navigate(['/column-selection']);
         }
     }
 
     goToStats() {
         this.appStateService.setCurrentStep(4);
         this.router.navigate(['/stats']);
+    }
+
+    goToDashboard() {
+        this.router.navigate(['/dashboard']);
     }
 } 

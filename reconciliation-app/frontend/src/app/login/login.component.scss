@@ -1,0 +1,185 @@
+.login-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  background: linear-gradient(135deg, #2c3e50 0%, #3498db 100%);
+  position: relative;
+}
+
+.login-container::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="grain" width="100" height="100" patternUnits="userSpaceOnUse"><circle cx="25" cy="25" r="1" fill="white" opacity="0.1"/><circle cx="75" cy="75" r="1" fill="white" opacity="0.1"/><circle cx="50" cy="10" r="0.5" fill="white" opacity="0.1"/><circle cx="10" cy="60" r="0.5" fill="white" opacity="0.1"/><circle cx="90" cy="40" r="0.5" fill="white" opacity="0.1"/></pattern></defs><rect width="100" height="100" fill="url(%23grain)"/></svg>');
+  pointer-events: none;
+}
+
+.login-form {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+  padding: 2.2rem 1.2rem 2.5rem 1.2rem;
+  border-radius: 20px;
+  box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+  display: flex;
+  flex-direction: column;
+  gap: 1.2rem;
+  min-width: 320px;
+  max-width: 350px;
+  width: 100%;
+  position: relative;
+  z-index: 1;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  animation: slideInUp 0.6s ease-out;
+}
+
+.logo-section {
+  text-align: center;
+  margin-bottom: 1rem;
+}
+
+.logo-icon {
+  font-size: 3rem;
+  color: #3498db;
+  margin-bottom: 1rem;
+  display: block;
+}
+
+.login-form h2 {
+  color: #2c3e50;
+  text-align: center;
+  margin: 0 0 0.5rem 0;
+  font-size: 2rem;
+  font-weight: 600;
+  position: relative;
+}
+
+.subtitle {
+  color: #7f8c8d;
+  text-align: center;
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 400;
+}
+
+.login-form h2::after {
+  content: '';
+  position: absolute;
+  bottom: -10px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 50px;
+  height: 3px;
+  background: linear-gradient(90deg, #3498db, #2c3e50);
+  border-radius: 2px;
+}
+
+.login-field {
+  width: 100%;
+  margin-bottom: 1.2rem;
+}
+
+.login-field ::ng-deep .mat-form-field-infix {
+  padding: 0.75em 0 0.75em 0;
+  font-size: 1.05rem;
+}
+
+.login-field ::ng-deep input.mat-input-element {
+  font-size: 1.05rem;
+  height: 2.2em;
+  line-height: 2.2em;
+  padding: 0 0.5em;
+}
+
+.login-field ::ng-deep .mat-form-field-label {
+  font-size: 1rem;
+  top: 1.1em;
+}
+
+.login-field ::ng-deep .mat-form-field-should-float .mat-form-field-label {
+  top: 0.5em;
+  font-size: 0.95em;
+}
+
+.login-field ::ng-deep .mat-form-field-outline {
+  color: #bdc3c7;
+}
+
+.login-field ::ng-deep .mat-form-field-outline-thick {
+  color: #3498db;
+}
+
+.login-field ::ng-deep .mat-form-field-label {
+  color: #7f8c8d;
+}
+
+.login-field ::ng-deep .mat-form-field.mat-focused .mat-form-field-label {
+  color: #3498db;
+}
+
+button[mat-raised-button] {
+  background: linear-gradient(135deg, #3498db, #2980b9);
+  color: white;
+  padding: 12px 24px;
+  font-size: 1.1rem;
+  font-weight: 500;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(52, 152, 219, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+button[mat-raised-button]:hover:not(:disabled) {
+  background: linear-gradient(135deg, #2980b9, #1f5f8b);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(52, 152, 219, 0.4);
+}
+
+button[mat-raised-button]:disabled {
+  background: #bdc3c7;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.login-error {
+  color: #e74c3c;
+  margin-top: 0.5rem;
+  text-align: center;
+  background: rgba(231, 76, 60, 0.1);
+  padding: 10px;
+  border-radius: 6px;
+  border-left: 4px solid #e74c3c;
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+@keyframes slideInUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 500px) {
+  .login-form {
+    min-width: 90vw;
+    max-width: 98vw;
+    padding: 1.2rem 0.5rem 1.5rem 0.5rem;
+  }
+}

@@ -1,0 +1,434 @@
+<div class="comptes-container">
+    <div class="header">
+        <h1>Gestion des Comptes</h1>
+        <div class="actions">
+            <button (click)="showAddForm = !showAddForm" class="btn add-btn">
+                <i class="fas fa-plus"></i> Nouveau Compte
+            </button>
+            <button (click)="exportComptes()" class="btn export-btn" [disabled]="isExporting">
+                <i class="fas fa-file-excel"></i> {{ isExporting ? 'Exportation...' : 'Exporter en Excel' }}
+            </button>
+        </div>
+    </div>
+
+    <!-- Formulaire d'ajout -->
+    <div *ngIf="showAddForm" class="add-form-container card">
+        <h2>Ajouter un nouveau compte</h2>
+        <form [formGroup]="addForm" (ngSubmit)="addCompte()" class="form-grid">
+            <div class="form-field">
+                <label for="numeroCompte">Numéro de Compte</label>
+                <input id="numeroCompte" formControlName="numeroCompte" placeholder="Ex: 123456789">
+                <div *ngIf="addForm.controls['numeroCompte'].touched && addForm.controls['numeroCompte'].errors?.['required']" class="error">
+                    Le numéro de compte est requis.
+                </div>
+            </div>
+            <div class="form-field">
+                <label for="solde">Solde Initial</label>
+                <input id="solde" type="number" formControlName="solde" placeholder="0.00">
+                 <div *ngIf="addForm.controls['solde'].touched && addForm.controls['solde'].errors?.['required']" class="error">
+                    Le solde est requis.
+                </div>
+            </div>
+            <div class="form-field">
+                <label for="pays"></label>
+                <app-autocomplete-input
+                    [options]="paysList"
+                    formControlName="pays"
+                    placeholder="Saisir un pays..."
+                    label="Pays">
+                </app-autocomplete-input>
+                 <div *ngIf="addForm.controls['pays'].touched && addForm.controls['pays'].errors?.['required']" class="error">
+                    Le pays est requis.
+                </div>
+            </div>
+            <div class="form-field">
+                <label for="codeProprietaire">Code Propriétaire</label>
+                <input id="codeProprietaire" formControlName="codeProprietaire" placeholder="Ex: PROP001">
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="btn primary" [disabled]="isAdding || addForm.invalid">
+                    {{ isAdding ? 'Ajout...' : 'Ajouter' }}
+                </button>
+                <button type="button" (click)="cancelAdd()" class="btn">Annuler</button>
+            </div>
+        </form>
+    </div>
+    
+    <!-- Formulaire de modification -->
+    <div *ngIf="showEditForm" class="edit-form-container card">
+      <h2>Modifier le Compte</h2>
+      <form [formGroup]="editForm" (ngSubmit)="updateCompte()" class="form-grid">
+          <div class="form-field">
+              <label for="editNumeroCompte">Numéro de Compte</label>
+              <input id="editNumeroCompte" formControlName="numeroCompte" placeholder="Ex: 123456789">
+          </div>
+          <div class="form-field">
+              <label for="editSolde">Solde</label>
+              <input id="editSolde" type="number" formControlName="solde" placeholder="0.00">
+          </div>
+          <div class="form-field">
+              <label for="editPays">Pays</label>
+              <app-autocomplete-input
+                  [options]="paysList"
+                  formControlName="pays"
+                  placeholder="Saisir un pays..."
+                  label="Pays">
+              </app-autocomplete-input>
+          </div>
+          <div class="form-field">
+              <label for="editCodeProprietaire">Code Propriétaire</label>
+              <input id="editCodeProprietaire" formControlName="codeProprietaire" placeholder="Ex: PROP001">
+          </div>
+          <div class="form-actions">
+              <button type="submit" class="btn primary" [disabled]="isEditing || editForm.invalid">
+                  {{ isEditing ? 'Mise à jour...' : 'Mettre à jour' }}
+              </button>
+              <button type="button" (click)="cancelEdit()" class="btn">Annuler</button>
+          </div>
+      </form>
+    </div>
+
+
+    <!-- Filtres et Statistiques -->
+    <div class="filters-stats-container">
+        <div class="card filters">
+            <h2>Filtres</h2>
+            <form [formGroup]="filterForm" (ngSubmit)="applyFilters()" class="form-grid">
+                <div class="form-field">
+                    <app-autocomplete-input
+                        [options]="paysList"
+                        formControlName="pays"
+                        placeholder="Saisir un pays..."
+                        label="Pays">
+                    </app-autocomplete-input>
+                </div>
+                <div class="form-field">
+                    <app-autocomplete-input
+                        [options]="codeProprietaireList"
+                        formControlName="codeProprietaire"
+                        placeholder="Saisir un code propriétaire..."
+                        label="Code Propriétaire">
+                    </app-autocomplete-input>
+                </div>
+                 <div class="form-field">
+                    <label for="dateDebut">Date de début</label>
+                    <input id="dateDebut" type="date" formControlName="dateDebut" >
+                </div>
+                 <div class="form-field">
+                    <label for="dateFin">Date de fin</label>
+                    <input id="dateFin" type="date" formControlName="dateFin" >
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="btn primary">Filtrer</button>
+                    <button type="button" (click)="clearFilters()" class="btn">Réinitialiser</button>
+                </div>
+            </form>
+        </div>
+        <div class="card stats">
+            <div class="stats-header">
+            <h2>Soldes Critiques</h2>
+                <button (click)="exportSoldesCritiques()" class="btn export-btn" [disabled]="isExporting || comptesCritiques.length === 0">
+                    <i class="fas fa-file-excel"></i> {{ isExporting ? 'Exportation...' : 'Exporter Critiques' }}
+                </button>
+            </div>
+            <div class="config-periode">
+                <label for="periodeJours">Période :</label>
+                <select id="periodeJours" [(ngModel)]="periodeJours" (ngModelChange)="onPeriodeJoursChange()" style="width:130px; margin-left:8px;">
+                    <option *ngFor="let opt of periodeOptions" [value]="opt.value">{{ opt.label }}</option>
+                </select>
+            </div>
+            <div *ngIf="comptesCritiques.length === 0" class="no-critical">
+                Aucun solde critique détecté.
+            </div>
+            <div *ngIf="comptesCritiques.length > 0" class="critical-cards-container">
+                <button class="arrow-btn left" (click)="prevCriticalPage()" [disabled]="criticalPage === 1">&#8592;</button>
+                <div class="critical-cards-list">
+                    <div class="critical-card" *ngFor="let item of pagedComptesCritiques">
+                        <div class="card-header">{{ item.compte.numeroCompte }}</div>
+                        <div class="card-solde">
+                            <span>Solde :</span>
+                            <span class="solde-value">{{ item.compte.solde | number:'1.2-2' }}</span>
+                        </div>
+                        <div class="card-moyenne">
+                            <span>Moyenne {{periodeJours}}j :</span>
+                            <span class="moyenne-value">{{ item.moyenneVolume | number:'1.2-2' }}</span>
+                        </div>
+                        <div class="card-ratio">
+                            <span>Ratio :</span>
+                            <span class="ratio-value" [class.critical]="(item.compte.solde / item.moyenneVolume) < 0.5" [class.warning]="(item.compte.solde / item.moyenneVolume) >= 0.5 && (item.compte.solde / item.moyenneVolume) < 0.8">
+                                {{ (item.compte.solde / item.moyenneVolume) | number:'1.2-2' }}
+                            </span>
+                        </div>
+                        <div class="card-label">Solde &lt; moyenne volume</div>
+                    </div>
+                </div>
+                <button class="arrow-btn right" (click)="nextCriticalPage()" [disabled]="criticalPage === totalCriticalPages">&#8594;</button>
+            </div>
+            <div *ngIf="comptesCritiques.length > criticalPageSize" class="critical-pagination-indicator">
+                Page {{criticalPage}} / {{totalCriticalPages}}
+            </div>
+        </div>
+    </div>
+
+    <!-- Tableau des comptes -->
+    <div class="card table-container">
+        <div *ngIf="isLoading" class="loading-overlay">
+            <div class="spinner"></div> <span>Chargement des données...</span>
+        </div>
+        <table *ngIf="!isLoading && comptes.length > 0">
+            <thead>
+                <tr>
+                    <th>Numéro de Compte</th>
+                    <th>Solde</th>
+                    <th>Date Dernière MAJ</th>
+                    <th>Pays</th>
+                    <th>Code Propriétaire</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr *ngFor="let compte of pagedComptes">
+                    <td>{{ compte.numeroCompte }}</td>
+                    <td class="solde">{{ compte.solde | number:'1.2-2' }}</td>
+                    <td>{{ formatDate(compte.dateDerniereMaj) }}</td>
+                    <td>{{ compte.pays }}</td>
+                    <td>{{ compte.codeProprietaire || '-' }}</td>
+                    <td class="actions-cell">
+                        <button (click)="viewReleve(compte)" class="btn icon-btn" title="Voir le relevé">
+                            <i class="fas fa-file-alt" style="color: blue;"></i>
+                        </button>
+                        <button (click)="editCompte(compte)" class="btn icon-btn" title="Modifier">
+                            <i class="fas fa-edit" style="color: green;"></i>
+                        </button>
+                        <button (click)="deleteCompte(compte.id!)" class="btn icon-btn delete" *ngIf="compte.id" title="Supprimer">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+        <div *ngIf="!isLoading && comptes.length === 0" class="no-data">
+            Aucun compte trouvé.
+        </div>
+    </div>
+
+    <!-- Pagination -->
+    <div class="pagination" *ngIf="totalPages > 1">
+        <button (click)="prevPage()" [disabled]="currentPage === 1">
+            <i class="fas fa-chevron-left"></i> Précédent
+        </button>
+        
+        <div class="pagination-indicators">
+            <span *ngFor="let page of getVisiblePages()" 
+                  class="page-indicator"
+                  [class.active]="currentPage === page"
+                  (click)="goToPage(page)">
+                {{ page }}
+            </span>
+        </div>
+        
+        <button (click)="nextPage()" [disabled]="currentPage === totalPages">
+            Suivant <i class="fas fa-chevron-right"></i>
+        </button>
+    </div>
+</div>
+
+<!-- Modal de relevé de compte -->
+<div *ngIf="showReleveModal" class="modal-overlay" (click)="closeReleveModal()">
+    <div class="modal-content" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+            <h2>Relevé de compte - {{ selectedCompte?.numeroCompte }}</h2>
+            <button class="modal-close" (click)="closeReleveModal()">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        
+        <div class="modal-body">
+            <!-- Informations du compte -->
+            <div class="compte-info">
+                <div class="info-row">
+                    <span class="info-label">Numéro de compte:</span>
+                    <span class="info-value">{{ selectedCompte?.numeroCompte }}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Solde actuel:</span>
+                    <span class="info-value solde-actuel">{{ selectedCompte?.solde | number:'1.2-2' }}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Pays:</span>
+                    <span class="info-value">{{ selectedCompte?.pays }}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Code propriétaire:</span>
+                    <span class="info-value">{{ selectedCompte?.codeProprietaire || '-' }}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Dernière mise à jour:</span>
+                    <span class="info-value">{{ formatDate(selectedCompte?.dateDerniereMaj || '') }}</span>
+                </div>
+            </div>
+
+            <!-- Filtres pour l'historique -->
+            <div class="releve-filters">
+                <div class="filter-group">
+                    <label>Période:</label>
+                    <select [(ngModel)]="releveDateDebut" (change)="onRelevePeriodChange()">
+                        <option value="">Toutes les opérations</option>
+                        <option value="7">7 derniers jours</option>
+                        <option value="30">30 derniers jours</option>
+                        <option value="90">3 derniers mois</option>
+                        <option value="custom">Période personnalisée</option>
+                    </select>
+                </div>
+                
+                <!-- Filtres de date personnalisés -->
+                <div class="filter-group custom-date-filters" *ngIf="releveDateDebut === 'custom'">
+                    <div class="date-input-group">
+                        <label>Date début:</label>
+                        <input type="date" [(ngModel)]="releveDateDebutCustom" (change)="loadReleveOperations()">
+                    </div>
+                    <div class="date-input-group">
+                        <label>Date fin:</label>
+                        <input type="date" [(ngModel)]="releveDateFinCustom" (change)="loadReleveOperations()">
+                    </div>
+                </div>
+                
+                <div class="filter-group">
+                    <label>Type d'opération:</label>
+                    <select [(ngModel)]="releveTypeOperation" (change)="loadReleveOperations()">
+                        <option value="">Tous les types</option>
+                        <option value="total_cashin">Total Cash-in</option>
+                        <option value="total_paiement">Total Paiement</option>
+                        <option value="approvisionnement">Approvisionnement</option>
+                        <option value="ajustement">Ajustement</option>
+                        <option value="compense">Compense</option>
+                        <option value="frais_transaction">Frais Transaction</option>
+                        <option value="annulation_partenaire">Annulation Partenaire</option>
+                        <option value="annulation_bo">Annulation BO</option>
+                        <option value="transaction_cree">Transaction créée</option>
+                    </select>
+                </div>
+                <button class="btn export-btn" (click)="exportReleve()" [disabled]="isExporting">
+                    <i class="fas fa-file-excel"></i> Exporter le relevé
+                </button>
+            </div>
+
+            <!-- Historique des opérations -->
+            <div class="releve-operations">
+                <h3>Historique des opérations</h3>
+                <div *ngIf="isLoadingReleve" class="loading-releve">
+                    <i class="fas fa-spinner fa-spin"></i> Chargement de l'historique...
+                </div>
+                
+                <div *ngIf="!isLoadingReleve && releveOperations.length === 0" class="no-operations">
+                    Aucune opération trouvée pour ce compte.
+                </div>
+                
+                <div *ngIf="!isLoadingReleve && releveOperations.length > 0" class="operations-table">
+                    <div class="operations-summary">
+                        <span>Total: {{ releveOperations.length }} opération(s)</span>
+                        <span *ngIf="releveOperations.length > relevePageSize">
+                            Affichage: {{ (releveCurrentPage - 1) * relevePageSize + 1 }} - {{ Math.min(releveCurrentPage * relevePageSize, releveOperations.length) }} sur {{ releveOperations.length }}
+                        </span>
+                    </div>
+                    <table class="table table-bordered table-hover table-sm">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Type</th>
+                                <th>Débit</th>
+                                <th>Crédit</th>
+                                <th>Solde avant</th>
+                                <th>Solde après</th>
+                                <th>Service</th>
+                                <th>Banque</th>
+                                <th>Bordereau</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td colspan="8" style="text-align: left; font-weight: bold; color: #1976d2;">
+                                    Solde d'ouverture global ({{ getGlobalOpeningBalanceDate() }}): {{ getGlobalOpeningBalance() | number:'1.2-2' }}
+                                </td>
+                            </tr>
+                            <ng-container *ngFor="let operation of pagedReleveOperations; let i = index">
+                                <tr *ngIf="shouldShowOpeningBalance(operation, i)" class="solde-ouverture">
+                                    <td colspan="3"><b style="color: #1976d2;">Solde d'ouverture ({{ getOpDate(operation) }})</b></td>
+                                    <td></td>
+                                    <td><b style="color: #1976d2;">{{ getDailyBalances(releveOperations)[getOpDate(operation)].opening | number:'1.2-2' }}</b></td>
+                                    <td colspan="4"></td>
+                                </tr>
+                                <tr>
+                                    <td>{{ formatDate(operation.dateOperation) }}</td>
+                                    <td>
+                                        <span class="operation-type" [class]="getOperationTypeClass(operation.typeOperation)">
+                                            {{ getOperationTypeLabel(operation.typeOperation) }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                      <!-- Affichage correct Débit/Crédit avec logique d'annulation -->
+                                      <ng-container *ngIf="operation.typeOperation.startsWith('annulation_'); else nonAnnulationDebit">
+                                        {{ isAnnulationDebit(operation) ? (operation.montant | number:'1.2-2') : '' }}
+                                      </ng-container>
+                                      <ng-template #nonAnnulationDebit>
+                                        <ng-container *ngIf="operation.typeOperation === 'FRAIS_TRANSACTION'; else autreDebit">
+                                          {{ isFraisTransactionDebit(operation) ? (operation.montant | number:'1.2-2') : '' }}
+                                        </ng-container>
+                                        <ng-template #autreDebit>
+                                          {{ isDebitOperation(operation.typeOperation, operation.service, operation.montant) ? (operation.montant | number:'1.2-2') : '' }}
+                                        </ng-template>
+                                      </ng-template>
+                                    </td>
+                                    <td>
+                                      <ng-container *ngIf="operation.typeOperation.startsWith('annulation_'); else nonAnnulationCredit">
+                                        {{ isAnnulationCredit(operation) ? (operation.montant | number:'1.2-2') : '' }}
+                                      </ng-container>
+                                      <ng-template #nonAnnulationCredit>
+                                        <ng-container *ngIf="operation.typeOperation === 'FRAIS_TRANSACTION'; else autreCredit">
+                                          {{ isFraisTransactionCredit(operation) ? (operation.montant | number:'1.2-2') : '' }}
+                                        </ng-container>
+                                        <ng-template #autreCredit>
+                                          {{ isCreditOperation(operation.typeOperation, operation.service, operation.montant) ? (operation.montant | number:'1.2-2') : '' }}
+                                        </ng-template>
+                                      </ng-template>
+                                    </td>
+                                    <td>{{ operation.soldeAvant | number:'1.2-2' }}</td>
+                                    <td>{{ operation.soldeApres | number:'1.2-2' }}</td>
+                                    <td>{{ operation.service || '-' }}</td>
+                                    <td>{{ operation.banque || '-' }}</td>
+                                    <td>{{ operation.nomBordereau || '-' }}</td>
+                                </tr>
+                                <tr *ngIf="shouldShowClosingBalance(operation, i)" class="solde-cloture">
+                                    <td colspan="8" style="text-align: right;"><b style="color: #388e3c;">Solde de clôture ({{ getOpDate(operation) }}) : {{ getDailyBalances(releveOperations)[getOpDate(operation)].closing | number:'1.2-2' }}</b></td>
+                                </tr>
+                            </ng-container>
+                        </tbody>
+                    </table>
+                    
+                    <!-- Pagination pour les opérations -->
+                    <div class="releve-pagination" *ngIf="releveTotalPages > 1">
+                        <button (click)="prevRelevePage()" [disabled]="releveCurrentPage === 1" class="btn pagination-btn">
+                            <i class="fas fa-chevron-left"></i> Précédent
+                        </button>
+                        
+                        <div class="pagination-indicators">
+                            <span *ngFor="let page of getVisibleRelevePages()" 
+                                  class="page-indicator"
+                                  [class.active]="releveCurrentPage === page"
+                                  (click)="goToRelevePage(page)">
+                                {{ page }}
+                            </span>
+                        </div>
+                        
+                        <button (click)="nextRelevePage()" [disabled]="releveCurrentPage === releveTotalPages" class="btn pagination-btn">
+                            Suivant <i class="fas fa-chevron-right"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div style="text-align: right; font-weight: bold; color: #388e3c; margin-top: 8px;">
+                Solde de clôture global ({{ getGlobalClosingBalanceDate() }}): {{ getGlobalClosingBalance() | number:'1.2-2' }}
+            </div>
+        </div>
+    </div>
+</div>

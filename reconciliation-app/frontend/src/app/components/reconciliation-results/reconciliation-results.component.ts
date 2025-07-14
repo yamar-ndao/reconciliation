@@ -1,4 +1,4 @@
-import { Component, Input, OnInit, ChangeDetectorRef, OnChanges, SimpleChanges } from '@angular/core';
+import { Component, Input, OnInit, ChangeDetectorRef, OnChanges, SimpleChanges, OnDestroy } from '@angular/core';
 import { ReconciliationResponse, Match } from '../../models/reconciliation-response.model';
 import { AppStateService } from '../../services/app-state.service';
 import { Router } from '@angular/router';
@@ -6,6 +6,7 @@ import { ReconciliationService } from '../../services/reconciliation.service';
 import * as ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 import { HttpClient } from '@angular/common/http';
+import { Subscription } from 'rxjs';
 
 interface ApiError {
     error?: {
@@ -18,6 +19,61 @@ interface ApiError {
 @Component({
     selector: 'app-reconciliation-results',
     template: `
+        <!-- Affichage de la progression -->
+        <div *ngIf="showProgress" class="progress-overlay">
+            <div class="progress-card">
+                <div class="progress-header">
+                    <h2>Réconciliation en cours...</h2>
+                    <div class="progress-icon">
+                        <i class="fas fa-cog fa-spin"></i>
+                    </div>
+                </div>
+                
+                <div class="progress-bar-container">
+                    <div class="progress-bar">
+                        <div class="progress-fill" [style.width.%]="progressPercentage"></div>
+                    </div>
+                    <div class="progress-text">
+                        {{ progressPercentage | number:'1.0-1' }}% terminé
+                    </div>
+                </div>
+                
+                <div class="progress-details">
+                    <div class="detail-item">
+                        <span class="label">Enregistrements traités:</span>
+                        <span class="value">{{ processedRecords | number }} / {{ totalRecords | number }}</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="label">Temps écoulé:</span>
+                        <span class="value">{{ formatTime(getElapsedTime()) }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Résumé des performances -->
+        <div *ngIf="response && executionTime > 0" class="performance-summary">
+            <div class="performance-card">
+                <div class="performance-header">
+                    <h3>📊 Performance de la réconciliation</h3>
+                </div>
+                <div class="performance-details">
+                    <div class="performance-item">
+                        <i class="fas fa-clock"></i>
+                        <span>Temps d'exécution: {{ formatTime(executionTime) }}</span>
+                    </div>
+                    <div class="performance-item">
+                        <i class="fas fa-database"></i>
+                        <span>Enregistrements traités: {{ processedRecords | number }}</span>
+                    </div>
+                    <div class="performance-item">
+                        <i class="fas fa-tachometer-alt"></i>
+                        <span>Vitesse: {{ (processedRecords / (executionTime / 1000)) | number:'1.0-0' }} enregistrements/seconde</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div class="results-container">
             <div class="service-selector">
                 <h3>🔍 Sélection du service</h3>
@@ -211,32 +267,42 @@ interface ApiError {
                             <button (click)="nextPage('matches')" [disabled]="matchesPage === getTotalPages('matches')">Suivant</button>
                         </div>
                         <div class="match-card" *ngFor="let match of getPagedMatches()">
-                            <div class="match-header">
-                                <span class="key">Clé: {{match.key}}</span>
-                                <span class="status" [class.has-differences]="hasDifferences(match)">
+                            <!-- Fiche des champs clés -->
+                            <div class="match-header fiche-header">
+                                <div class="fiche-row">
+                                    <span class="fiche-label">Clé :</span>
+                                    <span class="fiche-value">{{match.key}}</span>
+                                </div>
+                                <div class="fiche-row">
+                                    <span class="fiche-label">Statut :</span>
+                                    <span class="fiche-value" [class.has-differences]="hasDifferences(match)">
                                     {{hasDifferences(match) ? '⚠️ Différences détectées' : '✅ Correspondance parfaite'}}
                                 </span>
                             </div>
-                            <div class="match-content">
-                                <div class="data-column">
-                                    <h4>🏢 BO</h4>
-                                    <div class="agency-service-info refined-info">
-                                        <div class="info-row">
-                                            <span class="label">Agence:</span>
-                                            <span class="value">{{getBoAgencyAndService(match).agency}}</span>
+                                <div class="fiche-row">
+                                    <span class="fiche-label">Montant :</span>
+                                    <span class="fiche-value">{{match.boData['montant'] || match.partnerData['Crédit'] || match.partnerData['montant']}}</span>
                                         </div>
-                                        <div class="info-row">
-                                            <span class="label">Service:</span>
-                                            <span class="value">{{getBoAgencyAndService(match).service}}</span>
+                                <div class="fiche-row">
+                                    <span class="fiche-label">Date BO :</span>
+                                    <span class="fiche-value">{{match.boData['Date']}}</span>
+                                    <span class="fiche-label">Date Partenaire :</span>
+                                    <span class="fiche-value">{{match.partnerData['Date']}}</span>
                                         </div>
-                                        <div class="info-row">
-                                            <span class="label">Pays:</span>
-                                            <span class="value">{{getBoAgencyAndService(match).country}}</span>
+                                <div class="fiche-row">
+                                    <span class="fiche-label">Agence :</span>
+                                    <span class="fiche-value">{{getBoAgencyAndService(match).agency}}</span>
+                                    <span class="fiche-label">Service :</span>
+                                    <span class="fiche-value">{{getBoAgencyAndService(match).service}}</span>
                                         </div>
                                     </div>
+                            <!-- Deux colonnes alignées -->
+                            <div class="match-content two-columns">
+                                <div class="data-column">
+                                    <h4>🏢 BO</h4>
                                     <div class="data-grid refined-grid">
                                         <div class="data-row" *ngFor="let key of getBoKeys(match)">
-                                            <span class="label">{{key}}:</span>
+                                            <span class="label">{{key}} :</span>
                                             <span class="value">{{match.boData[key]}}</span>
                                         </div>
                                     </div>
@@ -245,7 +311,7 @@ interface ApiError {
                                     <h4>🤝 Partenaire</h4>
                                     <div class="data-grid refined-grid">
                                         <div class="data-row" *ngFor="let key of getPartnerKeys(match)">
-                                            <span class="label">{{key}}:</span>
+                                            <span class="label">{{key}} :</span>
                                             <span class="value">{{match.partnerData[key]}}</span>
                                         </div>
                                     </div>
@@ -259,11 +325,11 @@ interface ApiError {
                                     </div>
                                     <div class="diff-values">
                                         <div class="value bo">
-                                            <span class="label">BO:</span>
+                                            <span class="label">BO :</span>
                                             <span class="content">{{diff.boValue}}</span>
                                         </div>
                                         <div class="value partner">
-                                            <span class="label">Partenaire:</span>
+                                            <span class="label">Partenaire :</span>
                                             <span class="content">{{diff.partnerValue}}</span>
                                         </div>
                                     </div>
@@ -1170,8 +1236,9 @@ interface ApiError {
         }
     `]
 })
-export class ReconciliationResultsComponent implements OnInit, OnChanges {
-    @Input() response!: ReconciliationResponse;
+export class ReconciliationResultsComponent implements OnInit, OnDestroy {
+    response: ReconciliationResponse | null = null;
+    private subscription = new Subscription();
     activeTab: 'matches' | 'boOnly' | 'partnerOnly' | 'agencySummary' = 'matches';
     matchesPage = 1;
     boOnlyPage = 1;
@@ -1188,6 +1255,14 @@ export class ReconciliationResultsComponent implements OnInit, OnChanges {
     isSaving: boolean = false;
     exportProgress = 0;
     isExporting = false;
+    
+    // Propriétés pour la progression de la réconciliation
+    showProgress = false;
+    progressPercentage = 0;
+    processedRecords = 0;
+    totalRecords = 0;
+    executionTime = 0;
+    startTime = 0;
 
     constructor(
         private cdr: ChangeDetectorRef, 
@@ -1198,17 +1273,48 @@ export class ReconciliationResultsComponent implements OnInit, OnChanges {
     ) {}
 
     ngOnInit() {
-        this.initializeFilteredData();
+        this.subscription.add(
+            this.appStateService.getReconciliationResults().subscribe((response: ReconciliationResponse | null) => {
+                if (response) {
+                    this.response = response;
+                    this.initializeFilteredData();
+                    
+                    // Initialiser les informations de progression
+                    if (response.executionTimeMs) {
+                        this.executionTime = response.executionTimeMs;
+                    }
+                    if (response.processedRecords) {
+                        this.processedRecords = response.processedRecords;
+                    }
+                    if (response.progressPercentage) {
+                        this.progressPercentage = response.progressPercentage;
+                    }
+                    
+                    // Calculer le total des enregistrements
+                    this.totalRecords = response.totalBoRecords + response.totalPartnerRecords;
+                    
+                    this.cdr.detectChanges();
+                }
+            })
+        );
+
+        // Écouter les changements de progression
+        this.subscription.add(
+            this.appStateService.getReconciliationProgress().subscribe((showProgress: boolean) => {
+                this.showProgress = showProgress;
+                if (showProgress) {
+                    this.startTime = this.appStateService.getReconciliationStartTime();
+                    this.progressPercentage = 0;
+                    this.processedRecords = 0;
+                    this.simulateProgress();
+                }
+                this.cdr.detectChanges();
+            })
+        );
     }
 
-    ngOnChanges(changes: SimpleChanges) {
-        if (changes['response']) {
-            this.matchesPage = 1;
-            this.boOnlyPage = 1;
-            this.partnerOnlyPage = 1;
-            this.initializeFilteredData();
-            this.cdr.detectChanges();
-        }
+    ngOnDestroy() {
+        this.subscription.unsubscribe();
     }
 
     private initializeFilteredData() {
@@ -1335,7 +1441,8 @@ export class ReconciliationResultsComponent implements OnInit, OnChanges {
 
 private async generateExcelFile(): Promise<ExcelJS.Workbook[]> {
     const workbooks: ExcelJS.Workbook[] = [];
-    const MAX_ROWS_PER_FILE = 50000;
+    // SUPPRESSION DE LA LIMITE : on ne découpe plus en plusieurs fichiers
+    // const MAX_ROWS_PER_FILE = 50000;
 
     if (this.activeTab === 'matches') {
         console.log('Export des correspondances...');
@@ -1357,10 +1464,6 @@ private async generateExcelFile(): Promise<ExcelJS.Workbook[]> {
             
             console.log('Colonnes BO:', boKeysArray);
             console.log('Colonnes Partenaire:', partnerKeysArray);
-
-            // Calculer le nombre de fichiers nécessaires
-            const totalFiles = Math.ceil(filteredMatches.length / MAX_ROWS_PER_FILE);
-            console.log(`Division en ${totalFiles} fichiers`);
 
             // Styles Excel
             const headerStyle = {
@@ -1384,98 +1487,73 @@ private async generateExcelFile(): Promise<ExcelJS.Workbook[]> {
                 }
             };
 
-            // Créer un fichier pour chaque lot
-            for (let fileIndex = 0; fileIndex < totalFiles; fileIndex++) {
-                console.log(`Création du fichier ${fileIndex + 1}/${totalFiles}`);
-                const workbook = new ExcelJS.Workbook();
-                const worksheet = workbook.addWorksheet(`Correspondances_${fileIndex + 1}`);
+            // Créer un seul fichier pour toutes les correspondances
+            const workbook = new ExcelJS.Workbook();
+            const worksheet = workbook.addWorksheet('Correspondances');
 
-                // Définir les colonnes avec des largeurs appropriées
-                const columns = [
-                    { header: 'Clé', key: 'key', width: 20 },
-                    ...boKeysArray.map(k => ({ header: `BO_${k}`, key: `bo_${k}`, width: 15 })),
-                    ...partnerKeysArray.map(k => ({ header: `PARTENAIRE_${k}`, key: `partner_${k}`, width: 15 }))
-                ];
+            // Définir les colonnes avec des largeurs appropriées
+            const columns = [
+                { header: 'Clé', key: 'key', width: 20 },
+                ...boKeysArray.map(k => ({ header: `BO_${k}`, key: `bo_${k}`, width: 15 })),
+                ...partnerKeysArray.map(k => ({ header: `PARTENAIRE_${k}`, key: `partner_${k}`, width: 15 }))
+            ];
 
-                worksheet.columns = columns;
+            worksheet.columns = columns;
 
-                // Ajouter la ligne d'en-tête manuellement
-                const headerRow = worksheet.getRow(1);
-                headerRow.getCell(1).value = 'Clé';
-                
-                let colIndex = 2;
-                boKeysArray.forEach(key => {
-                    headerRow.getCell(colIndex).value = `BO_${key}`;
-                    colIndex++;
-                });
-                
-                partnerKeysArray.forEach(key => {
-                    headerRow.getCell(colIndex).value = `PARTENAIRE_${key}`;
-                    colIndex++;
-                });
+            // Ajouter la ligne d'en-tête manuellement
+            const headerRow = worksheet.getRow(1);
+            headerRow.getCell(1).value = 'Clé';
+            
+            let colIndex = 2;
+            boKeysArray.forEach(key => {
+                headerRow.getCell(colIndex).value = `BO_${key}`;
+                colIndex++;
+            });
+            
+            partnerKeysArray.forEach(key => {
+                headerRow.getCell(colIndex).value = `PARTENAIRE_${key}`;
+                colIndex++;
+            });
 
-                // Appliquer le style d'en-tête
-                headerRow.eachCell((cell, cellNumber) => {
-                    if (cellNumber <= columns.length) {
-                        cell.style = headerStyle;
-                    }
-                });
-
-                // Calculer les indices de début et de fin pour ce fichier
-                const startIndex = fileIndex * MAX_ROWS_PER_FILE;
-                const endIndex = Math.min((fileIndex + 1) * MAX_ROWS_PER_FILE, filteredMatches.length);
-                const fileMatches = filteredMatches.slice(startIndex, endIndex);
-
-                // Traiter les données par petits lots
-                const batchSize = 100;
-                let currentRow = 2;
-
-                for (let i = 0; i < fileMatches.length; i += batchSize) {
-                    console.log(`Traitement du lot ${Math.floor(i/batchSize) + 1}/${Math.ceil(fileMatches.length/batchSize)} pour le fichier ${fileIndex + 1}`);
-                    const batch = fileMatches.slice(i, i + batchSize);
-                    
-                    batch.forEach(match => {
-                        const row = worksheet.getRow(currentRow);
-                        
-                        // Ajouter la clé
-                        row.getCell(1).value = match.key;
-                        
-                        // Ajouter les données BO
-                        let cellIndex = 2;
-                        boKeysArray.forEach(key => {
-                            const value = match.boData[key];
-                            row.getCell(cellIndex).value = value !== undefined && value !== null ? value : '';
-                            cellIndex++;
-                        });
-                        
-                        // Ajouter les données Partenaire
-                        partnerKeysArray.forEach(key => {
-                            const value = match.partnerData[key];
-                            row.getCell(cellIndex).value = value !== undefined && value !== null ? value : '';
-                            cellIndex++;
-                        });
-                        
-                        // Appliquer le style aux cellules de données
-                        row.eachCell((cell, cellNumber) => {
-                            if (cellNumber <= columns.length) {
-                                cell.style = dataStyle;
-                            }
-                        });
-                        
-                        currentRow++;
-                    });
-
-                    // Mettre à jour la progression
-                    this.exportProgress = Math.round(((fileIndex * MAX_ROWS_PER_FILE + i + batch.length) / filteredMatches.length) * 100);
-                    this.cdr.detectChanges();
-
-                    // Permettre au navigateur de respirer
-                    await new Promise(resolve => setTimeout(resolve, 10));
+            // Appliquer le style d'en-tête
+            headerRow.eachCell((cell, cellNumber) => {
+                if (cellNumber <= columns.length) {
+                    cell.style = headerStyle;
                 }
+            });
 
-                workbooks.push(workbook);
-                console.log(`Fichier ${fileIndex + 1} terminé avec ${currentRow - 1} lignes`);
+            // Ajouter toutes les lignes de données
+            let currentRow = 2;
+            const batchSize = 100;
+            for (let i = 0; i < filteredMatches.length; i += batchSize) {
+                const batch = filteredMatches.slice(i, i + batchSize);
+                batch.forEach(match => {
+                    const row = worksheet.getRow(currentRow);
+                    row.getCell(1).value = match.key;
+                    let cellIndex = 2;
+                    boKeysArray.forEach(key => {
+                        const value = match.boData[key];
+                        row.getCell(cellIndex).value = value !== undefined && value !== null ? value : '';
+                        cellIndex++;
+                    });
+                    partnerKeysArray.forEach(key => {
+                        const value = match.partnerData[key];
+                        row.getCell(cellIndex).value = value !== undefined && value !== null ? value : '';
+                        cellIndex++;
+                    });
+                    row.eachCell((cell, cellNumber) => {
+                        if (cellNumber <= columns.length) {
+                            cell.style = dataStyle;
+                        }
+                    });
+                    currentRow++;
+                });
+                this.exportProgress = Math.round(((i + batch.length) / filteredMatches.length) * 100);
+                this.cdr.detectChanges();
+                await new Promise(resolve => setTimeout(resolve, 10));
             }
+            workbooks.push(workbook);
+            console.log(`Fichier unique terminé avec ${currentRow - 1} lignes`);
         }
     } else if (this.activeTab === 'boOnly') {
         console.log('Export des données BO uniquement...');
@@ -1614,87 +1692,65 @@ private async generateExcelFile(): Promise<ExcelJS.Workbook[]> {
 }
 
 private async downloadExcelFile(workbooks: ExcelJS.Workbook[]): Promise<void> {
-    for (let i = 0; i < workbooks.length; i++) {
-        const workbook = workbooks[i];
-        try {
-            console.log(`Début du téléchargement du fichier ${i + 1}/${workbooks.length}...`);
-            
-            // Générer le buffer avec des options optimisées
-            console.log('Génération du buffer...');
-            const buffer = await workbook.xlsx.writeBuffer({
-                useStyles: true,
-                useSharedStrings: false
-            });
-            
-            console.log('Buffer généré, taille:', buffer.byteLength, 'bytes');
-            
-            if (buffer.byteLength === 0) {
-                throw new Error('Le buffer généré est vide');
-            }
-
-            // Créer le blob
-            console.log('Création du blob...');
-            const blob = new Blob([buffer], { 
-                type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
-            });
-            
-            console.log('Blob créé, taille:', blob.size, 'bytes');
-            
-            if (blob.size === 0) {
-                throw new Error('Le blob créé est vide');
-            }
-            
-            // Générer le nom de fichier approprié
-            let fileName = 'export.xlsx';
-            const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
-            
-            switch (this.activeTab) {
-                case 'matches':
-                    fileName = workbooks.length > 1 ? 
-                        `correspondances_${i + 1}_${timestamp}.xlsx` : 
-                        `correspondances_${timestamp}.xlsx`;
-                    break;
-                case 'boOnly':
-                    fileName = `bo_uniquement_${timestamp}.xlsx`;
-                    break;
-                case 'partnerOnly':
-                    fileName = `partenaire_uniquement_${timestamp}.xlsx`;
-                    break;
-                case 'agencySummary':
-                    fileName = `resume_par_agence_${timestamp}.xlsx`;
-                    break;
-            }
-            
-            // Créer l'URL et le lien de téléchargement
-            console.log('Création de l\'URL...');
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = fileName;
-            a.style.display = 'none';
-            
-            // Ajouter le lien au DOM et déclencher le téléchargement
-            document.body.appendChild(a);
-            console.log('Déclenchement du téléchargement pour:', fileName);
-            a.click();
-            
-            // Attendre un peu avant de nettoyer
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            
-            // Nettoyer
-            document.body.removeChild(a);
-            window.URL.revokeObjectURL(url);
-            console.log(`Fichier ${i + 1} téléchargé avec succès`);
-            
-        } catch (error) {
-            console.error(`Erreur lors du téléchargement du fichier ${i + 1}:`, error);
-            throw error;
+    // On ne télécharge qu'un seul fichier
+    if (workbooks.length === 0) return;
+    const workbook = workbooks[0];
+    try {
+        console.log('Début du téléchargement du fichier unique...');
+        const buffer = await workbook.xlsx.writeBuffer({
+            useStyles: true,
+            useSharedStrings: false
+        });
+        if (buffer.byteLength === 0) {
+            throw new Error('Le buffer généré est vide');
         }
+        const blob = new Blob([buffer], { 
+            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+        });
+        if (blob.size === 0) {
+            throw new Error('Le blob créé est vide');
+        }
+        // Générer un nom de fichier unique
+        const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+        let fileName = 'export.xlsx';
+        switch (this.activeTab) {
+            case 'matches':
+                fileName = `correspondances_${timestamp}.xlsx`;
+                break;
+            case 'boOnly':
+                fileName = `bo_uniquement_${timestamp}.xlsx`;
+                break;
+            case 'partnerOnly':
+                fileName = `partenaire_uniquement_${timestamp}.xlsx`;
+                break;
+            case 'agencySummary':
+                fileName = `resume_par_agence_${timestamp}.xlsx`;
+                break;
+        }
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        a.style.display = 'none';
+        document.body.appendChild(a);
+        a.click();
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+        console.log(`Fichier téléchargé avec succès : ${fileName}`);
+    } catch (error) {
+        console.error(`Erreur lors du téléchargement du fichier :`, error);
+        throw error;
     }
 }
 
     nouvelleReconciliation() {
-        this.appStateService.setCurrentStep(1);
+        console.log('Navigation vers nouvelle réconciliation');
+        this.router.navigate(['/upload']).then(() => {
+            console.log('Navigation vers /upload réussie');
+        }).catch(error => {
+            console.error('Erreur lors de la navigation vers /upload:', error);
+        });
     }
 
     calculateTotalVolume(type: 'bo' | 'partner'): number {
@@ -1923,30 +1979,55 @@ private async downloadExcelFile(workbooks: ExcelJS.Workbook[]): Promise<void> {
         });
     }
 
+    // Cache pour les calculs
+    private cachedPagedAgencySummary: Array<{agency: string; service: string; date: string; country: string; totalVolume: number; recordCount: number}> | null = null;
+    private cachedTotalVolume: number | null = null;
+    private cachedTotalRecords: number | null = null;
+    private lastAgencyPage: number = 1;
+    private lastAgencySummaryHash: string = '';
+
+    private getAgencySummaryHash(): string {
+        const summary = this.getAgencySummary();
+        return JSON.stringify(summary) + '_' + this.agencyPage + '_' + this.agencyPageSize;
+    }
+
     getPagedAgencySummary(): Array<{agency: string; service: string; date: string; country: string; totalVolume: number; recordCount: number}> {
+        const currentHash = this.getAgencySummaryHash();
+        
+        if (this.cachedPagedAgencySummary && this.lastAgencySummaryHash === currentHash) {
+            return this.cachedPagedAgencySummary;
+        }
+        
         const start = (this.agencyPage - 1) * this.agencyPageSize;
         const summary = this.getAgencySummary();
-        console.log('Page actuelle:', this.agencyPage);
-        console.log('Taille de page:', this.agencyPageSize);
-        console.log('Début:', start);
-        console.log('Nombre total d\'éléments:', summary.length);
-        const result = summary.slice(start, start + this.agencyPageSize);
-        console.log('Éléments de la page:', result);
-        return result;
+        this.cachedPagedAgencySummary = summary.slice(start, start + this.agencyPageSize);
+        this.lastAgencySummaryHash = currentHash;
+        
+        return this.cachedPagedAgencySummary;
     }
 
     getTotalVolume(): number {
         const summary = this.getAgencySummary();
-        const total = summary.reduce((total, summary) => total + summary.totalVolume, 0);
-        console.log('Volume total calculé:', total);
-        return total;
+        const summaryHash = JSON.stringify(summary);
+        
+        if (this.cachedTotalVolume !== null && this.lastAgencySummaryHash.includes(summaryHash)) {
+            return this.cachedTotalVolume;
+        }
+        
+        this.cachedTotalVolume = summary.reduce((total, summary) => total + summary.totalVolume, 0);
+        return this.cachedTotalVolume;
     }
 
     getTotalRecords(): number {
         const summary = this.getAgencySummary();
-        const total = summary.reduce((total, summary) => total + summary.recordCount, 0);
-        console.log('Nombre total d\'enregistrements calculé:', total);
-        return total;
+        const summaryHash = JSON.stringify(summary);
+        
+        if (this.cachedTotalRecords !== null && this.lastAgencySummaryHash.includes(summaryHash)) {
+            return this.cachedTotalRecords;
+        }
+        
+        this.cachedTotalRecords = summary.reduce((total, summary) => total + summary.recordCount, 0);
+        return this.cachedTotalRecords;
     }
 
     getTotalAgencyPages(): number {
@@ -1956,6 +2037,7 @@ private async downloadExcelFile(workbooks: ExcelJS.Workbook[]): Promise<void> {
     nextAgencyPage() {
         if (this.agencyPage < this.getTotalAgencyPages()) {
             this.agencyPage++;
+            this.invalidateCache();
             this.cdr.detectChanges();
         }
     }
@@ -1963,6 +2045,7 @@ private async downloadExcelFile(workbooks: ExcelJS.Workbook[]): Promise<void> {
     prevAgencyPage() {
         if (this.agencyPage > 1) {
             this.agencyPage--;
+            this.invalidateCache();
             this.cdr.detectChanges();
         }
     }
@@ -2007,6 +2090,13 @@ private async downloadExcelFile(workbooks: ExcelJS.Workbook[]): Promise<void> {
         return partnerOnly.filter(record => (record['Service'] || '') === this.selectedService);
     }
 
+    private invalidateCache() {
+        this.cachedPagedAgencySummary = null;
+        this.cachedTotalVolume = null;
+        this.cachedTotalRecords = null;
+        this.lastAgencySummaryHash = '';
+    }
+
     applyServiceFilter() {
         // Appliquer le filtre seulement au clic
         this.matchesPage = 1;
@@ -2015,11 +2105,16 @@ private async downloadExcelFile(workbooks: ExcelJS.Workbook[]): Promise<void> {
         this.agencyPage = 1;
         this.initializeFilteredData();
         this.cdr.detectChanges();
+        this.invalidateCache();
     }
 
     startReconciliation() {
-        // Émettre un événement pour lancer la réconciliation avec le service sélectionné
-        this.appStateService.startReconciliation(this.selectedService);
+        console.log('Démarrage d\'une nouvelle réconciliation');
+        this.router.navigate(['/upload']).then(() => {
+            console.log('Navigation vers /upload réussie');
+        }).catch(error => {
+            console.error('Erreur lors de la navigation vers /upload:', error);
+        });
     }
 
     async saveAgencySummary() {
@@ -2033,6 +2128,9 @@ private async downloadExcelFile(workbooks: ExcelJS.Workbook[]): Promise<void> {
             }));
             await this.reconciliationService.saveSummary(summary).toPromise();
             alert('Résumé sauvegardé en base avec succès !');
+            
+            // Notifier le dashboard seulement quand le résumé est enregistré avec succès
+            this.appStateService.notifySummarySaved();
         } catch (error: any) {
             // Affichage détaillé du message d'erreur backend
             let msg = 'Erreur lors de la sauvegarde en base.';
@@ -2065,15 +2163,40 @@ private async downloadExcelFile(workbooks: ExcelJS.Workbook[]): Promise<void> {
     }
 
     goToStats() {
-        this.appStateService.setCurrentStep(4);
-        this.router.navigate(['/stats']);
+        console.log('Navigation vers les statistiques');
+        this.router.navigate(['/stats']).then(() => {
+            console.log('Navigation vers /stats réussie');
+        }).catch(error => {
+            console.error('Erreur lors de la navigation vers /stats:', error);
+        });
     }
 
     handleExport() {
-        console.log('Bouton d\'export cliqué');
-        this.exportResults().catch(error => {
-            console.error('Erreur lors de l\'export:', error);
-        });
+        this.exportResults();
+    }
+
+    formatTime(ms: number): string {
+        const seconds = Math.floor(ms / 1000);
+        const minutes = Math.floor(seconds / 60);
+        const remainingSeconds = seconds % 60;
+        
+        if (minutes > 0) {
+            return `${minutes}m ${remainingSeconds}s`;
+        } else {
+            return `${seconds}s`;
+        }
+    }
+
+    private simulateProgress() {
+        const interval = setInterval(() => {
+            if (this.progressPercentage < 90 && this.showProgress) {
+                this.progressPercentage += Math.random() * 10;
+                this.processedRecords = Math.floor((this.progressPercentage / 100) * this.totalRecords);
+                this.cdr.detectChanges();
+            } else {
+                clearInterval(interval);
+            }
+        }, 500);
     }
 
     exporterResumeParAgence(data: any[]) {
@@ -2135,5 +2258,9 @@ private async downloadExcelFile(workbooks: ExcelJS.Workbook[]): Promise<void> {
             });
             saveAs(blob, 'resume_par_agence.xlsx');
         });
+    }
+
+    getElapsedTime(): number {
+        return this.startTime > 0 ? Date.now() - this.startTime : 0;
     }
 } 

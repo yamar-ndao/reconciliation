@@ -22,11 +22,82 @@
     box-sizing: border-box;
 }
 
+// Styles de base pour le scroll
+html {
+    height: 100%;
+    overflow-y: auto;
+}
+
 body {
     font-family: 'Roboto', sans-serif;
     line-height: 1.6;
     color: var(--dark-color);
     background-color: var(--light-color);
+    min-height: 100vh;
+    height: 100%;
+    overflow-y: auto;
+}
+
+// Application principale
+app-root {
+    display: block;
+    min-height: 100vh;
+    height: 100%;
+}
+
+// Conteneurs principaux
+.main-content, .app-container {
+    min-height: 100vh;
+    height: 100%;
+    overflow-y: auto;
+}
+
+// Overlays - s'assurer qu'ils ne bloquent pas le scroll
+.processing-overlay, .progress-overlay, .modal-overlay {
+    overflow-y: auto;
+}
+
+// Conteneurs de pages
+[class*="-container"] {
+    overflow-y: auto;
+}
+
+// Tables et conteneurs de données
+.table-responsive, .table-container {
+    overflow-y: auto;
+}
+
+// Éléments interactifs
+input, select, textarea, button, a {
+    /* Styles de base */
+}
+
+// Formulaires
+form, .form-group, .form-section {
+    overflow-y: auto;
+}
+
+// Styles spécifiques pour Chrome
+@media screen and (-webkit-min-device-pixel-ratio: 0) {
+    html, body {
+        overflow-y: auto !important;
+    }
+    
+    .main-content, .app-container {
+        overflow-y: auto !important;
+    }
+    
+    [class*="-container"] {
+        overflow-y: auto !important;
+    }
+    
+    .table-responsive, .table-container {
+        overflow-y: auto !important;
+    }
+    
+    .processing-overlay, .modal-overlay, .progress-overlay {
+        overflow-y: auto !important;
+    }
 }
 
 .container {
@@ -68,192 +139,5 @@ body {
     &:disabled {
         opacity: 0.6;
         cursor: not-allowed;
-    }
-}
-
-.card {
-    background-color: var(--white-color);
-    border-radius: 8px;
-    box-shadow: var(--shadow);
-    padding: 1.5rem;
-    margin-bottom: 1rem;
-    
-    &-header {
-        margin-bottom: 1rem;
-        
-        h2 {
-            font-size: 1.5rem;
-            font-weight: 500;
-            color: var(--dark-color);
-        }
-    }
-}
-
-.form-group {
-    margin-bottom: 1rem;
-    
-    label {
-        display: block;
-        margin-bottom: 0.5rem;
-        font-weight: 500;
-    }
-    
-    input, select {
-        width: 100%;
-        padding: 0.5rem;
-        border: 1px solid var(--gray-color);
-        border-radius: 4px;
-        font-size: 1rem;
-        
-        &:focus {
-            outline: none;
-            border-color: var(--primary-color);
-        }
-    }
-}
-
-.alert {
-    padding: 1rem;
-    border-radius: 4px;
-    margin-bottom: 1rem;
-    
-    &-success {
-        background-color: var(--success-color);
-        color: var(--white-color);
-    }
-    
-    &-danger {
-        background-color: var(--danger-color);
-        color: var(--white-color);
-    }
-    
-    &-warning {
-        background-color: var(--warning-color);
-        color: var(--dark-color);
-    }
-    
-    &-info {
-        background-color: var(--info-color);
-        color: var(--white-color);
-    }
-}
-
-.badge {
-    display: inline-block;
-    padding: 0.25rem 0.5rem;
-    border-radius: 4px;
-    font-size: 0.875rem;
-    font-weight: 500;
-    
-    &-success {
-        background-color: var(--success-color);
-        color: var(--white-color);
-    }
-    
-    &-danger {
-        background-color: var(--danger-color);
-        color: var(--white-color);
-    }
-    
-    &-warning {
-        background-color: var(--warning-color);
-        color: var(--dark-color);
-    }
-    
-    &-info {
-        background-color: var(--info-color);
-        color: var(--white-color);
-    }
-}
-
-.table {
-    width: 100%;
-    border-collapse: collapse;
-    margin-bottom: 1rem;
-    
-    th, td {
-        padding: 0.75rem;
-        text-align: left;
-        border-bottom: 1px solid var(--gray-color);
-    }
-    
-    th {
-        font-weight: 500;
-        background-color: var(--light-color);
-    }
-    
-    tr:hover {
-        background-color: var(--light-color);
-    }
-}
-
-.tabs {
-    display: flex;
-    border-bottom: 1px solid var(--gray-color);
-    margin-bottom: 1rem;
-    
-    .tab {
-        padding: 0.75rem 1.5rem;
-        cursor: pointer;
-        border-bottom: 2px solid transparent;
-        transition: var(--transition);
-        
-        &.active {
-            border-bottom-color: var(--primary-color);
-            color: var(--primary-color);
-        }
-        
-        &:hover:not(.active) {
-            background-color: var(--light-color);
-        }
-    }
-}
-
-.progress {
-    height: 4px;
-    background-color: var(--light-color);
-    border-radius: 2px;
-    overflow: hidden;
-    
-    &-bar {
-        height: 100%;
-        background-color: var(--primary-color);
-        transition: width 0.3s ease;
-    }
-}
-
-.spinner {
-    display: inline-block;
-    width: 2rem;
-    height: 2rem;
-    border: 3px solid var(--light-color);
-    border-radius: 50%;
-    border-top-color: var(--primary-color);
-    animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-    to {
-        transform: rotate(360deg);
-    }
-}
-
-/* Responsive utilities */
-@media (max-width: 768px) {
-    .container {
-        padding: 0 0.5rem;
-    }
-    
-    .card {
-        padding: 1rem;
-    }
-    
-    .tabs {
-        flex-wrap: wrap;
-        
-        .tab {
-            flex: 1;
-            text-align: center;
-        }
     }
 } 
