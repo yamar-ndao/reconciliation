@@ -1,0 +1,264 @@
+name: Performance Tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:  # Permet de déclencher manuellement
+
+jobs:
+  # Tests de performance du backend
+  backend-performance:
+    name: Backend Performance Tests
+    runs-on: ubuntu-latest
+    
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: reconciliation_perf
+        ports:
+          - 3306:3306
+        options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=3
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Java
+      uses: actions/setup-java@v4
+      with:
+        java-version: '11'
+        distribution: 'temurin'
+
+    - name: Start Backend Application
+      working-directory: ./reconciliation-app/backend
+      run: |
+        mvn spring-boot:run -Dspring.profiles.active=test &
+        sleep 30  # Attendre que l'application démarre
+
+    - name: Run JMeter Tests
+      run: |
+        # Installer JMeter
+        wget https://downloads.apache.org/jmeter/binaries/apache-jmeter-5.5.zip
+        unzip apache-jmeter-5.5.zip
+        
+        # Créer un test simple
+        echo '<?xml version="1.0" encoding="UTF-8"?>
+        <jmeterTestPlan version="1.2" properties="5.0">
+          <hashTree>
+            <TestPlan guiclass="TestPlanGui" testclass="TestPlan" testname="Performance Test">
+              <elementProp name="TestPlan.arguments" elementType="Arguments">
+                <collectionProp name="Arguments.arguments"/>
+              </elementProp>
+              <boolProp name="TestPlan.functional_mode">false</boolProp>
+              <stringProp name="TestPlan.comments"></stringProp>
+              <boolProp name="TestPlan.tearDown_on_shutdown">true</boolProp>
+              <boolProp name="TestPlan.serialize_threadgroups">false</boolProp>
+            </TestPlan>
+            <hashTree>
+              <ThreadGroup guiclass="ThreadGroupGui" testclass="ThreadGroup" testname="API Load Test">
+                <elementProp name="ThreadGroup.main_controller" elementType="LoopController">
+                  <boolProp name="LoopController.continue_forever">false</boolProp>
+                  <stringProp name="LoopController.loops">10</stringProp>
+                </elementProp>
+                <stringProp name="ThreadGroup.on_sample_error">continue</stringProp>
+                <elementProp name="ThreadGroup.scheduler" elementType="Scheduler">
+                  <boolProp name="Scheduler.scheduler">false</boolProp>
+                  <stringProp name="Scheduler.duration"></stringProp>
+                  <stringProp name="Scheduler.delay"></stringProp>
+                </elementProp>
+                <stringProp name="ThreadGroup.duration"></stringProp>
+                <stringProp name="ThreadGroup.delay"></stringProp>
+                <boolProp name="ThreadGroup.same_user_on_next_iteration">true</boolProp>
+                <stringProp name="ThreadGroup.num_threads">5</stringProp>
+                <stringProp name="ThreadGroup.ramp_time">1</stringProp>
+              </ThreadGroup>
+              <hashTree>
+                <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="GET /api/health">
+                  <elementProp name="HTTPsampler.Arguments" elementType="Arguments">
+                    <collectionProp name="Arguments.arguments"/>
+                  </elementProp>
+                  <stringProp name="HTTPSampler.domain">localhost</stringProp>
+                  <stringProp name="HTTPSampler.port">8080</stringProp>
+                  <stringProp name="HTTPSampler.protocol">http</stringProp>
+                  <stringProp name="HTTPSampler.path">/api/health</stringProp>
+                  <stringProp name="HTTPSampler.method">GET</stringProp>
+                </HTTPSamplerProxy>
+                <hashTree/>
+              </hashTree>
+            </hashTree>
+          </hashTree>
+        </jmeterTestPlan>' > performance-test.jmx
+        
+        # Exécuter le test
+        apache-jmeter-5.5/bin/jmeter -n -t performance-test.jmx -l results.jtl -e -o report
+
+    - name: Upload Performance Report
+      uses: actions/upload-artifact@v4
+      with:
+        name: performance-report
+        path: |
+          results.jtl
+          report/
+
+  # Tests de performance du frontend
+  frontend-performance:
+    name: Frontend Performance Tests
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+
+    - name: Install Dependencies
+      working-directory: ./reconciliation-app/frontend
+      run: npm ci
+
+    - name: Build Application
+      working-directory: ./reconciliation-app/frontend
+      run: npm run build --prod
+
+    - name: Run Lighthouse CI
+      working-directory: ./reconciliation-app/frontend
+      run: |
+        npm install -g @lhci/cli
+        lhci autorun
+
+    - name: Upload Lighthouse Report
+      uses: actions/upload-artifact@v4
+      with:
+        name: lighthouse-report
+        path: ./reconciliation-app/frontend/.lighthouseci/
+
+  # Tests de charge avec Artillery
+  load-testing:
+    name: Load Testing
+    runs-on: ubuntu-latest
+    needs: [backend-performance]
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+
+    - name: Install Artillery
+      run: npm install -g artillery
+
+    - name: Create Load Test Configuration
+      run: |
+        echo '{
+          "config": {
+            "target": "http://localhost:8080",
+            "phases": [
+              {
+                "duration": 60,
+                "arrivalRate": 10
+              },
+              {
+                "duration": 120,
+                "arrivalRate": 20
+              }
+            ]
+          },
+          "scenarios": [
+            {
+              "name": "API Load Test",
+              "requests": [
+                {
+                  "method": "GET",
+                  "url": "/api/health"
+                },
+                {
+                  "method": "GET",
+                  "url": "/api/comptes"
+                }
+              ]
+            }
+          ]
+        }' > load-test.yml
+
+    - name: Run Load Test
+      run: artillery run load-test.yml
+
+    - name: Upload Load Test Results
+      uses: actions/upload-artifact@v4
+      with:
+        name: load-test-results
+        path: artillery-report.json
+
+  # Analyse des performances
+  performance-analysis:
+    name: Performance Analysis
+    runs-on: ubuntu-latest
+    needs: [backend-performance, frontend-performance, load-testing]
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Download Performance Reports
+      uses: actions/download-artifact@v4
+      with:
+        name: performance-report
+        path: ./performance-reports
+
+    - name: Download Lighthouse Reports
+      uses: actions/download-artifact@v4
+      with:
+        name: lighthouse-report
+        path: ./lighthouse-reports
+
+    - name: Generate Performance Summary
+      run: |
+        echo "📊 Performance Test Summary" > performance-summary.md
+        echo "=============================" >> performance-summary.md
+        echo "" >> performance-summary.md
+        echo "**Date:** $(date)" >> performance-summary.md
+        echo "**Branch:** ${{ github.ref }}" >> performance-summary.md
+        echo "" >> performance-summary.md
+        
+        echo "## Backend Performance" >> performance-summary.md
+        echo "- JMeter tests completed" >> performance-summary.md
+        echo "- Load testing with Artillery" >> performance-summary.md
+        echo "" >> performance-summary.md
+        
+        echo "## Frontend Performance" >> performance-summary.md
+        echo "- Lighthouse CI analysis completed" >> performance-summary.md
+        echo "- Performance metrics generated" >> performance-summary.md
+        echo "" >> performance-summary.md
+        
+        echo "## Recommendations" >> performance-summary.md
+        echo "- Monitor response times in production" >> performance-summary.md
+        echo "- Optimize database queries if needed" >> performance-summary.md
+        echo "- Consider caching strategies" >> performance-summary.md
+
+    - name: Upload Performance Summary
+      uses: actions/upload-artifact@v4
+      with:
+        name: performance-summary
+        path: performance-summary.md
+
+    - name: Comment on PR
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: '📊 Performance tests completed successfully! Check the artifacts for detailed reports.'
+          }) 
