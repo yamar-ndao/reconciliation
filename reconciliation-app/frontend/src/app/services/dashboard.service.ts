@@ -11,6 +11,7 @@ export interface DashboardMetrics {
 
 export interface DetailedMetrics {
     totalVolume: number;
+    totalFees: number;
     totalTransactions: number;
     totalClients: number;
     averageVolume: number;

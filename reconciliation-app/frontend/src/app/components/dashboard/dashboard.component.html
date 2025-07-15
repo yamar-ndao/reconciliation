@@ -52,25 +52,49 @@
         </div>
     </div>
 
+    <!-- Barre récapitulative clients/services/pays -->
+    <div class="dashboard-summary-bar" style="display: flex; justify-content: space-between; align-items: center; background: #1976d2; color: #fff; padding: 24px 0; margin: 24px auto; border-radius: 6px; max-width: 1200px; width: 100%;">
+      <div style="flex: 1; text-align: center;">
+        <div style="font-size: 1.1rem; opacity: 0.8;">Nombre de clients</div>
+        <div style="font-size: 2.2rem; font-weight: bold;">{{ totalClientsCount }}</div>
+      </div>
+      <div style="flex: 1; text-align: center;">
+        <div style="font-size: 1.1rem; opacity: 0.8;">Nombre de services</div>
+        <div style="font-size: 2.2rem; font-weight: bold;">{{ totalServicesCount }}</div>
+      </div>
+      <div style="flex: 1; text-align: center;">
+        <div style="font-size: 1.1rem; opacity: 0.8;">Nombre de pays</div>
+        <div style="font-size: 2.2rem; font-weight: bold;">{{ totalCountriesCount }}</div>
+      </div>
+    </div>
+    <!-- Fin barre récapitulative -->
+
     <!-- Nouvelle section pour les métriques détaillées -->
     <div class="detailed-metrics-section">
-        <div class="detailed-metrics-header">
-            <h3>📈 Métriques détaillées</h3>
-            <div class="metric-select" style="margin-bottom: 16px; text-align: right;">
-              <label for="metricSelect">Afficher&nbsp;:</label>
-              <select id="metricSelect" [(ngModel)]="selectedMetric" (change)="updateBarChartData()">
-                <option value="volume">Volume total</option>
-                <option value="transactions">Nombre de transactions</option>
-                <option value="frais">Volume des frais</option>
-              </select>
-            </div>
-            <div class="chart-type-select" style="margin-bottom: 12px; text-align: right;">
-              <label for="chartTypeSelect">Vue :</label>
-              <select id="chartTypeSelect" [(ngModel)]="selectedChartType">
-                <option value="bar">Barres</option>
-                <option value="line">Courbe</option>
-              </select>
-            </div>
+        <div class="detailed-metrics-header" style="display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px;">
+          <div class="metric-select" style="flex: 1; text-align: left; min-width: 180px;">
+            <mat-form-field appearance="fill" class="filter-select">
+              <mat-label>Afficher</mat-label>
+              <mat-select [(ngModel)]="selectedMetric" (selectionChange)="updateBarChartData()">
+                <mat-option value="volume">Volume total</mat-option>
+                <mat-option value="transactions">Nombre de transactions</mat-option>
+                <mat-option value="revenu">Volume des revenus</mat-option>
+              </mat-select>
+            </mat-form-field>
+          </div>
+          <div style="flex: 2; text-align: center;">
+            <h3 style="margin: 0;">📈 Métriques détaillées</h3>
+          </div>
+          <div class="chart-type-select" style="flex: 1; text-align: right; min-width: 180px;">
+            <mat-form-field appearance="fill" class="filter-select">
+              <mat-label>Vue</mat-label>
+              <mat-select [(ngModel)]="selectedChartType">
+                <mat-option value="bar">Barres</mat-option>
+                <mat-option value="line">Courbe</mat-option>
+              </mat-select>
+            </mat-form-field>
+          </div>
+        </div>
             <!-- Espace réservé pour les futurs graphiques placé ici -->
             <div class="graph-placeholder">
               <canvas *ngIf="selectedChartType === 'bar' && barChartData && barChartData.labels?.length" baseChart
@@ -81,64 +105,61 @@
               <canvas *ngIf="selectedChartType === 'line' && lineChartData && lineChartData.labels?.length" baseChart
                 [data]="lineChartData"
                 [options]="barChartOptions"
-                [type]="'line'">
+                [type]="'line'"
+                [plugins]="lineChartPlugins">
               </canvas>
               <div *ngIf="(!barChartData || !barChartData.labels?.length) && (!lineChartData || !lineChartData.labels?.length)" class="text">Aucune donnée à afficher</div>
             </div>
-            <button class="export-btn" (click)="exportDetailedMetricsExcel()">Exporter Excel</button>
-            <div class="filters-container">
+            <div class="filters-export-row" style="display: flex; justify-content: space-between; align-items: center; gap: 24px; margin-bottom: 16px;">
+              <button class="export-btn" (click)="exportDetailedMetricsExcel()">Exporter Excel</button>
+              <div class="filters-container" style="display: flex; gap: 12px; justify-content: center; align-items: center;">
                 <div class="filter-group">
-                    <label for="agency-select">Agence:</label>
-                    <select 
-                        id="agency-select" 
-                        [(ngModel)]="selectedAgency"
-                        (change)="onAgencyChange()"
-                        class="filter-select">
-                        <option value="Tous">Toutes les agences</option>
-                        <option *ngFor="let agency of filterOptions?.agencies || []" [value]="agency">
-                            {{ agency }}
-                        </option>
-                    </select>
+                  <mat-form-field appearance="fill" class="filter-select">
+                    <mat-label>Client</mat-label>
+                    <mat-select [(ngModel)]="selectedAgency" multiple (selectionChange)="onFilterChange()">
+                      <ngx-mat-select-search [formControl]="agenceSearchCtrl" placeholderLabel="Rechercher un client..." noEntriesFoundLabel="Aucun client trouvé"></ngx-mat-select-search>
+                      <mat-option *ngFor="let agency of filteredAgencies" [value]="agency">
+                        {{ agency }}
+                      </mat-option>
+                    </mat-select>
+                  </mat-form-field>
                 </div>
                 <div class="filter-group">
-                    <label for="service-select">Service:</label>
-                    <select 
-                        id="service-select" 
-                        [(ngModel)]="selectedService"
-                        (change)="onServiceChange()"
-                        class="filter-select">
-                        <option value="Tous">Tous les services</option>
-                        <option *ngFor="let service of filterOptions?.services || []" [value]="service">
-                            {{ service }}
-                        </option>
-                    </select>
+                  <mat-form-field appearance="fill" class="filter-select">
+                    <mat-label>Service</mat-label>
+                    <mat-select [(ngModel)]="selectedService" multiple (selectionChange)="onFilterChange()">
+                      <ngx-mat-select-search [formControl]="serviceSearchCtrl" placeholderLabel="Rechercher un service..." noEntriesFoundLabel="Aucun service trouvé"></ngx-mat-select-search>
+                      <mat-option *ngFor="let service of filteredServices" [value]="service">
+                        {{ service }}
+                      </mat-option>
+                    </mat-select>
+                  </mat-form-field>
                 </div>
                 <div class="filter-group">
-                    <label for="country-select">Pays:</label>
-                    <select 
-                        id="country-select" 
-                        [(ngModel)]="selectedCountry"
-                        (change)="onCountryChange()"
-                        class="filter-select">
-                        <option value="Tous">Tous les pays</option>
-                        <option *ngFor="let country of filterOptions?.countries || []" [value]="country">
-                            {{ country }}
-                        </option>
-                    </select>
+                  <mat-form-field appearance="fill" class="filter-select">
+                    <mat-label>Pays</mat-label>
+                    <mat-select [(ngModel)]="selectedCountry" multiple (selectionChange)="onFilterChange()">
+                      <ngx-mat-select-search [formControl]="paysSearchCtrl" placeholderLabel="Rechercher un pays..." noEntriesFoundLabel="Aucun pays trouvé"></ngx-mat-select-search>
+                      <mat-option *ngFor="let country of filteredCountries" [value]="country">
+                        {{ country }}
+                      </mat-option>
+                    </mat-select>
+                  </mat-form-field>
                 </div>
                 <div class="filter-group">
-                    <label for="timeFilter">Période:</label>
-                    <select [(ngModel)]="selectedTimeFilter" (change)="onTimeFilterChange()" class="filter-select">
-                        <option *ngFor="let timeFilter of filterOptions?.timeFilters" [value]="timeFilter">
-                            {{ timeFilter }}
-                        </option>
-                    </select>
+                  <mat-form-field appearance="fill" class="filter-select">
+                    <mat-label>Période</mat-label>
+                    <mat-select [(ngModel)]="selectedTimeFilter" (selectionChange)="onTimeFilterChange()">
+                      <mat-option *ngFor="let timeFilter of filterOptions?.timeFilters" [value]="timeFilter">
+                        {{ timeFilter }}
+                      </mat-option>
+                    </mat-select>
+                  </mat-form-field>
                 </div>
-                <div class="filter-group">
-                    <button type="button" (click)="resetFilters()" class="reset-btn">
-                        <i class="fas fa-undo"></i> Réinitialiser
-                    </button>
-                </div>
+              </div>
+              <button type="button" (click)="resetFilters()" class="reset-btn">
+                <i class="fas fa-undo"></i> Réinitialiser
+              </button>
             </div>
         </div>
 
@@ -171,6 +192,11 @@
                     <div class="main-metric-label">Volume Total</div>
                 </div>
                 <div class="main-metric">
+                    <div class="main-metric-icon">💵</div>
+                    <div class="main-metric-value">{{detailedMetrics.totalFees | number:'1.0-0'}}</div>
+                    <div class="main-metric-label">Volume des Revenus</div>
+                </div>
+                <div class="main-metric">
                     <div class="main-metric-icon">📊</div>
                     <div class="main-metric-value">{{detailedMetrics.totalTransactions}}</div>
                     <div class="main-metric-label">Transactions</div>
@@ -193,7 +219,7 @@
                 <div class="main-metric">
                     <div class="main-metric-icon">💸</div>
                     <div class="main-metric-value">{{detailedMetrics.averageFeesPerDay | number:'1.0-0'}}</div>
-                    <div class="main-metric-label">Frais moyen/Jour</div>
+                    <div class="main-metric-label">Revenu moyen/Jour</div>
                 </div>
             </div>
 
@@ -242,6 +268,3 @@
             </div>
         </div>
     </div>
-
-    <!-- Espace réservé pour les futurs graphiques supprimé de la fin du fichier -->
-</div> 

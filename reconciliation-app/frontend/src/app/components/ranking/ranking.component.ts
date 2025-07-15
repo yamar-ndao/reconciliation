@@ -18,7 +18,7 @@ export class RankingComponent implements OnInit {
   serviceRankingType: 'transactions' | 'volume' | 'fees' = 'transactions';
   
   // Période de calcul
-  selectedPeriod: 'day' | 'week' | 'month' = 'month';
+  selectedPeriod: 'all' | 'day' | 'week' | 'month' | 'custom' = 'month';
   
   // États de chargement
   loadingAgencies = false;
@@ -27,6 +27,15 @@ export class RankingComponent implements OnInit {
   // Erreurs
   errorAgencies = '';
   errorServices = '';
+
+  // Indicateur de mise à jour
+  showUpdateMessage = false;
+  updateMessage = '';
+
+  // Filtre personnalisé
+  customStartDate: string = '';
+  customEndDate: string = '';
+  customDateError: string = '';
 
   // Pagination agences
   agencyPage = 1;
@@ -53,6 +62,9 @@ export class RankingComponent implements OnInit {
   countries: string[] = [];
   selectedCountries: string[] = ['Tous les pays'];
 
+  // Dropdown pays
+  showCountryDropdown = false;
+
   constructor(private rankingService: RankingService) { }
 
   ngOnInit(): void {
@@ -75,19 +87,23 @@ export class RankingComponent implements OnInit {
     this.loadingAgencies = true;
     this.errorAgencies = '';
 
+    // Déterminer les dates personnalisées si nécessaire
+    const startDate = this.selectedPeriod === 'custom' ? this.customStartDate : undefined;
+    const endDate = this.selectedPeriod === 'custom' ? this.customEndDate : undefined;
+
     let observable;
     switch (this.agencyRankingType) {
       case 'transactions':
-        observable = this.rankingService.getAgencyRankingByTransactions(this.selectedCountries, this.selectedPeriod);
+        observable = this.rankingService.getAgencyRankingByTransactions(this.selectedCountries, this.selectedPeriod, startDate, endDate);
         break;
       case 'volume':
-        observable = this.rankingService.getAgencyRankingByVolume(this.selectedCountries, this.selectedPeriod);
+        observable = this.rankingService.getAgencyRankingByVolume(this.selectedCountries, this.selectedPeriod, startDate, endDate);
         break;
       case 'fees':
-        observable = this.rankingService.getAgencyRankingByFees(this.selectedCountries, this.selectedPeriod);
+        observable = this.rankingService.getAgencyRankingByFees(this.selectedCountries, this.selectedPeriod, startDate, endDate);
         break;
       default:
-        observable = this.rankingService.getAgencyRankingByTransactions(this.selectedCountries, this.selectedPeriod);
+        observable = this.rankingService.getAgencyRankingByTransactions(this.selectedCountries, this.selectedPeriod, startDate, endDate);
     }
 
     observable.subscribe({
@@ -110,19 +126,23 @@ export class RankingComponent implements OnInit {
     this.loadingServices = true;
     this.errorServices = '';
 
+    // Déterminer les dates personnalisées si nécessaire
+    const startDate = this.selectedPeriod === 'custom' ? this.customStartDate : undefined;
+    const endDate = this.selectedPeriod === 'custom' ? this.customEndDate : undefined;
+
     let observable;
     switch (this.serviceRankingType) {
       case 'transactions':
-        observable = this.rankingService.getServiceRankingByTransactions(this.selectedCountries, this.selectedPeriod);
+        observable = this.rankingService.getServiceRankingByTransactions(this.selectedCountries, this.selectedPeriod, startDate, endDate);
         break;
       case 'volume':
-        observable = this.rankingService.getServiceRankingByVolume(this.selectedCountries, this.selectedPeriod);
+        observable = this.rankingService.getServiceRankingByVolume(this.selectedCountries, this.selectedPeriod, startDate, endDate);
         break;
       case 'fees':
-        observable = this.rankingService.getServiceRankingByFees(this.selectedCountries, this.selectedPeriod);
+        observable = this.rankingService.getServiceRankingByFees(this.selectedCountries, this.selectedPeriod, startDate, endDate);
         break;
       default:
-        observable = this.rankingService.getServiceRankingByTransactions(this.selectedCountries, this.selectedPeriod);
+        observable = this.rankingService.getServiceRankingByTransactions(this.selectedCountries, this.selectedPeriod, startDate, endDate);
     }
 
     observable.subscribe({
@@ -156,8 +176,83 @@ export class RankingComponent implements OnInit {
    * Changer la période de calcul
    */
   onPeriodChange(): void {
+    // Réinitialiser les erreurs de date personnalisée
+    this.customDateError = '';
+    
+    if (this.selectedPeriod === 'custom') {
+      // Si on passe en mode personnalisé, ne pas charger les données tant qu'on n'a pas de dates
+      return;
+    }
+    
+    this.showUpdateMessage = true;
+    this.updateMessage = `Mise à jour des classements : ${this.getPeriodDescription()}`;
+    
     this.loadAgencyRankings();
     this.loadServiceRankings();
+    
+    // Masquer le message après 3 secondes
+    setTimeout(() => {
+      this.showUpdateMessage = false;
+      this.updateMessage = '';
+    }, 3000);
+  }
+
+  /**
+   * Gérer le changement de dates personnalisées
+   */
+  onCustomDateChange(): void {
+    this.customDateError = '';
+    
+    if (!this.customStartDate || !this.customEndDate) {
+      return;
+    }
+    
+    const startDate = new Date(this.customStartDate);
+    const endDate = new Date(this.customEndDate);
+    
+    // Validation des dates
+    if (startDate > endDate) {
+      this.customDateError = 'La date de début doit être antérieure à la date de fin';
+      return;
+    }
+    
+    if (endDate > new Date()) {
+      this.customDateError = 'La date de fin ne peut pas être dans le futur';
+      return;
+    }
+    
+    this.showUpdateMessage = true;
+    this.updateMessage = `Mise à jour des classements : ${this.formatCustomPeriod()}`;
+    
+    this.loadAgencyRankings();
+    this.loadServiceRankings();
+    
+    // Masquer le message après 3 secondes
+    setTimeout(() => {
+      this.showUpdateMessage = false;
+      this.updateMessage = '';
+    }, 3000);
+  }
+
+  /**
+   * Formater la période personnalisée pour l'affichage
+   */
+  formatCustomPeriod(): string {
+    if (!this.customStartDate || !this.customEndDate) {
+      return '';
+    }
+    
+    const startDate = new Date(this.customStartDate);
+    const endDate = new Date(this.customEndDate);
+    
+    const startFormatted = startDate.toLocaleDateString('fr-FR');
+    const endFormatted = endDate.toLocaleDateString('fr-FR');
+    
+    if (startFormatted === endFormatted) {
+      return `Données du ${startFormatted}`;
+    } else {
+      return `Données du ${startFormatted} au ${endFormatted}`;
+    }
   }
 
   /**
@@ -197,6 +292,8 @@ export class RankingComponent implements OnInit {
    */
   getPeriodLabel(): string {
     switch (this.selectedPeriod) {
+      case 'all':
+        return 'Toute la période';
       case 'day':
         return 'Jour';
       case 'week':
@@ -205,6 +302,34 @@ export class RankingComponent implements OnInit {
         return 'Mois';
       default:
         return 'Mois';
+    }
+  }
+
+  /**
+   * Obtenir la description détaillée de la période
+   */
+  getPeriodDescription(): string {
+    const today = new Date();
+    
+    switch (this.selectedPeriod) {
+      case 'all':
+        return 'Toutes les données disponibles';
+      case 'day':
+        const yesterday = new Date(today);
+        yesterday.setDate(today.getDate() - 1);
+        return `Données de ${yesterday.toLocaleDateString('fr-FR')} (J-1)`;
+      case 'week':
+        const lastWeekStart = new Date(today);
+        lastWeekStart.setDate(today.getDate() - 7);
+        const lastWeekEnd = new Date(lastWeekStart);
+        lastWeekEnd.setDate(lastWeekStart.getDate() + 6);
+        return `Données du ${lastWeekStart.toLocaleDateString('fr-FR')} au ${lastWeekEnd.toLocaleDateString('fr-FR')} (dernière semaine)`;
+      case 'month':
+        const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+        const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+        return `Données du ${monthStart.toLocaleDateString('fr-FR')} au ${monthEnd.toLocaleDateString('fr-FR')} (mois en cours)`;
+      default:
+        return 'Mois en cours';
     }
   }
 
@@ -321,9 +446,9 @@ export class RankingComponent implements OnInit {
       case 'service': return 'Service';
       case 'transactionCount': return 'Transactions';
       case 'totalVolume': return 'Volume Total';
-      case 'totalFees': return 'Frais Totaux';
+      case 'totalFees': return 'Revenu';
       case 'averageVolume': return `Volume Moyen/${this.getPeriodLabel()}`;
-      case 'averageFees': return `Frais Moyens/${this.getPeriodLabel()}`;
+                  case 'averageFees': return `Revenu Moyen/${this.getPeriodLabel()}`;
       case 'uniqueAgencies': return 'Agences';
       case 'position': return 'Position';
       default: return col;
@@ -350,8 +475,22 @@ export class RankingComponent implements OnInit {
         this.selectedCountries.push(country);
       }
     }
+    
+    // Afficher le message de mise à jour
+    const selectedCountriesText = this.selectedCountries.includes('Tous les pays') 
+      ? 'Tous les pays' 
+      : this.selectedCountries.join(', ');
+    this.showUpdateMessage = true;
+    this.updateMessage = `Mise à jour des classements pour : ${selectedCountriesText}`;
+    
     this.loadAgencyRankings();
     this.loadServiceRankings();
+    
+    // Masquer le message après 3 secondes
+    setTimeout(() => {
+      this.showUpdateMessage = false;
+      this.updateMessage = '';
+    }, 3000);
   }
 
   isCountrySelected(country: string): boolean {
@@ -359,6 +498,26 @@ export class RankingComponent implements OnInit {
   }
 
   onCountryChange(): void {
+    this.loadAgencyRankings();
+    this.loadServiceRankings();
+  }
+
+  /**
+   * Ouvre/ferme le menu déroulant des pays
+   */
+  toggleCountryDropdown(): void {
+    this.showCountryDropdown = !this.showCountryDropdown;
+  }
+
+  /**
+   * Sélectionner/désélectionner tous les pays
+   */
+  toggleSelectAllCountries(): void {
+    if (this.selectedCountries.length === this.countries.length || (this.selectedCountries.includes('Tous les pays') && this.countries.length > 1)) {
+      this.selectedCountries = [];
+    } else {
+      this.selectedCountries = this.countries.filter(c => c !== 'Tous les pays');
+    }
     this.loadAgencyRankings();
     this.loadServiceRankings();
   }

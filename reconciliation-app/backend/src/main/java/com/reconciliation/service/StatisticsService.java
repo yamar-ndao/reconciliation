@@ -352,13 +352,18 @@ public class StatisticsService {
                 .filter(op -> op.getFraisApplicable() != null && op.getFraisApplicable())
                 .collect(java.util.stream.Collectors.toList());
             
-            // Calculer le total des frais
+            // Calculer le total des frais (uniquement les débits - montants positifs)
             Double totalFees = filteredOperations.stream()
-                .mapToDouble(op -> op.getMontantFrais() != null ? op.getMontantFrais() : 0.0)
+                .filter(op -> op.getMontantFrais() != null && op.getMontantFrais() > 0)
+                .mapToDouble(op -> op.getMontantFrais())
                 .sum();
             
-            // Compter les jours uniques avec des frais
+            // Ajouter le total des frais aux métriques
+            metrics.put("totalFees", totalFees);
+            
+            // Compter les jours uniques avec des frais (uniquement les débits)
             long daysWithFees = filteredOperations.stream()
+                .filter(op -> op.getMontantFrais() != null && op.getMontantFrais() > 0)
                 .map(op -> op.getDateOperation().toLocalDate())
                 .distinct()
                 .count();

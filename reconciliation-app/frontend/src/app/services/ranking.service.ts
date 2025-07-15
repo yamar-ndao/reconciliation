@@ -47,11 +47,14 @@ export class RankingService {
   /**
    * Classement des agences par nombre de transactions
    */
-  getAgencyRankingByTransactions(countries?: string[], period: string = 'month'): Observable<RankingItem[]> {
+  getAgencyRankingByTransactions(countries?: string[], period: string = 'month', startDate?: string, endDate?: string): Observable<RankingItem[]> {
     let url = `${this.apiUrl}/agencies/transactions?period=${period}`;
     if (countries && countries.length > 0 && !countries.includes('Tous les pays')) {
       const countryParams = countries.map(c => `country=${encodeURIComponent(c)}`).join('&');
       url += `&${countryParams}`;
+    }
+    if (startDate && endDate) {
+      url += `&startDate=${startDate}&endDate=${endDate}`;
     }
     return this.http.get<RankingItem[]>(url);
   }
@@ -59,11 +62,14 @@ export class RankingService {
   /**
    * Classement des agences par volume
    */
-  getAgencyRankingByVolume(countries?: string[], period: string = 'month'): Observable<RankingItem[]> {
+  getAgencyRankingByVolume(countries?: string[], period: string = 'month', startDate?: string, endDate?: string): Observable<RankingItem[]> {
     let url = `${this.apiUrl}/agencies/volume?period=${period}`;
     if (countries && countries.length > 0 && !countries.includes('Tous les pays')) {
       const countryParams = countries.map(c => `country=${encodeURIComponent(c)}`).join('&');
       url += `&${countryParams}`;
+    }
+    if (startDate && endDate) {
+      url += `&startDate=${startDate}&endDate=${endDate}`;
     }
     return this.http.get<RankingItem[]>(url);
   }
@@ -71,11 +77,14 @@ export class RankingService {
   /**
    * Classement des agences par frais
    */
-  getAgencyRankingByFees(countries?: string[], period: string = 'month'): Observable<RankingItem[]> {
+  getAgencyRankingByFees(countries?: string[], period: string = 'month', startDate?: string, endDate?: string): Observable<RankingItem[]> {
     let url = `${this.apiUrl}/agencies/fees?period=${period}`;
     if (countries && countries.length > 0 && !countries.includes('Tous les pays')) {
       const countryParams = countries.map(c => `country=${encodeURIComponent(c)}`).join('&');
       url += `&${countryParams}`;
+    }
+    if (startDate && endDate) {
+      url += `&startDate=${startDate}&endDate=${endDate}`;
     }
     return this.http.get<RankingItem[]>(url);
   }
@@ -83,11 +92,14 @@ export class RankingService {
   /**
    * Classement des services par nombre de transactions
    */
-  getServiceRankingByTransactions(countries?: string[], period: string = 'month'): Observable<RankingItem[]> {
+  getServiceRankingByTransactions(countries?: string[], period: string = 'month', startDate?: string, endDate?: string): Observable<RankingItem[]> {
     let url = `${this.apiUrl}/services/transactions?period=${period}`;
     if (countries && countries.length > 0 && !countries.includes('Tous les pays')) {
       const countryParams = countries.map(c => `country=${encodeURIComponent(c)}`).join('&');
       url += `&${countryParams}`;
+    }
+    if (startDate && endDate) {
+      url += `&startDate=${startDate}&endDate=${endDate}`;
     }
     return this.http.get<RankingItem[]>(url);
   }
@@ -95,11 +107,14 @@ export class RankingService {
   /**
    * Classement des services par volume
    */
-  getServiceRankingByVolume(countries?: string[], period: string = 'month'): Observable<RankingItem[]> {
+  getServiceRankingByVolume(countries?: string[], period: string = 'month', startDate?: string, endDate?: string): Observable<RankingItem[]> {
     let url = `${this.apiUrl}/services/volume?period=${period}`;
     if (countries && countries.length > 0 && !countries.includes('Tous les pays')) {
       const countryParams = countries.map(c => `country=${encodeURIComponent(c)}`).join('&');
       url += `&${countryParams}`;
+    }
+    if (startDate && endDate) {
+      url += `&startDate=${startDate}&endDate=${endDate}`;
     }
     return this.http.get<RankingItem[]>(url);
   }
@@ -107,11 +122,14 @@ export class RankingService {
   /**
    * Classement des services par frais
    */
-  getServiceRankingByFees(countries?: string[], period: string = 'month'): Observable<RankingItem[]> {
+  getServiceRankingByFees(countries?: string[], period: string = 'month', startDate?: string, endDate?: string): Observable<RankingItem[]> {
     let url = `${this.apiUrl}/services/fees?period=${period}`;
     if (countries && countries.length > 0 && !countries.includes('Tous les pays')) {
       const countryParams = countries.map(c => `country=${encodeURIComponent(c)}`).join('&');
       url += `&${countryParams}`;
+    }
+    if (startDate && endDate) {
+      url += `&startDate=${startDate}&endDate=${endDate}`;
     }
     return this.http.get<RankingItem[]>(url);
   }

@@ -2,38 +2,106 @@
   <div class="ranking-header">
     <h1 class="ranking-title">🏆 Classements</h1>
     <p>Découvrez les meilleures performances par agence et par service</p>
+    
+    <!-- Message de mise à jour -->
+    <div *ngIf="showUpdateMessage" 
+         style="margin-top: 15px; padding: 10px 20px; background: linear-gradient(135deg, #27ae60 0%, #2ecc71 100%); color: white; border-radius: 8px; font-weight: 500; animation: fadeIn 0.3s ease-in;">
+      {{ updateMessage }}
+    </div>
   </div>
 
   <div class="ranking-filter-bar" style="margin-bottom: 24px;">
-    <div style="display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start;">
+    <div style="display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start; justify-content: space-between;">
       <!-- Filtre par pays -->
-      <div style="flex: 1; min-width: 300px;">
+      <div style="min-width: 200px;">
         <label style="display: block; margin-bottom: 8px; font-weight: bold;">Filtrer par pays :</label>
-        <div style="display: flex; flex-wrap: wrap; gap: 12px;">
-          <div *ngFor="let country of countries" style="display: flex; align-items: center; gap: 4px;">
-            <input 
-              type="checkbox" 
-              [id]="'country-' + country"
-              [checked]="isCountrySelected(country)"
-              (change)="toggleCountry(country)"
-              style="margin: 0;">
-            <label [for]="'country-' + country" style="margin: 0; cursor: pointer;">{{ country }}</label>
+        <div style="position: relative;">
+          <div (click)="toggleCountryDropdown()" 
+               [style.opacity]="(loadingAgencies || loadingServices) ? '0.6' : '1'"
+               [style.pointer-events]="(loadingAgencies || loadingServices) ? 'none' : 'auto'"
+               style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #ddd; background-color: white; cursor: pointer; display: flex; align-items: center; justify-content: space-between;">
+            <span>
+              <ng-container *ngIf="selectedCountries.length === 0">Aucun pays sélectionné</ng-container>
+              <ng-container *ngIf="selectedCountries.length === 1">{{ selectedCountries[0] }}</ng-container>
+              <ng-container *ngIf="selectedCountries.length > 1">{{ selectedCountries.length }} pays sélectionnés</ng-container>
+            </span>
+            <span style="font-size: 1.2em;">▼</span>
           </div>
+          <div *ngIf="loadingAgencies || loadingServices" 
+               style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); pointer-events: none;">
+            <div style="width: 16px; height: 16px; border: 2px solid #f3f3f3; border-top: 2px solid #3498db; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+          </div>
+          <div *ngIf="showCountryDropdown" style="position: absolute; z-index: 10; background: #fff; border: 1px solid #ddd; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); width: 100%; max-height: 250px; overflow-y: auto; margin-top: 4px;">
+            <div style="padding: 8px; border-bottom: 1px solid #eee; display: flex; align-items: center; gap: 8px;">
+              <button (click)="toggleSelectAllCountries(); $event.stopPropagation();" style="background: #764ba2; color: #fff; border: none; border-radius: 4px; padding: 4px 10px; font-size: 0.9em; cursor: pointer;">
+                {{ selectedCountries.length === countries.length - 1 ? 'Tout désélectionner' : 'Tout sélectionner' }}
+              </button>
+            </div>
+            <div *ngFor="let country of countries" style="padding: 8px 12px; display: flex; align-items: center; gap: 8px; cursor: pointer;" (click)="toggleCountry(country); $event.stopPropagation();">
+              <input type="checkbox" [checked]="isCountrySelected(country)" style="margin: 0;"/>
+              <span>{{ country }}</span>
+            </div>
+          </div>
+        </div>
+        <div *ngIf="selectedCountries.length > 0" style="margin-top: 4px; font-size: 0.8rem; color: #27ae60; font-weight: 500;">
+          ✓ Pays sélectionnés : {{ selectedCountries.includes('Tous les pays') ? 'Tous les pays' : selectedCountries.join(', ') }}
         </div>
       </div>
       
       <!-- Filtre par période -->
       <div style="min-width: 200px;">
         <label style="display: block; margin-bottom: 8px; font-weight: bold;">Période de calcul :</label>
-        <select 
-          [(ngModel)]="selectedPeriod" 
-          (change)="onPeriodChange()"
-          class="ranking-select"
-          style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #ddd;">
-          <option value="day">Par Jour</option>
-          <option value="week">Par Semaine</option>
-          <option value="month">Par Mois</option>
-        </select>
+        <div style="position: relative;">
+          <select 
+            [(ngModel)]="selectedPeriod" 
+            (change)="onPeriodChange()"
+            class="ranking-select"
+            [disabled]="loadingAgencies || loadingServices"
+            style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #ddd; background-color: white;">
+            <option value="all">Toute la période</option>
+            <option value="day">Par Jour</option>
+            <option value="week">Par Semaine</option>
+            <option value="month">Par Mois</option>
+            <option value="custom">Période personnalisée</option>
+          </select>
+          <div *ngIf="loadingAgencies || loadingServices" 
+               style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); pointer-events: none;">
+            <div style="width: 16px; height: 16px; border: 2px solid #f3f3f3; border-top: 2px solid #3498db; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+          </div>
+        </div>
+        <div *ngIf="selectedPeriod && selectedPeriod !== 'custom'" style="margin-top: 4px; font-size: 0.8rem; color: #27ae60; font-weight: 500;">
+          ✓ {{ getPeriodDescription() }}
+        </div>
+      </div>
+    </div>
+
+    <!-- Filtre personnalisé -->
+    <div *ngIf="selectedPeriod === 'custom'" style="margin-top: 16px;">
+      <div style="display: flex; gap: 12px; align-items: center; justify-content: flex-end;">
+        <div style="min-width: 200px;">
+          <label style="display: block; margin-bottom: 4px; font-size: 0.9rem; color: #666;">Date de début :</label>
+          <input 
+            type="date" 
+            [(ngModel)]="customStartDate"
+            (change)="onCustomDateChange()"
+            [disabled]="loadingAgencies || loadingServices"
+            style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #ddd; background-color: white;">
+        </div>
+        <div style="min-width: 200px;">
+          <label style="display: block; margin-bottom: 4px; font-size: 0.9rem; color: #666;">Date de fin :</label>
+          <input 
+            type="date" 
+            [(ngModel)]="customEndDate"
+            (change)="onCustomDateChange()"
+            [disabled]="loadingAgencies || loadingServices"
+            style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #ddd; background-color: white;">
+        </div>
+      </div>
+      <div *ngIf="customStartDate && customEndDate" style="margin-top: 4px; font-size: 0.8rem; color: #27ae60; font-weight: 500; text-align: right;">
+        ✓ Période : {{ formatCustomPeriod() }}
+      </div>
+      <div *ngIf="customDateError" style="margin-top: 4px; font-size: 0.8rem; color: #e74c3c; font-weight: 500; text-align: right;">
+        ⚠ {{ customDateError }}
       </div>
     </div>
   </div>
@@ -43,6 +111,9 @@
     <div class="ranking-section">
       <div class="section-header">
         <h2 class="section-title">🏢 {{ getAgencyRankingTitle() }}</h2>
+        <div style="text-align: center; margin-top: 5px; font-size: 0.9rem; opacity: 0.9;">
+          📅 {{ getPeriodDescription() }}
+        </div>
         <div class="ranking-controls">
           <label for="agency-ranking-type">Trier par :</label>
           <select 
@@ -52,7 +123,7 @@
             class="ranking-select control-same-width">
             <option value="transactions">Nombre de Transactions</option>
             <option value="volume">Volume Total</option>
-            <option value="fees">Frais Totaux</option>
+            <option value="fees">Revenu</option>
           </select>
           <button (click)="exportAgencyCSV()" class="export-btn control-same-width">Exporter CSV</button>
           <button (click)="exportAgencyExcel()" class="export-btn control-same-width">Exporter Excel</button>
@@ -77,9 +148,9 @@
               <th class="agency-name">Agence</th>
               <th class="transaction-count">Transactions</th>
               <th class="total-volume">Volume Total</th>
-              <th class="total-fees">Frais Totaux</th>
+              <th class="total-fees">Revenu</th>
               <th class="average-volume">Volume Moyen/{{ getPeriodLabel() }}</th>
-              <th class="average-fees">Frais Moyens/{{ getPeriodLabel() }}</th>
+              <th class="average-fees">Revenu Moyen/{{ getPeriodLabel() }}</th>
             </tr>
           </thead>
           <tbody>
@@ -115,6 +186,9 @@
     <div class="ranking-section">
       <div class="section-header">
         <h2 class="section-title">🔧 {{ getServiceRankingTitle() }}</h2>
+        <div style="text-align: center; margin-top: 5px; font-size: 0.9rem; opacity: 0.9;">
+          📅 {{ getPeriodDescription() }}
+        </div>
         <div class="ranking-controls">
           <label for="service-ranking-type">Trier par :</label>
           <select 
@@ -124,7 +198,7 @@
             class="ranking-select control-same-width">
             <option value="transactions">Nombre de Transactions</option>
             <option value="volume">Volume Total</option>
-            <option value="fees">Frais Totaux</option>
+            <option value="fees">Revenu</option>
           </select>
           <button (click)="exportServiceCSV()" class="export-btn control-same-width">Exporter CSV</button>
           <button (click)="exportServiceExcel()" class="export-btn control-same-width">Exporter Excel</button>
@@ -149,10 +223,10 @@
               <th class="service-name">Service</th>
               <th class="transaction-count">Transactions</th>
               <th class="total-volume">Volume Total</th>
-              <th class="total-fees">Frais Totaux</th>
+              <th class="total-fees">Revenu</th>
               <th class="unique-agencies">Agences</th>
               <th class="average-volume">Volume Moyen/{{ getPeriodLabel() }}</th>
-              <th class="average-fees">Frais Moyens/{{ getPeriodLabel() }}</th>
+              <th class="average-fees">Revenu Moyen/{{ getPeriodLabel() }}</th>
             </tr>
           </thead>
           <tbody>

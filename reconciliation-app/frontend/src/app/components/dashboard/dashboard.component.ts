@@ -2,14 +2,30 @@ import { Component, OnInit, OnDestroy } from '@angular/core';
 import { Router, NavigationEnd } from '@angular/router';
 import { filter } from 'rxjs/operators';
 import { Subscription } from 'rxjs';
-import { DashboardService, DashboardMetrics, DetailedMetrics, FilterOptions } from '../../services/dashboard.service';
+import { DashboardService, DashboardMetrics, DetailedMetrics } from '../../services/dashboard.service';
 import { AppStateService } from '../../services/app-state.service';
 import * as XLSX from 'xlsx';
 import { ChartConfiguration } from 'chart.js';
 import { AgencySummaryService } from '../../services/agency-summary.service';
 import { OperationService } from '../../services/operation.service';
+import { MatSelectModule } from '@angular/material/select';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatOptionModule } from '@angular/material/core';
+import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
+import { FormControl } from '@angular/forms';
+import { Chart } from 'chart.js';
+import ChartDataLabels from 'chartjs-plugin-datalabels';
 
-export type DashboardMetric = 'volume' | 'transactions' | 'frais';
+export type DashboardMetric = 'volume' | 'transactions' | 'revenu';
+
+// Correction du type FilterOptions pour rendre 'banques' optionnel
+interface FilterOptions {
+  agencies: string[];
+  services: string[];
+  countries: string[];
+  banques?: string[];
+  timeFilters: string[];
+}
 
 @Component({
     selector: 'app-dashboard',
@@ -17,6 +33,7 @@ export type DashboardMetric = 'volume' | 'transactions' | 'frais';
     styleUrls: ['./dashboard.component.scss']
 })
 export class DashboardComponent implements OnInit, OnDestroy {
+    public ChartDataLabels = ChartDataLabels;
     totalReconciliations: number = 0;
     totalFiles: number = 0;
     lastActivity: string = 'Chargement...';
@@ -30,12 +47,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
     detailedError: string | null = null;
 
     // Filtres
-    selectedAgency: string = 'Tous';
-    selectedService: string = 'Tous';
-    selectedCountry: string = 'Tous';
+    selectedAgency: string[] = [];
+    selectedService: string[] = [];
+    selectedCountry: string[] = [];
     selectedTimeFilter: string = 'Tous';
     startDate: string = '';
     endDate: string = '';
+    // selectedBanque: string = 'Tous'; // supprimé
 
     // Listes pour les filtres
     filterOptions: FilterOptions | null = null;
@@ -46,16 +64,19 @@ export class DashboardComponent implements OnInit, OnDestroy {
     barChartOptions: any = {
       responsive: true,
       plugins: {
-        legend: { display: false },
+        legend: { display: true, position: 'top' },
         title: { display: true, text: '' }
+        // plus de datalabels ici
       }
     };
 
+    lineChartOptions: any = {};
     selectedMetric: DashboardMetric = 'volume';
     agencySummaryData: any[] = [];
     allOperations: any[] = [];
     selectedChartType: 'bar' | 'line' = 'bar';
     lineChartData: any = { labels: [], datasets: [] };
+    lineChartPlugins: any[] = [];
 
     totalVolume: number = 0;
     totalTransactions: number = 0;
@@ -74,9 +95,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
         start = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate());
         end = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate() + 1);
       } else if (this.selectedTimeFilter === 'Cette semaine') {
-        const day = today.getDay() || 7; // 1 (lundi) à 7 (dimanche)
+        // Trouver le lundi de la semaine en cours
+        const currentDay = today.getDay(); // 0 (dimanche) à 6 (samedi)
+        const diffToMonday = (currentDay === 0 ? -6 : 1) - currentDay;
         start = new Date(today);
-        start.setDate(today.getDate() - day + 1);
+        start.setDate(today.getDate() + diffToMonday);
         start.setHours(0, 0, 0, 0);
         end = new Date(start);
         end.setDate(start.getDate() + 7);
@@ -102,135 +125,177 @@ export class DashboardComponent implements OnInit, OnDestroy {
     }
 
     updateBarChartData() {
+      // Palette de couleurs standard (10 couleurs)
+      const colorList = [
+        '#1976d2', '#388e3c', '#fbc02d', '#d32f2f', '#7b1fa2',
+        '#0288d1', '#c2185b', '#ffa000', '#388e3c', '#455a64'
+      ];
+      // Fonction pour générer une couleur aléatoire
+      const randomColor = () => '#' + Math.floor(Math.random()*16777215).toString(16).padStart(6, '0');
       // Les données sont déjà filtrées lors du chargement
       const agencySummaryFiltered = this.agencySummaryData;
       const operationsFiltered = this.allOperations;
 
       if (this.selectedMetric === 'transactions') {
         // Bar chart : répartition par service
+        const excludedTypes = ['annulation_bo']; // NE PAS exclure 'transaction_cree'
+        const filteredAgencySummary = agencySummaryFiltered.filter(s => !excludedTypes.includes((s.typeOperation || '').toLowerCase()));
         const aggregation: { [service: string]: number } = {};
-        agencySummaryFiltered.forEach((s: any) => {
+        filteredAgencySummary.forEach((s: any) => {
           if (!aggregation[s.service]) aggregation[s.service] = 0;
           aggregation[s.service] += Number(s.recordCount) || 0;
         });
         const barLabels = Object.keys(aggregation);
+        // Couleurs : couleur aléatoire pour 'transaction_cree', palette sinon
+        const barColors = barLabels.map((label, idx) =>
+          (label && label.toLowerCase() === 'transaction_cree') ? randomColor() : colorList[idx % colorList.length]
+        );
         const barData = barLabels.map(service => aggregation[service]);
         this.barChartData = {
           labels: barLabels,
           datasets: [{
             data: barData,
-            backgroundColor: '#1976d2',
+            backgroundColor: barColors,
             borderRadius: 6
           }]
         };
         this.barChartOptions.plugins.title.text = "Nombre de transactions par service (toutes agences)";
 
-        // Line chart : évolution par date
-        const dateAgg: { [date: string]: number } = {};
-        agencySummaryFiltered.forEach((s: any) => {
-          if (!dateAgg[s.date]) dateAgg[s.date] = 0;
-          dateAgg[s.date] += Number(s.recordCount) || 0;
-        });
-        const lineLabels = Object.keys(dateAgg).sort();
-        const lineData = lineLabels.map(date => dateAgg[date]);
-        this.lineChartData = {
-          labels: lineLabels,
-          datasets: [{
-            data: lineData,
-            label: 'Transactions',
-            borderColor: '#1976d2',
+        // Line chart : évolution par service et par date
+        const allServices = Array.from(new Set(filteredAgencySummary.map(s => s.service)));
+        const allDates = Array.from(new Set(filteredAgencySummary.map(s => s.date))).sort();
+        const datasets = allServices.map((service, idx) => {
+          const data = allDates.map(date => {
+            const found = filteredAgencySummary.find(s => s.service === service && s.date === date);
+            return found ? Number(found.recordCount) : 0;
+          });
+          return {
+            data,
+            label: service,
+            borderColor: (service && service.toLowerCase() === 'transaction_cree') ? randomColor() : colorList[idx % colorList.length],
             backgroundColor: 'rgba(25, 118, 210, 0.1)',
-            fill: true,
+            fill: false,
             tension: 0.3,
             pointRadius: 3
-          }]
+          };
+        });
+        this.lineChartData = {
+          labels: allDates,
+          datasets
         };
+        if (this.selectedChartType === 'line') {
+          const datasets = this.lineChartData.datasets || [];
+          // Correction : ne compter que les datasets réellement visibles (au moins une valeur non nulle)
+          const visibleDatasets = datasets.filter((ds: any) => ds.data && (ds.data as number[]).some((val: number) => val !== 0));
+          this.lineChartPlugins = (visibleDatasets.length === 1) ? [ChartDataLabels] : [];
+        }
         return;
-      } else if (this.selectedMetric === 'frais') {
-        // Bar chart : volume des frais par service
+      } else if (this.selectedMetric === 'revenu') {
+        // Bar chart : volume des frais par service (tous les FRAIS_TRANSACTION, crédit et débit)
+        const excludedTypes = ['annulation_bo']; // NE PAS exclure 'transaction_cree'
+        const filteredOperations = operationsFiltered.filter(op => !excludedTypes.includes((op.typeOperation || '').toLowerCase()));
         const aggregation: { [service: string]: number } = {};
-        operationsFiltered
-          .filter((op: any) => op.typeOperation && op.typeOperation.startsWith('FRAIS') && op.service)
+        filteredOperations
+          .filter((op: any) => op.typeOperation === 'FRAIS_TRANSACTION' && op.service)
           .forEach((op: any) => {
             if (!aggregation[op.service]) aggregation[op.service] = 0;
             aggregation[op.service] += Number(op.montant) || 0;
           });
         const barLabels = Object.keys(aggregation);
+        const barColors = barLabels.map((label, idx) =>
+          (label && label.toLowerCase() === 'transaction_cree') ? randomColor() : colorList[idx % colorList.length]
+        );
         const barData = barLabels.map(service => aggregation[service]);
         this.barChartData = {
           labels: barLabels,
           datasets: [{
             data: barData,
-            backgroundColor: '#1976d2',
+            backgroundColor: barColors,
             borderRadius: 6
           }]
         };
-        this.barChartOptions.plugins.title.text = "Volume des frais par service (toutes agences)";
+        this.barChartOptions.plugins.title.text = "Volume des revenus par service (tous frais transaction)";
 
-        // Line chart : évolution du volume des frais par date
-        const dateAgg: { [date: string]: number } = {};
-        operationsFiltered
-          .filter((op: any) => op.typeOperation && op.typeOperation.startsWith('FRAIS') && op.dateOperation)
-          .forEach((op: any) => {
-            const date = op.dateOperation.split('T')[0];
-            if (!dateAgg[date]) dateAgg[date] = 0;
-            dateAgg[date] += Number(op.montant) || 0;
+        // Line chart : évolution du volume des frais par service et par date (tous les FRAIS_TRANSACTION)
+        const allServices = Array.from(new Set(filteredOperations
+          .filter((op: any) => op.typeOperation === 'FRAIS_TRANSACTION' && op.service)
+          .map((op: any) => op.service)));
+        const allDates = Array.from(new Set(filteredOperations
+          .filter((op: any) => op.typeOperation === 'FRAIS_TRANSACTION' && op.dateOperation)
+          .map((op: any) => op.dateOperation.split('T')[0]))).sort();
+        const datasets = allServices.map((service, idx) => {
+          const data = allDates.map(date => {
+            const found = filteredOperations.find(op => op.service === service && op.typeOperation === 'FRAIS_TRANSACTION' && op.dateOperation && op.dateOperation.split('T')[0] === date);
+            return found ? Number(found.montant) : 0;
           });
-        const lineLabels = Object.keys(dateAgg).sort();
-        const lineData = lineLabels.map(date => dateAgg[date]);
-        this.lineChartData = {
-          labels: lineLabels,
-          datasets: [{
-            data: lineData,
-            label: 'Volume des frais',
-            borderColor: '#1976d2',
+          return {
+            data,
+            label: service,
+            borderColor: (service && service.toLowerCase() === 'transaction_cree') ? randomColor() : colorList[idx % colorList.length],
             backgroundColor: 'rgba(25, 118, 210, 0.1)',
-            fill: true,
+            fill: false,
             tension: 0.3,
             pointRadius: 3
-          }]
+          };
+        });
+        this.lineChartData = {
+          labels: allDates,
+          datasets
         };
+        if (this.selectedChartType === 'line') {
+          const datasets = this.lineChartData.datasets || [];
+          this.lineChartPlugins = (datasets.length === 1) ? [ChartDataLabels] : [];
+        }
         return;
       } else if (this.selectedMetric === 'volume') {
         // Bar chart : volume total par type d'opération
         if (!this.detailedMetrics?.operationStats) return;
-        const stats = this.detailedMetrics.operationStats;
-        // On pourrait aussi filtrer stats ici si besoin
-        const barLabels = stats.map((s: any) => s.operationType);
-        const barData = stats.map((s: any) => s.totalVolume);
+        const excludedTypes = ['annulation_bo']; // NE PAS exclure 'transaction_cree'
+        const filteredStats = this.detailedMetrics.operationStats.filter(s => !excludedTypes.includes((s.operationType || '').toLowerCase()));
+        // Correction : chaque type devient un dataset distinct
+        const barDatasets = filteredStats.map((s: any, idx: number) => ({
+          label: s.operationType ? s.operationType : '(Type inconnu)',
+          data: [Number(s.totalVolume) || 0],
+          backgroundColor: (s.operationType && s.operationType.toLowerCase() === 'transaction_cree') ? randomColor() : colorList[idx % colorList.length],
+          borderRadius: 6
+        }));
         this.barChartData = {
-          labels: barLabels,
-          datasets: [{
-            data: barData,
-            backgroundColor: '#1976d2',
-            borderRadius: 6
-          }]
+          labels: [''], // une seule barre par dataset, label vide pour aligner
+          datasets: barDatasets
         };
+        this.barChartOptions.plugins.legend.display = true;
         this.barChartOptions.plugins.title.text = "Volume total par type d'opération";
 
-        // Line chart : évolution du volume total par date
-        const dateAgg: { [date: string]: number } = {};
-        if (operationsFiltered.length) {
-          operationsFiltered.forEach((op: any) => {
-            if (!op.dateOperation) return;
-            const date = op.dateOperation.split('T')[0];
-            if (!dateAgg[date]) dateAgg[date] = 0;
-            dateAgg[date] += Number(op.montant) || 0;
+        // Line chart : évolution du volume total par type d'opération et par date
+        const filteredOperations = operationsFiltered.filter(op => !excludedTypes.includes((op.typeOperation || '').toLowerCase()));
+        const allTypes = Array.from(new Set(filteredOperations.map((op: any) => op.typeOperation)));
+        const allDates = Array.from(new Set(filteredOperations
+          .filter((op: any) => op.dateOperation)
+          .map((op: any) => op.dateOperation.split('T')[0]))).sort();
+        const datasets = allTypes.map((type, idx) => {
+          const data = allDates.map(date => {
+            // Correction : somme de tous les montants pour ce type et cette date
+            return filteredOperations
+              .filter(op => op.typeOperation === type && op.dateOperation && op.dateOperation.split('T')[0] === date)
+              .reduce((sum, op) => sum + Number(op.montant), 0);
           });
-          const lineLabels = Object.keys(dateAgg).sort();
-          const lineData = lineLabels.map(date => dateAgg[date]);
-          this.lineChartData = {
-            labels: lineLabels,
-            datasets: [{
-              data: lineData,
-              label: 'Volume total',
-              borderColor: '#1976d2',
-              backgroundColor: 'rgba(25, 118, 210, 0.1)',
-              fill: true,
-              tension: 0.3,
-              pointRadius: 3
-            }]
+          return {
+            data,
+            label: type,
+            borderColor: (type && type.toLowerCase() === 'transaction_cree') ? randomColor() : colorList[idx % colorList.length],
+            backgroundColor: 'rgba(25, 118, 210, 0.1)',
+            fill: false,
+            tension: 0.3,
+            pointRadius: 3
           };
+        });
+        this.lineChartData = {
+          labels: allDates,
+          datasets
+        };
+        if (this.selectedChartType === 'line') {
+          const datasets = this.lineChartData.datasets || [];
+          this.lineChartPlugins = (datasets.length === 1) ? [ChartDataLabels] : [];
         }
         return;
       }
@@ -238,6 +303,25 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
     private routerSubscription: Subscription = new Subscription();
     private dataUpdateSubscription: Subscription = new Subscription();
+
+    agenceSearchCtrl = new FormControl('');
+    serviceSearchCtrl = new FormControl('');
+    paysSearchCtrl = new FormControl('');
+    filteredAgencies: string[] = [];
+    filteredServices: string[] = [];
+    filteredCountries: string[] = [];
+    // filteredBanques: string[] = []; // supprimé
+
+    // Ajout des compteurs pour la barre récapitulative
+    get totalClientsCount(): number {
+      return (this.filteredAgencies?.filter(a => a !== 'Tous').length) || 0;
+    }
+    get totalServicesCount(): number {
+      return (this.filteredServices?.filter(s => s !== 'Tous').length) || 0;
+    }
+    get totalCountriesCount(): number {
+      return (this.filteredCountries?.filter(p => p !== 'Tous').length) || 0;
+    }
 
     constructor(
         private router: Router,
@@ -250,9 +334,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
     ngOnInit() {
         this.loadDashboardData();
         this.loadFilterOptions();
-        this.loadDetailedMetrics();
         this.loadAgencySummaryData();
         this.loadAllOperations();
+        
+        // Charger les métriques détaillées après un court délai pour s'assurer que les autres données sont chargées
+        setTimeout(() => {
+            this.loadDetailedMetrics();
+        }, 500);
         
         // Écouter les changements de route pour recharger les données quand on revient sur le dashboard
         this.routerSubscription = this.router.events.pipe(
@@ -276,6 +364,23 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
         // Gestionnaire de clic global pour fermer les dropdowns
         document.addEventListener('click', this.handleGlobalClick.bind(this));
+
+        this.filteredAgencies = this.filterOptions?.agencies || [];
+        this.filteredServices = this.filterOptions?.services || [];
+        this.filteredCountries = this.filterOptions?.countries || [];
+        // this.filteredBanques = this.filterOptions?.banques || []; // supprimé
+        this.agenceSearchCtrl.valueChanges.subscribe(search => {
+          const s = (search || '').toLowerCase();
+          this.filteredAgencies = (this.filterOptions?.agencies || []).filter(a => a.toLowerCase().includes(s));
+        });
+        this.serviceSearchCtrl.valueChanges.subscribe(search => {
+          const s = (search || '').toLowerCase();
+          this.filteredServices = (this.filterOptions?.services || []).filter(a => a.toLowerCase().includes(s));
+        });
+        this.paysSearchCtrl.valueChanges.subscribe(search => {
+          const s = (search || '').toLowerCase();
+          this.filteredCountries = (this.filterOptions?.countries || []).filter(a => a.toLowerCase().includes(s));
+        });
     }
 
     ngOnDestroy() {
@@ -316,6 +421,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
         this.dashboardService.getFilterOptions().subscribe({
             next: (options: FilterOptions) => {
                 this.filterOptions = options;
+                this.filteredAgencies = options.agencies || [];
+                this.filteredServices = options.services || [];
+                this.filteredCountries = options.countries || [];
+                // this.filteredBanques = options.banques || []; // supprimé
                 console.log('Filter options loaded:', options);
             },
             error: (error) => {
@@ -325,8 +434,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
                     agencies: ['Toutes les agences'],
                     services: ['Tous les services'],
                     countries: ['Tous les pays'],
+                    // banques: ['Toutes les banques'], // supprimé
                     timeFilters: ['Tous', 'Aujourd\'hui', 'Cette semaine', 'Ce mois', 'Personnalisé']
                 };
+                this.filteredAgencies = this.filterOptions.agencies;
+                this.filteredServices = this.filterOptions.services;
+                this.filteredCountries = this.filterOptions.countries;
+                // this.filteredBanques = this.filterOptions.banques; // supprimé
             }
         });
     }
@@ -336,9 +450,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
         this.detailedError = null;
 
         // Traiter les valeurs vides comme "Tous" (pas de filtre)
-        const agencies = this.selectedAgency === 'Tous' ? undefined : [this.selectedAgency];
-        const services = this.selectedService === 'Tous' ? undefined : [this.selectedService];
-        const countries = this.selectedCountry === 'Tous' ? undefined : [this.selectedCountry];
+        const agencies = this.selectedAgency.length === 0 ? undefined : this.selectedAgency;
+        const services = this.selectedService.length === 0 ? undefined : this.selectedService;
+        const countries = this.selectedCountry.length === 0 ? undefined : this.selectedCountry;
+        // const banques = this.selectedBanque === 'Tous' ? undefined : [this.selectedBanque]; // supprimé
         const timeFilter = this.selectedTimeFilter !== 'Tous' ? this.selectedTimeFilter : undefined;
         
         this.dashboardService.getDetailedMetrics(
@@ -350,16 +465,29 @@ export class DashboardComponent implements OnInit, OnDestroy {
             this.endDate || undefined
         ).subscribe({
             next: (metrics: DetailedMetrics) => {
+                // Si aucune donnée n'est trouvée, afficher un message explicite et vider les données
+                if (!metrics || (Array.isArray(metrics) && metrics.length === 0) || (typeof metrics === 'object' && Object.keys(metrics).length === 0)) {
+                    this.detailedMetrics = null;
+                    this.barChartData = { labels: [], datasets: [] };
+                    this.lineChartData = { labels: [], datasets: [] };
+                    this.detailedError = 'Aucune donnée pour ce pays';
+                    this.detailedLoading = false;
+                    this.updateBarChartData();
+                    return;
+                }
                 this.detailedMetrics = metrics;
                 this.detailedLoading = false;
+                this.detailedError = null;
                 this.updateBarChartData();
                 console.log('Detailed metrics loaded:', metrics);
             },
             error: (error) => {
-                console.error('Error loading detailed metrics:', error);
-                this.detailedError = 'Erreur lors du chargement des métriques détaillées';
-                this.detailedLoading = false;
+                // En cas d'erreur, vider les données et afficher un message explicite
                 this.detailedMetrics = null;
+                this.barChartData = { labels: [], datasets: [] };
+                this.lineChartData = { labels: [], datasets: [] };
+                this.detailedError = 'Aucune donnée pour ce pays';
+                this.detailedLoading = false;
             }
         });
     }
@@ -369,9 +497,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
     updateDashboardIndicators() {
       // Utiliser les données filtrées pour recalculer les indicateurs
       const agencySummaryFiltered = this.agencySummaryData.filter((s: any) =>
-        (this.selectedAgency === 'Tous' || s.agency === this.selectedAgency) &&
-        (this.selectedService === 'Tous' || s.service === this.selectedService) &&
-        (this.selectedCountry === 'Tous' || s.pays === this.selectedCountry) &&
+        (this.selectedAgency.length === 0 || this.selectedAgency.includes(s.agency)) &&
+        (this.selectedService.length === 0 || this.selectedService.includes(s.service)) &&
+        (this.selectedCountry.length === 0 || this.selectedCountry.includes(s.pays)) &&
+        // (this.selectedBanque === 'Tous' || this.selectedBanque === s.banque) && // supprimé
         (this.selectedTimeFilter === 'Tous' || (s.date && s.date.startsWith(this.selectedTimeFilter)))
       );
       this.filteredAgencySummary = agencySummaryFiltered;
@@ -385,11 +514,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
     }
 
     onFilterChange() {
+        console.log('onFilterChange', this.selectedCountry, this.selectedService);
         this.loadAgencySummaryData();
         this.loadAllOperations();
         this.updateDashboardIndicators();
         // Recharger les métriques détaillées avec les nouveaux filtres
         this.loadDetailedMetrics();
+        // Mettre à jour les graphiques
+        this.updateBarChartData();
     }
 
     onTimeFilterChange() {
@@ -415,6 +547,64 @@ export class DashboardComponent implements OnInit, OnDestroy {
         this.onFilterChange();
     }
 
+    toggleAllAgencies(event: any) {
+      if (event.target.checked) {
+        this.selectedAgency = []; // Clear all selected agencies
+      }
+      this.onFilterChange();
+    }
+    onAgencyCheckboxChange(agency: string, event: any) {
+      if (event.target.checked) {
+        if (!this.selectedAgency.includes(agency)) {
+          this.selectedAgency.push(agency);
+        }
+      } else {
+        this.selectedAgency = this.selectedAgency.filter(a => a !== agency);
+        if (this.selectedAgency.length === 0) {
+          this.selectedAgency = ['Tous']; // Ensure at least one is selected
+        }
+      }
+      this.onFilterChange();
+    }
+    toggleAllServices(event: any) {
+      if (event.target.checked) {
+        this.selectedService = []; // Clear all selected services
+      }
+      this.onFilterChange();
+    }
+    onServiceCheckboxChange(service: string, event: any) {
+      if (event.target.checked) {
+        if (!this.selectedService.includes(service)) {
+          this.selectedService.push(service);
+        }
+      } else {
+        this.selectedService = this.selectedService.filter(s => s !== service);
+        if (this.selectedService.length === 0) {
+          this.selectedService = ['Tous']; // Ensure at least one is selected
+        }
+      }
+      this.onFilterChange();
+    }
+    toggleAllCountries(event: any) {
+      if (event.target.checked) {
+        this.selectedCountry = []; // Clear all selected countries
+      }
+      this.onFilterChange();
+    }
+    onCountryCheckboxChange(country: string, event: any) {
+      if (event.target.checked) {
+        if (!this.selectedCountry.includes(country)) {
+          this.selectedCountry.push(country);
+        }
+      } else {
+        this.selectedCountry = this.selectedCountry.filter(c => c !== country);
+        if (this.selectedCountry.length === 0) {
+          this.selectedCountry = ['Tous']; // Ensure at least one is selected
+        }
+      }
+      this.onFilterChange();
+    }
+
     getFrequencyPercentage(frequency: number): number {
         if (!this.detailedMetrics || this.detailedMetrics.frequencyStats.length === 0) {
             return 0;
@@ -432,13 +622,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
         // Recharger les métriques de base
         this.loadDashboardData();
         
-        // Recharger les métriques détaillées seulement si des filtres sont appliqués
-        const hasFilters = (this.selectedAgency !== 'Tous' || this.selectedService !== 'Tous' || this.selectedCountry !== 'Tous' ||
-                          this.selectedTimeFilter !== 'Tous' || this.startDate || this.endDate);
-        
-        if (hasFilters) {
-            this.loadDetailedMetrics();
-        }
+        // Recharger les métriques détaillées (toujours, même sans filtres)
+        this.loadDetailedMetrics();
         
         // Afficher un message de confirmation
         setTimeout(() => {
@@ -467,14 +652,15 @@ export class DashboardComponent implements OnInit, OnDestroy {
     }
 
     resetFilters() {
-        this.selectedAgency = 'Tous';
-        this.selectedService = 'Tous';
-        this.selectedCountry = 'Tous';
+        this.selectedAgency = [];
+        this.selectedService = [];
+        this.selectedCountry = [];
         this.selectedTimeFilter = 'Tous';
         this.startDate = '';
         this.endDate = '';
         this.showCustomDateInputs = false;
         this.loadDetailedMetrics();
+        this.updateBarChartData();
     }
 
     exportDetailedMetricsExcel() {
@@ -630,9 +816,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
             ['Rapport des Métriques Détaillées'],
             [''],
             ['Filtres appliqués:'],
-            ['Agences', this.selectedAgency],
-            ['Services', this.selectedService],
-            ['Pays', this.selectedCountry],
+            ['Agences', this.selectedAgency.join(', ')],
+            ['Services', this.selectedService.join(', ')],
+            ['Pays', this.selectedCountry.join(', ')],
+            // ['Banque', this.selectedBanque], // supprimé
             ['Période', this.selectedTimeFilter],
             [''],
             ['Date de génération', new Date().toLocaleString('fr-FR')]
@@ -722,24 +909,24 @@ export class DashboardComponent implements OnInit, OnDestroy {
     }
 
     loadAgencySummaryData() {
-      // Appliquer les filtres lors du chargement des données
-      const agencies = this.selectedAgency === 'Tous' ? undefined : [this.selectedAgency];
-      const services = this.selectedService === 'Tous' ? undefined : [this.selectedService];
-      const countries = this.selectedCountry === 'Tous' ? undefined : [this.selectedCountry];
-      
+      const normalize = (str: string) => (str || '').toLowerCase().normalize('NFD').replace(/[ \u0300-\u036f]/g, '');
+      const agencies = this.selectedAgency.length === 0 ? undefined : this.selectedAgency;
+      const services = this.selectedService.length === 0 ? undefined : this.selectedService;
+      const countries = this.selectedCountry.length === 0 ? undefined : this.selectedCountry;
+      // const banques = this.selectedBanque === 'Tous' ? undefined : [normalize(this.selectedBanque)]; // supprimé
       this.agencySummaryService.getAllSummaries().subscribe({
         next: (data: any[]) => {
-          // Filtrer les données selon les critères sélectionnés
+          // DEBUG : Afficher les valeurs distinctes de banque et service
+          console.log('Banques dans agencySummary:', Array.from(new Set(data.map(o => o.banque))));
+          console.log('Services dans agencySummary:', Array.from(new Set(data.map(o => o.service))));
           this.agencySummaryData = data.filter((item: any) => {
             const agencyMatch = !agencies || agencies.includes(item.agency);
             const serviceMatch = !services || services.includes(item.service);
             const countryMatch = !countries || countries.includes(item.pays);
+            // const banqueMatch = !banques || banques.includes(normalize(item.banque)); // supprimé
             return agencyMatch && serviceMatch && countryMatch;
           });
-          
-          // Appliquer le filtre de période
           this.agencySummaryData = this.filterByPeriod(this.agencySummaryData);
-          
           this.updateDashboardIndicators();
           this.updateBarChartData();
         },
@@ -752,24 +939,24 @@ export class DashboardComponent implements OnInit, OnDestroy {
     }
 
     loadAllOperations() {
-      // Appliquer les filtres lors du chargement des données
-      const agencies = this.selectedAgency === 'Tous' ? undefined : [this.selectedAgency];
-      const services = this.selectedService === 'Tous' ? undefined : [this.selectedService];
-      const countries = this.selectedCountry === 'Tous' ? undefined : [this.selectedCountry];
-      
+      const normalize = (str: string) => (str || '').toLowerCase().normalize('NFD').replace(/[ \u0300-\u036f]/g, '');
+      const agencies = this.selectedAgency.length === 0 ? undefined : this.selectedAgency;
+      const services = this.selectedService.length === 0 ? undefined : this.selectedService;
+      const countries = this.selectedCountry.length === 0 ? undefined : this.selectedCountry;
+      // const banques = this.selectedBanque === 'Tous' ? undefined : [normalize(this.selectedBanque)]; // supprimé
       this.operationService.getAllOperations().subscribe({
         next: (ops: any[]) => {
-          // Filtrer les données selon les critères sélectionnés
+          // DEBUG : Afficher les valeurs distinctes de banque et service
+          console.log('Banques dans les opérations:', Array.from(new Set(ops.map(o => o.banque))));
+          console.log('Services dans les opérations:', Array.from(new Set(ops.map(o => o.service))));
           this.allOperations = ops.filter((item: any) => {
             const agencyMatch = !agencies || agencies.includes(item.agence);
             const serviceMatch = !services || services.includes(item.service);
             const countryMatch = !countries || countries.includes(item.pays);
+            // const banqueMatch = !banques || banques.includes(normalize(item.banque)); // supprimé
             return agencyMatch && serviceMatch && countryMatch;
           });
-          
-          // Appliquer le filtre de période
           this.allOperations = this.filterByPeriod(this.allOperations);
-          
           this.updateBarChartData();
         },
         error: (err) => {
