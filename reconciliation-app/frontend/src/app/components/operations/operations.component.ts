@@ -1,5 +1,5 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
-import { FormBuilder, FormGroup, Validators } from '@angular/forms';
+import { FormBuilder, FormGroup, Validators, FormControl } from '@angular/forms';
 import { Subscription } from 'rxjs';
 import { OperationService } from '../../services/operation.service';
 import { CompteService } from '../../services/compte.service';
@@ -53,7 +53,6 @@ export class OperationsComponent implements OnInit, OnDestroy {
     isLoadingStats = false;
     
     // Filtres pour les statistiques
-    selectedPays: string = '';
     selectedCompteNumero: string = '';
     selectedCompteId: number | undefined = undefined;
     
@@ -88,6 +87,32 @@ export class OperationsComponent implements OnInit, OnDestroy {
         { value: 'transaction_cree', label: 'Transaction Créée' }
     ];
 
+    // Ajout des contrôles de recherche et des variables de sélection
+    typeOperationSearchCtrl = new FormControl('');
+    selectedTypesOperation: string[] = [];
+    filteredTypeOperationList: { value: string, label: string }[] = [];
+    paysSearchCtrl = new FormControl('');
+    selectedPays: string[] = [];
+    filteredPaysList: string[] = [];
+    statutSearchCtrl = new FormControl('');
+    selectedStatut: string[] = [];
+    filteredStatutList: string[] = [];
+    banqueSearchCtrl = new FormControl('');
+    selectedBanque: string[] = [];
+    filteredBanqueList: string[] = [];
+    codeProprietaireSearchCtrl = new FormControl('');
+    selectedCodesProprietaire: string[] = [];
+    filteredCodeProprietaireList: string[] = [];
+    serviceSearchCtrl = new FormControl('');
+    selectedService: string[] = [];
+    filteredServiceList: string[] = [];
+    compteSearchCtrl = new FormControl('');
+    selectedComptes: string[] = [];
+    // Remplacer la logique filteredComptesList pour qu'elle soit basée sur les codeProprietaire distincts des opérations
+    get filteredComptesList(): string[] {
+        return Array.from(new Set(this.operations.map(op => op.codeProprietaire).filter(c => !!c)));
+    }
+
     private subscription = new Subscription();
 
     constructor(
@@ -120,12 +145,12 @@ export class OperationsComponent implements OnInit, OnDestroy {
         });
 
         this.filterForm = this.fb.group({
-            typeOperation: [''],
-            pays: [''],
-            statut: [''],
-            banque: [''],
-            codeProprietaire: [''],
-            service: [''],
+            typeOperation: [[]],
+            pays: [[]],
+            statut: [[]],
+            banque: [[]],
+            codeProprietaire: [[]],
+            service: [[]],
             dateDebut: [''],
             dateFin: ['']
         });
@@ -144,6 +169,42 @@ export class OperationsComponent implements OnInit, OnDestroy {
         this.loadServiceListFromBackend();
         this.loadStatsByType();
         this.initializeStatutList();
+        this.filteredTypeOperationList = this.filterTypeOptions;
+        this.typeOperationSearchCtrl.valueChanges.subscribe(search => {
+            const s = (search || '').toLowerCase();
+            this.filteredTypeOperationList = this.filterTypeOptions.filter(opt => opt.label.toLowerCase().includes(s));
+        });
+        this.filteredPaysList = this.paysList;
+        this.paysSearchCtrl.valueChanges.subscribe(search => {
+            const s = (search || '').toLowerCase();
+            this.filteredPaysList = this.paysList.filter(p => p.toLowerCase().includes(s));
+        });
+        this.filteredStatutList = this.statutList;
+        this.statutSearchCtrl.valueChanges.subscribe(search => {
+            const s = (search || '').toLowerCase();
+            this.filteredStatutList = this.statutList.filter(st => st.toLowerCase().includes(s));
+        });
+        this.filteredBanqueList = this.banqueList;
+        this.banqueSearchCtrl.valueChanges.subscribe(search => {
+            const s = (search || '').toLowerCase();
+            this.filteredBanqueList = this.banqueList.filter(b => b.toLowerCase().includes(s));
+        });
+        this.filteredCodeProprietaireList = this.codeProprietaireList;
+        this.codeProprietaireSearchCtrl.valueChanges.subscribe(search => {
+            const s = (search || '').toLowerCase();
+            this.filteredCodeProprietaireList = this.codeProprietaireList.filter(c => c.toLowerCase().includes(s));
+        });
+        this.filteredServiceList = this.serviceList;
+        this.serviceSearchCtrl.valueChanges.subscribe(search => {
+            const s = (search || '').toLowerCase();
+            this.filteredServiceList = this.serviceList.filter(sv => sv.toLowerCase().includes(s));
+        });
+        // Ajout des logs pour diagnostic
+        setTimeout(() => {
+            console.log('filteredPaysList:', this.filteredPaysList);
+            console.log('filteredBanqueList:', this.filteredBanqueList);
+            console.log('filteredServiceList:', this.filteredServiceList);
+        }, 1000);
     }
 
     ngOnDestroy() {
@@ -159,6 +220,7 @@ export class OperationsComponent implements OnInit, OnDestroy {
                 );
                 this.filteredOperations = [...this.operations];
                 this.paysList = [...new Set(data.map(op => op.pays))].sort();
+                this.filteredPaysList = this.paysList.slice(); // <-- Correction ici
                 this.applyFilters();
                 this.calculateStats();
                 this.isLoading = false;
@@ -171,11 +233,14 @@ export class OperationsComponent implements OnInit, OnDestroy {
     }
 
     loadComptes() {
-        this.compteService.getAllComptes().subscribe(data => this.comptes = data);
+        this.compteService.getAllComptes().subscribe(data => {
+            this.comptes = data;
+        });
     }
 
     loadPaysList() {
         this.paysList = [...new Set(this.operations.map(op => op.pays))].sort();
+        this.filteredPaysList = this.paysList.slice();
     }
 
     loadCodeProprietaireList() {
@@ -208,6 +273,7 @@ export class OperationsComponent implements OnInit, OnDestroy {
             this.operationService.getDistinctBanque().subscribe({
                 next: (banques: string[]) => {
                     this.banqueList = banques;
+                    this.filteredBanqueList = this.banqueList.slice();
                 },
                 error: (error: any) => {
                     console.error('Erreur lors du chargement de la liste des banques:', error);
@@ -221,6 +287,7 @@ export class OperationsComponent implements OnInit, OnDestroy {
             this.operationService.getDistinctService().subscribe({
                 next: (services: string[]) => {
                     this.serviceList = services;
+                    this.filteredServiceList = this.serviceList.slice();
                 },
                 error: (error: any) => {
                     console.error('Erreur lors du chargement de la liste des services:', error);
@@ -233,7 +300,7 @@ export class OperationsComponent implements OnInit, OnDestroy {
         this.isLoadingStats = true;
         this.currentStatsPage = 1;
         this.subscription.add(
-            this.operationService.getOperationsStatsByTypeWithFilters(this.selectedPays, this.selectedCompteId).subscribe({
+            this.operationService.getOperationsStatsByTypeWithFilters(this.selectedPays.length > 0 ? this.selectedPays[0] : '', this.selectedCompteId).subscribe({
                 next: (stats) => {
                     this.statsByType = stats;
                     this.isLoadingStats = false;
@@ -257,7 +324,7 @@ export class OperationsComponent implements OnInit, OnDestroy {
     }
 
     clearStatsFilters() {
-        this.selectedPays = '';
+        this.selectedPays = [];
         this.selectedCompteId = undefined;
         this.loadStatsByType();
     }
@@ -451,25 +518,39 @@ export class OperationsComponent implements OnInit, OnDestroy {
         }
     }
 
+    // Harmonisation de la méthode de filtrage
     applyFilters() {
         const filters = this.filterForm.value;
-        
+        // DEBUG : Afficher toutes les valeurs sélectionnées et présentes
+        console.log('filters:', filters);
+        console.log('Tous les typeOperation:', Array.from(new Set(this.operations.map(op => op.typeOperation))));
+        console.log('Tous les pays:', Array.from(new Set(this.operations.map(op => op.pays))));
+        console.log('Tous les statut:', Array.from(new Set(this.operations.map(op => op.statut))));
+        console.log('Toutes les banques:', Array.from(new Set(this.operations.map(op => op.banque))));
+        console.log('Tous les services:', Array.from(new Set(this.operations.map(op => op.service))));
+        console.log('Tous les codeProprietaire:', this.operations.map(op => op.codeProprietaire));
         this.filteredOperations = this.operations.filter(op => {
-            return (!filters.typeOperation || op.typeOperation === filters.typeOperation) &&
-                   (!filters.pays || op.pays === filters.pays) &&
-                   (!filters.statut || op.statut === filters.statut) &&
-                   (!filters.banque || op.banque?.toLowerCase().includes(filters.banque.toLowerCase())) &&
-                   (!filters.codeProprietaire || op.codeProprietaire.toLowerCase().includes(filters.codeProprietaire.toLowerCase())) &&
-                   (!filters.service || op.service?.toLowerCase().includes(filters.service.toLowerCase())) &&
-                   (!filters.dateDebut || new Date(op.dateOperation) >= new Date(filters.dateDebut)) &&
-                   (!filters.dateFin || new Date(op.dateOperation) <= new Date(filters.dateFin));
-        }).sort((a, b) => 
-            new Date(b.dateOperation).getTime() - new Date(a.dateOperation).getTime()
-        );
-        
+            const typeMatch = !filters.typeOperation || filters.typeOperation.length === 0 || filters.typeOperation.includes(op.typeOperation);
+            const paysMatch = !filters.pays || filters.pays.length === 0 || filters.pays.includes(op.pays);
+            const statutMatch = !filters.statut || filters.statut.length === 0 || filters.statut.includes(op.statut);
+            const banqueMatch = !filters.banque || filters.banque.length === 0 || filters.banque.includes(op.banque);
+            const codeProprietaireMatch = !filters.codeProprietaire || filters.codeProprietaire.length === 0 || filters.codeProprietaire.includes(op.codeProprietaire);
+            const serviceMatch = !filters.service || filters.service.length === 0 || filters.service.includes(op.service);
+            // Correction ici : comparer uniquement la partie date (YYYY-MM-DD)
+            const opDate = op.dateOperation ? op.dateOperation.substring(0, 10) : '';
+            const dateDebutMatch = !filters.dateDebut || opDate >= filters.dateDebut;
+            const dateFinMatch = !filters.dateFin || opDate <= filters.dateFin;
+            return typeMatch && paysMatch && statutMatch && banqueMatch && codeProprietaireMatch && serviceMatch && dateDebutMatch && dateFinMatch;
+        }).sort((a, b) => new Date(b.dateOperation).getTime() - new Date(a.dateOperation).getTime());
         this.currentPage = 1;
         this.updatePagedOperations();
         this.calculateStats();
+    }
+
+    // Méthode appelée lors d'un changement de filtre
+    onFilterChange() {
+        console.log('onFilterChange', this.filterForm.value);
+        this.applyFilters();
     }
 
     clearFilters() {

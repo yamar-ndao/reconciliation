@@ -1,7 +1,7 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
 import { AppStateService } from '../../services/app-state.service';
 import { DataNormalizationService } from '../../services/data-normalization.service';
-import { FormBuilder, FormGroup } from '@angular/forms';
+import { FormBuilder, FormGroup, FormControl } from '@angular/forms';
 import { Subscription } from 'rxjs';
 import { Router } from '@angular/router';
 import { AgencySummaryService } from '../../services/agency-summary.service';
@@ -38,6 +38,15 @@ export class StatsComponent implements OnInit, OnDestroy {
 
     private subscription: Subscription = new Subscription();
 
+    // Ajout des contrôles de recherche et des variables de sélection
+    agenceSearchCtrl = new FormControl('');
+    serviceSearchCtrl = new FormControl('');
+    paysSearchCtrl = new FormControl('');
+    // Supprimer selectedAgency, selectedService, selectedCountry
+    filteredAgencies: string[] = [];
+    filteredServices: string[] = [];
+    filteredCountries: string[] = [];
+
     constructor(
         private appStateService: AppStateService,
         private dataNormalizationService: DataNormalizationService,
@@ -46,9 +55,9 @@ export class StatsComponent implements OnInit, OnDestroy {
         private agencySummaryService: AgencySummaryService
     ) {
         this.filterForm = this.fb.group({
-            agency: [''],
-            service: [''],
-            country: [''],
+            agency: [[]],
+            service: [[]],
+            country: [[]],
             startDate: [''],
             endDate: ['']
         });
@@ -57,9 +66,9 @@ export class StatsComponent implements OnInit, OnDestroy {
     async ngOnInit() {
         console.log('StatsComponent initialisé');
         this.filterForm = this.fb.group({
-            agency: [''],
-            service: [''],
-            country: [''],
+            agency: [[]],
+            service: [[]],
+            country: [[]],
             startDate: [''],
             endDate: ['']
         });
@@ -70,6 +79,28 @@ export class StatsComponent implements OnInit, OnDestroy {
         });
 
         this.loadData();
+
+        // Initialisation des listes filtrées
+        // SUPPRIMER l'initialisation des listes filtrées ici
+        // this.filteredAgencies = this.getAllAgencies();
+        // this.filteredServices = this.getAllServices();
+        // this.filteredCountries = this.getAllCountries();
+        this.agenceSearchCtrl.setValue('');
+        this.serviceSearchCtrl.setValue('');
+        this.paysSearchCtrl.setValue('');
+        // Gestion de la recherche dynamique
+        this.agenceSearchCtrl.valueChanges.subscribe(search => {
+            const s = (search || '').toLowerCase();
+            this.filteredAgencies = this.getAllAgencies().filter(a => a.toLowerCase().includes(s));
+        });
+        this.serviceSearchCtrl.valueChanges.subscribe(search => {
+            const s = (search || '').toLowerCase();
+            this.filteredServices = this.getAllServices().filter(a => a.toLowerCase().includes(s));
+        });
+        this.paysSearchCtrl.valueChanges.subscribe(search => {
+            const s = (search || '').toLowerCase();
+            this.filteredCountries = this.getAllCountries().filter(a => a.toLowerCase().includes(s));
+        });
     }
 
     ngOnDestroy() {
@@ -82,6 +113,10 @@ export class StatsComponent implements OnInit, OnDestroy {
             next: (data) => {
                 console.log('Données reçues de l\'API agency-summary:', data);
                 this.agencySummaries = data;
+                // Initialiser les listes filtrées après chargement effectif
+                this.filteredAgencies = this.getAllAgencies();
+                this.filteredServices = this.getAllServices();
+                this.filteredCountries = this.getAllCountries();
                 this.applyFilters();
                 this.isLoading = false;
             },
@@ -129,19 +164,25 @@ export class StatsComponent implements OnInit, OnDestroy {
         return countries.sort();
     }
 
+    // Harmonisation de la méthode de filtrage
     applyFilters() {
         const filters = this.filterForm.value;
         this.filteredData = this.agencySummaries.filter(summary => {
             const summaryDate = new Date(summary.date);
             const afterStart = !filters.startDate || summaryDate >= new Date(filters.startDate);
             const beforeEnd = !filters.endDate || summaryDate <= new Date(filters.endDate);
-            return (!filters.agency || summary.agency === filters.agency) &&
-                   (!filters.service || summary.service === filters.service) &&
-                   (!filters.country || summary.country === filters.country) &&
-                   afterStart && beforeEnd;
+            const agencyMatch = !filters.agency || filters.agency.length === 0 || filters.agency.includes(summary.agency);
+            const serviceMatch = !filters.service || filters.service.length === 0 || filters.service.includes(summary.service);
+            const countryMatch = !filters.country || filters.country.length === 0 || filters.country.includes(summary.country);
+            return agencyMatch && serviceMatch && countryMatch && afterStart && beforeEnd;
         });
         console.log('Données après filtrage:', this.filteredData);
         this.totalPages = Math.ceil(this.filteredData.length / this.statsPageSize);
+    }
+
+    // Méthode appelée lors d'un changement de filtre
+    onFilterChange() {
+        this.applyFilters();
     }
 
     /**
@@ -434,5 +475,16 @@ export class StatsComponent implements OnInit, OnDestroy {
                 }
             });
         }
+    }
+
+    // Méthodes utilitaires pour récupérer toutes les valeurs uniques
+    getAllAgencies(): string[] {
+        return Array.from(new Set(this.agencySummaries.map(s => s.agency))).sort();
+    }
+    getAllServices(): string[] {
+        return Array.from(new Set(this.agencySummaries.map(s => s.service))).sort();
+    }
+    getAllCountries(): string[] {
+        return Array.from(new Set(this.agencySummaries.map(s => s.country))).sort();
     }
 } 

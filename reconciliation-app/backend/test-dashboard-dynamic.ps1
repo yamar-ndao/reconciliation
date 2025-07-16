@@ -1,161 +1,75 @@
-# Test de la dynamique de "Transaction moyenne/Jour" pour tous les filtres du dashboard
-Write-Host "=== TEST DE LA DYNAMIQUE TRANSACTION MOYENNE/JOUR ===" -ForegroundColor Green
+# Test des métriques dynamiques du dashboard
+Write-Host "=== TEST DES MÉTRIQUES DYNAMIQUES DU DASHBOARD ===" -ForegroundColor Green
 
-$baseUrl = "http://localhost:8080/api/dashboard"
+$baseUrl = "http://localhost:8080/api/statistics"
 
-# Fonction pour formater les résultats
-function Format-Metrics {
-    param($metrics, $filterName)
-    
-    Write-Host "`n📊 $filterName" -ForegroundColor Cyan
-    Write-Host "  - Volume Total: $($metrics.totalVolume | ForEach-Object { [math]::Round($_, 2) })" -ForegroundColor White
-    Write-Host "  - Transactions: $($metrics.totalTransactions)" -ForegroundColor White
-    Write-Host "  - Clients: $($metrics.totalClients)" -ForegroundColor White
-    Write-Host "  - Transaction moyenne/Jour: $($metrics.averageTransactions)" -ForegroundColor Yellow
-    Write-Host "  - Volume Moyen/Jour: $($metrics.averageVolume | ForEach-Object { [math]::Round($_, 2) })" -ForegroundColor White
-    Write-Host "  - Frais moyen/Jour: $($metrics.averageFeesPerDay | ForEach-Object { [math]::Round($_, 2) })" -ForegroundColor White
-}
+# Test 1: Métriques sans filtres
+Write-Host "`n1. Test des métriques sans filtres..." -ForegroundColor Yellow
+$response1 = Invoke-RestMethod -Uri "$baseUrl/detailed-metrics" -Method GET
+Write-Host "Volume total sans filtres: $($response1.totalVolume)" -ForegroundColor Cyan
+Write-Host "Volume des revenus sans filtres: $($response1.totalFees)" -ForegroundColor Cyan
+Write-Host "Revenu moyen/jour sans filtres: $($response1.averageFeesPerDay)" -ForegroundColor Cyan
 
-# 1. Test sans filtres (Tous)
-Write-Host "`n1. Test sans filtres (Tous)..." -ForegroundColor Yellow
-try {
-    $metricsAll = Invoke-RestMethod -Uri "$baseUrl/detailed-metrics" -Method GET
-    Format-Metrics $metricsAll "Sans filtres (Tous)"
-} catch {
-    Write-Host "❌ Erreur lors du test sans filtres: $($_.Exception.Message)" -ForegroundColor Red
-    exit 1
-}
+# Test 2: Métriques avec filtre de période "Aujourd'hui"
+Write-Host "`n2. Test des métriques avec filtre 'Aujourd'hui'..." -ForegroundColor Yellow
+$response2 = Invoke-RestMethod -Uri "$baseUrl/detailed-metrics?timeFilter=Aujourd'hui" -Method GET
+Write-Host "Volume total avec filtre 'Aujourd'hui': $($response2.totalVolume)" -ForegroundColor Cyan
+Write-Host "Volume des revenus avec filtre 'Aujourd'hui': $($response2.totalFees)" -ForegroundColor Cyan
+Write-Host "Revenu moyen/jour avec filtre 'Aujourd'hui': $($response2.averageFeesPerDay)" -ForegroundColor Cyan
 
-# 2. Test avec filtre de temps "Aujourd'hui"
-Write-Host "`n2. Test avec filtre 'Aujourd'hui'..." -ForegroundColor Yellow
-try {
-    $params = @{
-        timeFilter = "Aujourd'hui"
-    }
-    $metricsToday = Invoke-RestMethod -Uri "$baseUrl/detailed-metrics" -Method GET -Body ($params | ConvertTo-Json) -ContentType "application/json"
-    Format-Metrics $metricsToday "Filtre 'Aujourd'hui'"
-} catch {
-    Write-Host "❌ Erreur lors du test avec filtre 'Aujourd'hui': $($_.Exception.Message)" -ForegroundColor Red
-}
+# Test 3: Métriques avec filtre de période "Ce mois"
+Write-Host "`n3. Test des métriques avec filtre 'Ce mois'..." -ForegroundColor Yellow
+$response3 = Invoke-RestMethod -Uri "$baseUrl/detailed-metrics?timeFilter=Ce%20mois" -Method GET
+Write-Host "Volume total avec filtre 'Ce mois': $($response3.totalVolume)" -ForegroundColor Cyan
+Write-Host "Volume des revenus avec filtre 'Ce mois': $($response3.totalFees)" -ForegroundColor Cyan
+Write-Host "Revenu moyen/jour avec filtre 'Ce mois': $($response3.averageFeesPerDay)" -ForegroundColor Cyan
 
-# 3. Test avec filtre de temps "Cette semaine"
-Write-Host "`n3. Test avec filtre 'Cette semaine'..." -ForegroundColor Yellow
-try {
-    $params = @{
-        timeFilter = "Cette semaine"
-    }
-    $metricsWeek = Invoke-RestMethod -Uri "$baseUrl/detailed-metrics" -Method GET -Body ($params | ConvertTo-Json) -ContentType "application/json"
-    Format-Metrics $metricsWeek "Filtre 'Cette semaine'"
-} catch {
-    Write-Host "❌ Erreur lors du test avec filtre 'Cette semaine': $($_.Exception.Message)" -ForegroundColor Red
-}
+# Test 4: Métriques avec filtre de service
+Write-Host "`n4. Test des métriques avec filtre de service..." -ForegroundColor Yellow
+$response4 = Invoke-RestMethod -Uri "$baseUrl/detailed-metrics?service=CASHIN" -Method GET
+Write-Host "Volume total avec filtre service CASHIN: $($response4.totalVolume)" -ForegroundColor Cyan
+Write-Host "Volume des revenus avec filtre service CASHIN: $($response4.totalFees)" -ForegroundColor Cyan
+Write-Host "Revenu moyen/jour avec filtre service CASHIN: $($response4.averageFeesPerDay)" -ForegroundColor Cyan
 
-# 4. Test avec filtre de temps "Ce mois"
-Write-Host "`n4. Test avec filtre 'Ce mois'..." -ForegroundColor Yellow
-try {
-    $params = @{
-        timeFilter = "Ce mois"
-    }
-    $metricsMonth = Invoke-RestMethod -Uri "$baseUrl/detailed-metrics" -Method GET -Body ($params | ConvertTo-Json) -ContentType "application/json"
-    Format-Metrics $metricsMonth "Filtre 'Ce mois'"
-} catch {
-    Write-Host "❌ Erreur lors du test avec filtre 'Ce mois': $($_.Exception.Message)" -ForegroundColor Red
-}
+# Test 5: Métriques avec filtre d'agence
+Write-Host "`n5. Test des métriques avec filtre d'agence..." -ForegroundColor Yellow
+$response5 = Invoke-RestMethod -Uri "$baseUrl/detailed-metrics?agency=celcm0001" -Method GET
+Write-Host "Volume total avec filtre agence celcm0001: $($response5.totalVolume)" -ForegroundColor Cyan
+Write-Host "Volume des revenus avec filtre agence celcm0001: $($response5.totalFees)" -ForegroundColor Cyan
+Write-Host "Revenu moyen/jour avec filtre agence celcm0001: $($response5.averageFeesPerDay)" -ForegroundColor Cyan
 
-# 5. Test avec filtre personnalisé (derniers 7 jours)
-Write-Host "`n5. Test avec filtre personnalisé (derniers 7 jours)..." -ForegroundColor Yellow
-try {
-    $endDate = (Get-Date).ToString("yyyy-MM-dd")
-    $startDate = (Get-Date).AddDays(-7).ToString("yyyy-MM-dd")
-    
-    $params = @{
-        timeFilter = "Personnalisé"
-        startDate = $startDate
-        endDate = $endDate
-    }
-    $metricsCustom = Invoke-RestMethod -Uri "$baseUrl/detailed-metrics" -Method GET -Body ($params | ConvertTo-Json) -ContentType "application/json"
-    Format-Metrics $metricsCustom "Filtre personnalisé (7 jours)"
-} catch {
-    Write-Host "❌ Erreur lors du test avec filtre personnalisé: $($_.Exception.Message)" -ForegroundColor Red
-}
+# Test 6: Métriques avec filtres combinés
+Write-Host "`n6. Test des métriques avec filtres combinés..." -ForegroundColor Yellow
+$response6 = Invoke-RestMethod -Uri "$baseUrl/detailed-metrics?timeFilter=Ce%20mois&service=CASHIN&agency=celcm0001" -Method GET
+Write-Host "Volume total avec filtres combinés: $($response6.totalVolume)" -ForegroundColor Cyan
+Write-Host "Volume des revenus avec filtres combinés: $($response6.totalFees)" -ForegroundColor Cyan
+Write-Host "Revenu moyen/jour avec filtres combinés: $($response6.averageFeesPerDay)" -ForegroundColor Cyan
 
-# 6. Test avec filtre d'agence
-Write-Host "`n6. Test avec filtre d'agence..." -ForegroundColor Yellow
-try {
-    # Récupérer d'abord les options de filtre pour avoir une agence valide
-    $filterOptions = Invoke-RestMethod -Uri "$baseUrl/filter-options" -Method GET
-    
-    if ($filterOptions.agencies -and $filterOptions.agencies.Count -gt 1) {
-        $testAgency = $filterOptions.agencies[1] # Prendre la deuxième agence (la première est souvent "Toutes les agences")
-        
-        $params = @{
-            agency = $testAgency
-        }
-        $metricsAgency = Invoke-RestMethod -Uri "$baseUrl/detailed-metrics" -Method GET -Body ($params | ConvertTo-Json) -ContentType "application/json"
-        Format-Metrics $metricsAgency "Filtre agence: $testAgency"
-    } else {
-        Write-Host "⚠️ Aucune agence disponible pour le test" -ForegroundColor Yellow
-    }
-} catch {
-    Write-Host "❌ Erreur lors du test avec filtre d'agence: $($_.Exception.Message)" -ForegroundColor Red
-}
+# Vérification que les valeurs changent
+Write-Host "`n=== VÉRIFICATION DES CHANGEMENTS ===" -ForegroundColor Green
 
-# 7. Test avec filtre de service
-Write-Host "`n7. Test avec filtre de service..." -ForegroundColor Yellow
-try {
-    if ($filterOptions.services -and $filterOptions.services.Count -gt 1) {
-        $testService = $filterOptions.services[1] # Prendre le deuxième service
-        
-        $params = @{
-            service = $testService
-        }
-        $metricsService = Invoke-RestMethod -Uri "$baseUrl/detailed-metrics" -Method GET -Body ($params | ConvertTo-Json) -ContentType "application/json"
-        Format-Metrics $metricsService "Filtre service: $testService"
-    } else {
-        Write-Host "⚠️ Aucun service disponible pour le test" -ForegroundColor Yellow
-    }
-} catch {
-    Write-Host "❌ Erreur lors du test avec filtre de service: $($_.Exception.Message)" -ForegroundColor Red
-}
-
-# 8. Test avec combinaison de filtres
-Write-Host "`n8. Test avec combinaison de filtres..." -ForegroundColor Yellow
-try {
-    $params = @{
-        timeFilter = "Ce mois"
-        service = $testService
-    }
-    $metricsCombined = Invoke-RestMethod -Uri "$baseUrl/detailed-metrics" -Method GET -Body ($params | ConvertTo-Json) -ContentType "application/json"
-    Format-Metrics $metricsCombined "Combinaison: Ce mois + $testService"
-} catch {
-    Write-Host "❌ Erreur lors du test avec combinaison de filtres: $($_.Exception.Message)" -ForegroundColor Red
-}
-
-# 9. Analyse de la dynamique
-Write-Host "`n=== ANALYSE DE LA DYNAMIQUE ===" -ForegroundColor Green
-
-# Collecter tous les résultats pour comparaison
-$results = @()
-
-if ($metricsAll) { $results += @{ Name = "Sans filtres"; Value = $metricsAll.averageTransactions } }
-if ($metricsToday) { $results += @{ Name = "Aujourd'hui"; Value = $metricsToday.averageTransactions } }
-if ($metricsWeek) { $results += @{ Name = "Cette semaine"; Value = $metricsWeek.averageTransactions } }
-if ($metricsMonth) { $results += @{ Name = "Ce mois"; Value = $metricsMonth.averageTransactions } }
-if ($metricsCustom) { $results += @{ Name = "7 jours"; Value = $metricsCustom.averageTransactions } }
-
-Write-Host "`n📈 Comparaison des 'Transaction moyenne/Jour':" -ForegroundColor Cyan
-foreach ($result in $results) {
-    Write-Host "  $($result.Name): $($result.Value)" -ForegroundColor White
-}
-
-# Vérifier si les valeurs sont différentes (indiquant que c'est dynamique)
-$uniqueValues = ($results | Select-Object -ExpandProperty Value | Sort-Object -Unique).Count
-if ($uniqueValues -gt 1) {
-    Write-Host "`n✅ SUCCÈS: La 'Transaction moyenne/Jour' est dynamique!" -ForegroundColor Green
-    Write-Host "   Les valeurs varient selon les filtres appliqués." -ForegroundColor Green
+if ($response1.totalFees -ne $response2.totalFees) {
+    Write-Host "✅ Le volume des revenus change avec le filtre de période" -ForegroundColor Green
 } else {
-    Write-Host "`n❌ PROBLÈME: La 'Transaction moyenne/Jour' n'est pas dynamique!" -ForegroundColor Red
-    Write-Host "   Toutes les valeurs sont identiques." -ForegroundColor Red
+    Write-Host "❌ Le volume des revenus ne change pas avec le filtre de période" -ForegroundColor Red
 }
 
-Write-Host "`n=== FIN DU TEST ===" -ForegroundColor Green 
+if ($response1.averageFeesPerDay -ne $response2.averageFeesPerDay) {
+    Write-Host "✅ Le revenu moyen/jour change avec le filtre de période" -ForegroundColor Green
+} else {
+    Write-Host "❌ Le revenu moyen/jour ne change pas avec le filtre de période" -ForegroundColor Red
+}
+
+if ($response1.totalFees -ne $response4.totalFees) {
+    Write-Host "✅ Le volume des revenus change avec le filtre de service" -ForegroundColor Green
+} else {
+    Write-Host "❌ Le volume des revenus ne change pas avec le filtre de service" -ForegroundColor Red
+}
+
+if ($response1.totalFees -ne $response5.totalFees) {
+    Write-Host "✅ Le volume des revenus change avec le filtre d'agence" -ForegroundColor Green
+} else {
+    Write-Host "❌ Le volume des revenus ne change pas avec le filtre d'agence" -ForegroundColor Red
+}
+
+Write-Host "`n=== TEST TERMINÉ ===" -ForegroundColor Green 

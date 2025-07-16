@@ -60,7 +60,8 @@
                     </div>
                     <div class="stat-type-content">
                         <div class="stat-item">
-                            <span class="stat-label">Nombre AG:</span>
+                            <span class="stat-label" *ngIf="type === 'total_cashin' || type === 'total_paiement'; else nombreLabel">Nombre AG:</span>
+                            <ng-template #nombreLabel><span class="stat-label">Nombre:</span></ng-template>
                             <span class="stat-value">{{ statsByType[type]?.count || 0 }}</span>
                         </div>
                         <div class="stat-item">
@@ -263,52 +264,60 @@
         <form [formGroup]="filterForm" (ngSubmit)="applyFilters()" class="filters-form">
             <div class="form-row">
                 <div class="form-group">
-                    <label>Type d'opération</label>
-                    <select formControlName="typeOperation">
-                        <option *ngFor="let opt of filterTypeOptions" [value]="opt.value">{{ opt.label }}</option>
-                    </select>
+                    <mat-form-field appearance="fill" class="filter-select">
+                        <mat-label>Type d'opération</mat-label>
+                        <mat-select formControlName="typeOperation" multiple (selectionChange)="onFilterChange()">
+                            <ngx-mat-select-search [formControl]="typeOperationSearchCtrl" placeholderLabel="Rechercher un type..." noEntriesFoundLabel="Aucun type trouvé"></ngx-mat-select-search>
+                            <mat-option *ngFor="let opt of filteredTypeOperationList" [value]="opt.value">{{ opt.label }}</mat-option>
+                        </mat-select>
+                    </mat-form-field>
                 </div>
                 <div class="form-group">
-                    <app-autocomplete-input
-                        [options]="paysList"
-                        formControlName="pays"
-                        placeholder="Saisir un pays..."
-                        label="Pays">
-                    </app-autocomplete-input>
+                    <mat-form-field appearance="fill" class="filter-select">
+                        <mat-label>Pays</mat-label>
+                        <mat-select formControlName="pays" multiple (selectionChange)="onFilterChange()">
+                            <ngx-mat-select-search [formControl]="paysSearchCtrl" placeholderLabel="Rechercher un pays..." noEntriesFoundLabel="Aucun pays trouvé"></ngx-mat-select-search>
+                            <mat-option *ngFor="let pays of filteredPaysList" [value]="pays">{{ pays }}</mat-option>
+                        </mat-select>
+                    </mat-form-field>
                 </div>
                 <div class="form-group">
-                    <app-autocomplete-input
-                        [options]="statutList"
-                        formControlName="statut"
-                        placeholder="Saisir un statut..."
-                        label="Statut">
-                    </app-autocomplete-input>
+                    <mat-form-field appearance="fill" class="filter-select">
+                        <mat-label>Statut</mat-label>
+                        <mat-select formControlName="statut" multiple (selectionChange)="onFilterChange()">
+                            <ngx-mat-select-search [formControl]="statutSearchCtrl" placeholderLabel="Rechercher un statut..." noEntriesFoundLabel="Aucun statut trouvé"></ngx-mat-select-search>
+                            <mat-option *ngFor="let statut of filteredStatutList" [value]="statut">{{ statut }}</mat-option>
+                        </mat-select>
+                    </mat-form-field>
                 </div>
                 <div class="form-group">
-                    <app-autocomplete-input
-                        [options]="banqueList"
-                        formControlName="banque"
-                        placeholder="Saisir une banque..."
-                        label="Banque">
-                    </app-autocomplete-input>
+                    <mat-form-field appearance="fill" class="filter-select">
+                        <mat-label>Banque</mat-label>
+                        <mat-select formControlName="banque" multiple (selectionChange)="onFilterChange()">
+                            <ngx-mat-select-search [formControl]="banqueSearchCtrl" placeholderLabel="Rechercher une banque..." noEntriesFoundLabel="Aucune banque trouvée"></ngx-mat-select-search>
+                            <mat-option *ngFor="let banque of filteredBanqueList" [value]="banque">{{ banque }}</mat-option>
+                        </mat-select>
+                    </mat-form-field>
                 </div>
             </div>
             <div class="form-row">
                 <div class="form-group">
-                    <app-autocomplete-input
-                        [options]="codeProprietaireList"
-                        formControlName="codeProprietaire"
-                        placeholder="Saisir un code propriétaire..."
-                        label="Code propriétaire">
-                    </app-autocomplete-input>
+                    <mat-form-field appearance="fill" class="filter-select">
+                        <mat-label>Compte</mat-label>
+                        <mat-select formControlName="codeProprietaire" multiple (selectionChange)="onFilterChange()">
+                            <ngx-mat-select-search [formControl]="compteSearchCtrl" placeholderLabel="Rechercher un compte..." noEntriesFoundLabel="Aucun compte trouvé"></ngx-mat-select-search>
+                            <mat-option *ngFor="let compte of filteredComptesList" [value]="compte">{{ compte }}</mat-option>
+                        </mat-select>
+                    </mat-form-field>
                 </div>
                 <div class="form-group">
-                    <app-autocomplete-input
-                        [options]="serviceList"
-                        formControlName="service"
-                        placeholder="Saisir un service..."
-                        label="Service">
-                    </app-autocomplete-input>
+                    <mat-form-field appearance="fill" class="filter-select">
+                        <mat-label>Service</mat-label>
+                        <mat-select formControlName="service" multiple (selectionChange)="onFilterChange()">
+                            <ngx-mat-select-search [formControl]="serviceSearchCtrl" placeholderLabel="Rechercher un service..." noEntriesFoundLabel="Aucun service trouvé"></ngx-mat-select-search>
+                            <mat-option *ngFor="let service of filteredServiceList" [value]="service">{{ service }}</mat-option>
+                        </mat-select>
+                    </mat-form-field>
                 </div>
                 <div class="form-group">
                     <label>Date début</label>

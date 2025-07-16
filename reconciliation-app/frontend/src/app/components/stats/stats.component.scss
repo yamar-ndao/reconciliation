@@ -25,7 +25,7 @@ h2 {
 
 .filter-form {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    grid-template-columns: repeat(6, 1fr) 180px; /* 6 filtres + bouton */
     gap: 20px;
     align-items: end;
 }
@@ -62,6 +62,8 @@ h2 {
     border-radius: 4px;
     cursor: pointer;
     transition: all 0.3s ease;
+    justify-self: end;
+    margin-top: 0;
 }
 
 .apply-btn:hover {
@@ -239,13 +241,18 @@ h2 {
 }
 
 // Responsive design pour les filtres
+@media (max-width: 1100px) {
+    .filter-form {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
 @media (max-width: 768px) {
     .filter-form {
         grid-template-columns: 1fr;
         gap: 15px;
     }
-    
-    .filter-group {
-        margin-bottom: 10px;
+    .apply-btn {
+        width: 100%;
+        justify-self: stretch;
     }
 } 

@@ -248,11 +248,14 @@ public class StatisticsService {
             metrics.put("totalClients", totalClients);
 
             // Conversion des dates pour les opérations
-            java.time.LocalDateTime startDateTime = null;
-            java.time.LocalDateTime endDateTime = null;
+            final java.time.LocalDateTime startDateTime;
+            final java.time.LocalDateTime endDateTime;
             if (start != null && end != null) {
                 startDateTime = java.time.LocalDate.parse(start).atStartOfDay();
                 endDateTime = java.time.LocalDate.parse(end).atTime(23, 59, 59);
+            } else {
+                startDateTime = null;
+                endDateTime = null;
             }
 
             // Statistiques par type d'opération (operationRepository)
@@ -350,16 +353,30 @@ public class StatisticsService {
                 .filter(op -> finalAgencies == null || finalAgencies.isEmpty() || finalAgencies.contains(op.getCodeProprietaire()))
                 .filter(op -> finalServices == null || finalServices.isEmpty() || finalServices.contains(op.getService()))
                 .filter(op -> op.getFraisApplicable() != null && op.getFraisApplicable())
+                .filter(op -> {
+                    // Appliquer le filtre de dates si spécifié
+                    if (startDateTime != null && endDateTime != null) {
+                        return op.getDateOperation() != null && 
+                               !op.getDateOperation().isBefore(startDateTime) && 
+                               !op.getDateOperation().isAfter(endDateTime);
+                    }
+                    return true;
+                })
                 .collect(java.util.stream.Collectors.toList());
             
-            // Calculer le total des frais (uniquement les débits - montants positifs)
-            Double totalFees = filteredOperations.stream()
-                .filter(op -> op.getMontantFrais() != null && op.getMontantFrais() > 0)
-                .mapToDouble(op -> op.getMontantFrais())
-                .sum();
-            
-            // Ajouter le total des frais aux métriques
-            metrics.put("totalFees", totalFees);
+            // --- Nouveau calcul du volume des revenus (somme brute des FRAIS_TRANSACTION avec filtres) ---
+            String agenceFilter = (finalAgencies != null && !finalAgencies.isEmpty()) ? finalAgencies.get(0) : null;
+            String serviceFilter = (finalServices != null && !finalServices.isEmpty()) ? finalServices.get(0) : null;
+            String paysFilter = (finalCountries != null && !finalCountries.isEmpty()) ? finalCountries.get(0) : null;
+            Double totalFees = operationRepository.sumMontantByTypeOperationWithFilters(
+                "FRAIS_TRANSACTION",
+                agenceFilter,
+                serviceFilter,
+                paysFilter,
+                startDateTime,
+                endDateTime
+            );
+            metrics.put("totalFees", totalFees != null ? totalFees : 0.0);
             
             // Compter les jours uniques avec des frais (uniquement les débits)
             long daysWithFees = filteredOperations.stream()

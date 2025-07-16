@@ -15,6 +15,9 @@ import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import com.reconciliation.model.ReconciliationProgress;
+import com.reconciliation.service.ReconciliationProgressService;
+import org.springframework.beans.factory.annotation.Autowired;
 
 @Slf4j
 @RestController
@@ -23,6 +26,8 @@ import java.util.UUID;
 public class ReconciliationController {
 
     private final CsvReconciliationService reconciliationService;
+    @Autowired
+    private ReconciliationProgressService progressService;
 
     @GetMapping("/test")
     public ResponseEntity<String> test() {
@@ -82,10 +87,7 @@ public class ReconciliationController {
     }
 
     @GetMapping("/progress")
-    public ResponseEntity<Map<String, Integer>> getProgress(@RequestParam String jobId) {
-        int progress = reconciliationService.getProgress(jobId);
-        Map<String, Integer> resp = new HashMap<>();
-        resp.put("progress", progress);
-        return ResponseEntity.ok(resp);
+    public ReconciliationProgress getProgress(@RequestParam String sessionId) {
+        return progressService.getProgress(sessionId);
     }
 } 

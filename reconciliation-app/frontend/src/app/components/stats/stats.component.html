@@ -10,42 +10,46 @@
     <div class="filters-section">
             <form [formGroup]="filterForm" class="filter-form">
                 <div class="filter-group">
-                    <app-autocomplete-input
-                        [options]="getFilteredAgencies()"
-                        formControlName="agency"
-                        placeholder="Saisir une agence..."
-                        label="Agence">
-                    </app-autocomplete-input>
+                    <mat-form-field appearance="fill" class="filter-select">
+                        <mat-label>Client</mat-label>
+                        <mat-select formControlName="agency" multiple (selectionChange)="onFilterChange()">
+                            <ngx-mat-select-search [formControl]="agenceSearchCtrl" placeholderLabel="Rechercher un client..." noEntriesFoundLabel="Aucun client trouvé"></ngx-mat-select-search>
+                            <mat-option *ngFor="let agency of filteredAgencies" [value]="agency">
+                                {{ agency }}
+                            </mat-option>
+                        </mat-select>
+                    </mat-form-field>
                 </div>
-
                 <div class="filter-group">
-                    <app-autocomplete-input
-                        [options]="getFilteredServices()"
-                        formControlName="service"
-                        placeholder="Saisir un service..."
-                        label="Service">
-                    </app-autocomplete-input>
+                    <mat-form-field appearance="fill" class="filter-select">
+                        <mat-label>Service</mat-label>
+                        <mat-select formControlName="service" multiple (selectionChange)="onFilterChange()">
+                            <ngx-mat-select-search [formControl]="serviceSearchCtrl" placeholderLabel="Rechercher un service..." noEntriesFoundLabel="Aucun service trouvé"></ngx-mat-select-search>
+                            <mat-option *ngFor="let service of filteredServices" [value]="service">
+                                {{ service }}
+                            </mat-option>
+                        </mat-select>
+                    </mat-form-field>
                 </div>
-
                 <div class="filter-group">
-                    <app-autocomplete-input
-                        [options]="getFilteredCountries()"
-                        formControlName="country"
-                        placeholder="Saisir un pays..."
-                        label="Pays">
-                    </app-autocomplete-input>
+                    <mat-form-field appearance="fill" class="filter-select">
+                        <mat-label>Pays</mat-label>
+                        <mat-select formControlName="country" multiple (selectionChange)="onFilterChange()">
+                            <ngx-mat-select-search [formControl]="paysSearchCtrl" placeholderLabel="Rechercher un pays..." noEntriesFoundLabel="Aucun pays trouvé"></ngx-mat-select-search>
+                            <mat-option *ngFor="let country of filteredCountries" [value]="country">
+                                {{ country }}
+                            </mat-option>
+                        </mat-select>
+                    </mat-form-field>
                 </div>
-
                 <div class="filter-group">
                     <label>Date de début</label>
                     <input type="date" formControlName="startDate">
                 </div>
-
                 <div class="filter-group">
                     <label>Date de fin</label>
                     <input type="date" formControlName="endDate">
                 </div>
-
                 <button type="button" (click)="applyFilters()" class="apply-btn" [disabled]="isLoading">
                     {{isLoading ? 'Traitement en cours...' : 'Appliquer les filtres'}}
                 </button>
@@ -69,7 +73,7 @@
                 <table>
                     <thead>
                         <tr>
-                            <th>Agence</th>
+                            <th>Client</th>
                             <th>Service</th>
                             <th>Pays</th>
                             <th>Date</th>

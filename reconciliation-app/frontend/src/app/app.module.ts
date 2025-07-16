@@ -11,7 +11,11 @@ import { MatTableModule } from '@angular/material/table';
 import { MatPaginatorModule } from '@angular/material/paginator';
 import { MatAutocompleteModule } from '@angular/material/autocomplete';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatSelectModule } from '@angular/material/select';
+import { MatOptionModule } from '@angular/material/core';
 import { NgChartsModule } from 'ng2-charts';
+import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
+import { NgxMatSelectSearchModule } from 'ngx-mat-select-search';
 
 import { AppComponent } from './app.component';
 import { FileUploadComponent } from './components/file-upload/file-upload.component';
@@ -33,6 +37,7 @@ import { ReconciliationService } from './services/reconciliation.service';
 import { Observable, of } from 'rxjs';
 import { LoginComponent } from './login/login.component';
 import { TraitementComponent } from './components/traitement/traitement.component';
+import { ProgressPopupComponent } from './components/shared/progress-popup.component';
 
 @NgModule({
     declarations: [
@@ -50,10 +55,12 @@ import { TraitementComponent } from './components/traitement/traitement.componen
         UsersComponent,
         RankingComponent,
         LoginComponent,
-        TraitementComponent
+        TraitementComponent,
+        ProgressPopupComponent
     ],
     imports: [
         BrowserModule,
+        BrowserAnimationsModule,
         CommonModule,
         FormsModule,
         ReactiveFormsModule,
@@ -70,7 +77,10 @@ import { TraitementComponent } from './components/traitement/traitement.componen
         MatAutocompleteModule,
         ReactiveFormsModule,
         MatProgressSpinnerModule,
-        NgChartsModule
+        NgChartsModule,
+        MatSelectModule,
+        MatOptionModule,
+        NgxMatSelectSearchModule
     ],
     providers: [ReconciliationService],
     bootstrap: [AppComponent]

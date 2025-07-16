@@ -540,4 +540,38 @@
   width: 100% !important;
   height: 100% !important;
 }
+
+.graph-placeholder canvas[type='line'] {
+  margin-top: 48px !important;
+}
+
+.custom-legend {
+  display: flex;
+  gap: 24px;
+  margin-bottom: 16px;
+  justify-content: center;
+}
+.legend-item {
+  display: flex;
+  align-items: center;
+  font-size: 15px;
+}
+.legend-bar {
+  display: inline-block;
+  width: 28px;
+  height: 12px;
+  border: 3px solid;
+  background: transparent;
+  border-radius: 3px;
+  margin-right: 8px;
+}
+ 
+// Ajout d'un espace sous la légende pour les courbes
+.graph-placeholder .chartjs-legend {
+  margin-bottom: 72px !important;
+}
+ 
+.graph-placeholder .chartjs-title {
+  margin-bottom: 48px !important;
+}
  

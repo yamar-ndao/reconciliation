@@ -24,14 +24,14 @@
                     </div>
                 </div>
                 <div class="form-group">
-                    <label>Agence *</label>
+                    <label>Client *</label>
                     <app-autocomplete-input
                         [options]="agences"
                         formControlName="agence"
-                        placeholder="Saisir ou sélectionner une agence...">
+                        placeholder="Saisir ou sélectionner un client...">
                     </app-autocomplete-input>
                     <div *ngIf="addForm.get('agence')?.invalid && addForm.get('agence')?.touched" class="error-message">
-                        L'agence est requise
+                        Le client est requis
                     </div>
                 </div>
             </div>
@@ -101,14 +101,14 @@
                     </div>
                 </div>
                 <div class="form-group">
-                    <label>Agence *</label>
+                    <label>Client *</label>
                     <app-autocomplete-input
                         [options]="agences"
                         formControlName="agence"
-                        placeholder="Saisir ou sélectionner une agence...">
+                        placeholder="Saisir ou sélectionner un client...">
                     </app-autocomplete-input>
                     <div *ngIf="editForm.get('agence')?.invalid && editForm.get('agence')?.touched" class="error-message">
-                        L'agence est requise
+                        Le client est requis
                     </div>
                 </div>
             </div>
@@ -175,11 +175,11 @@
                     </app-autocomplete-input>
                 </div>
                 <div class="form-group">
-                    <label>Agence</label>
+                    <label>Client</label>
                     <app-autocomplete-input
                         [options]="agences"
                         formControlName="agence"
-                        placeholder="Toutes les agences">
+                        placeholder="Tous les clients">
                     </app-autocomplete-input>
                 </div>
                 <div class="form-group">
@@ -231,7 +231,7 @@
                 <thead>
                     <tr>
                         <th>Service</th>
-                        <th>Agence</th>
+                        <th>Client</th>
                         <th>Type</th>
                         <th>Valeur Paramétrée</th>
                         <th>Description</th>
@@ -336,8 +336,8 @@
                     <input type="text" [(ngModel)]="testService" placeholder="Ex: AIRTIME">
                 </div>
                 <div class="form-group">
-                    <label>Agence</label>
-                    <input type="text" [(ngModel)]="testAgence" placeholder="Ex: AG001">
+                    <label>Client</label>
+                    <input type="text" [(ngModel)]="testAgence" placeholder="Ex: CL001">
                 </div>
                 <div class="form-group">
                     <label>Type de calcul</label>

@@ -1,6 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { RankingService, RankingItem } from '../../services/ranking.service';
 import * as XLSX from 'xlsx';
+import { FormControl } from '@angular/forms';
 
 @Component({
   selector: 'app-ranking',
@@ -60,10 +61,14 @@ export class RankingComponent implements OnInit {
   }
 
   countries: string[] = [];
+  selectedCountry: string = 'Tous les pays';
   selectedCountries: string[] = ['Tous les pays'];
 
   // Dropdown pays
   showCountryDropdown = false;
+
+  paysSearchCtrl = new FormControl('');
+  filteredCountries: string[] = [];
 
   constructor(private rankingService: RankingService) { }
 
@@ -71,13 +76,19 @@ export class RankingComponent implements OnInit {
     this.rankingService.getCountries().subscribe({
       next: (data) => {
         this.countries = ['Tous les pays', ...data];
+        this.filteredCountries = this.countries;
       },
       error: () => {
         this.countries = ['Tous les pays'];
+        this.filteredCountries = this.countries;
       }
     });
     this.loadAgencyRankings();
     this.loadServiceRankings();
+    this.paysSearchCtrl.valueChanges.subscribe(search => {
+      const s = (search || '').toLowerCase();
+      this.filteredCountries = this.countries.filter(c => c.toLowerCase().includes(s));
+    });
   }
 
   /**
@@ -94,16 +105,16 @@ export class RankingComponent implements OnInit {
     let observable;
     switch (this.agencyRankingType) {
       case 'transactions':
-        observable = this.rankingService.getAgencyRankingByTransactions(this.selectedCountries, this.selectedPeriod, startDate, endDate);
+        observable = this.rankingService.getAgencyRankingByTransactions(this.selectedCountries.includes('Tous les pays') ? undefined : this.selectedCountries, this.selectedPeriod, startDate, endDate);
         break;
       case 'volume':
-        observable = this.rankingService.getAgencyRankingByVolume(this.selectedCountries, this.selectedPeriod, startDate, endDate);
+        observable = this.rankingService.getAgencyRankingByVolume(this.selectedCountries.includes('Tous les pays') ? undefined : this.selectedCountries, this.selectedPeriod, startDate, endDate);
         break;
       case 'fees':
-        observable = this.rankingService.getAgencyRankingByFees(this.selectedCountries, this.selectedPeriod, startDate, endDate);
+        observable = this.rankingService.getAgencyRankingByFees(this.selectedCountries.includes('Tous les pays') ? undefined : this.selectedCountries, this.selectedPeriod, startDate, endDate);
         break;
       default:
-        observable = this.rankingService.getAgencyRankingByTransactions(this.selectedCountries, this.selectedPeriod, startDate, endDate);
+        observable = this.rankingService.getAgencyRankingByTransactions(this.selectedCountries.includes('Tous les pays') ? undefined : this.selectedCountries, this.selectedPeriod, startDate, endDate);
     }
 
     observable.subscribe({
@@ -133,16 +144,16 @@ export class RankingComponent implements OnInit {
     let observable;
     switch (this.serviceRankingType) {
       case 'transactions':
-        observable = this.rankingService.getServiceRankingByTransactions(this.selectedCountries, this.selectedPeriod, startDate, endDate);
+        observable = this.rankingService.getServiceRankingByTransactions(this.selectedCountries.includes('Tous les pays') ? undefined : this.selectedCountries, this.selectedPeriod, startDate, endDate);
         break;
       case 'volume':
-        observable = this.rankingService.getServiceRankingByVolume(this.selectedCountries, this.selectedPeriod, startDate, endDate);
+        observable = this.rankingService.getServiceRankingByVolume(this.selectedCountries.includes('Tous les pays') ? undefined : this.selectedCountries, this.selectedPeriod, startDate, endDate);
         break;
       case 'fees':
-        observable = this.rankingService.getServiceRankingByFees(this.selectedCountries, this.selectedPeriod, startDate, endDate);
+        observable = this.rankingService.getServiceRankingByFees(this.selectedCountries.includes('Tous les pays') ? undefined : this.selectedCountries, this.selectedPeriod, startDate, endDate);
         break;
       default:
-        observable = this.rankingService.getServiceRankingByTransactions(this.selectedCountries, this.selectedPeriod, startDate, endDate);
+        observable = this.rankingService.getServiceRankingByTransactions(this.selectedCountries.includes('Tous les pays') ? undefined : this.selectedCountries, this.selectedPeriod, startDate, endDate);
     }
 
     observable.subscribe({
@@ -259,15 +270,12 @@ export class RankingComponent implements OnInit {
    * Obtenir le titre du classement des agences
    */
   getAgencyRankingTitle(): string {
-    switch (this.agencyRankingType) {
-      case 'transactions':
-        return 'Classement des Agences par Nombre de Transactions';
-      case 'volume':
-        return 'Classement des Agences par Volume';
-      case 'fees':
-        return 'Classement des Agences par Frais';
-      default:
-        return 'Classement des Agences';
+    if (this.agencyRankingType === 'fees') {
+      return 'Classement des Agences par Revenu';
+    } else if (this.agencyRankingType === 'volume') {
+      return 'Classement des Agences par Volume';
+    } else {
+      return 'Classement des Agences par Transactions';
     }
   }
 
@@ -275,15 +283,12 @@ export class RankingComponent implements OnInit {
    * Obtenir le titre du classement des services
    */
   getServiceRankingTitle(): string {
-    switch (this.serviceRankingType) {
-      case 'transactions':
-        return 'Classement des Services par Nombre de Transactions';
-      case 'volume':
-        return 'Classement des Services par Volume';
-      case 'fees':
-        return 'Classement des Services par Frais';
-      default:
-        return 'Classement des Services';
+    if (this.serviceRankingType === 'fees') {
+      return 'Classement des Services par Revenu';
+    } else if (this.serviceRankingType === 'volume') {
+      return 'Classement des Services par Volume';
+    } else {
+      return 'Classement des Services par Transactions';
     }
   }
 
@@ -461,27 +466,15 @@ export class RankingComponent implements OnInit {
       this.selectedCountries = ['Tous les pays'];
     } else {
       // Retirer "Tous les pays" si présent
-      this.selectedCountries = this.selectedCountries.filter(c => c !== 'Tous les pays');
-      
-      if (this.selectedCountries.includes(country)) {
-        // Décocher le pays
-        this.selectedCountries = this.selectedCountries.filter(c => c !== country);
-        // Si aucun pays n'est sélectionné, remettre "Tous les pays"
-        if (this.selectedCountries.length === 0) {
-          this.selectedCountries = ['Tous les pays'];
-        }
-      } else {
-        // Cocher le pays
-        this.selectedCountries.push(country);
-      }
+      this.selectedCountries = [country];
     }
     
     // Afficher le message de mise à jour
-    const selectedCountriesText = this.selectedCountries.includes('Tous les pays') 
+    const selectedCountryText = this.selectedCountries.length === 1 && this.selectedCountries[0] === 'Tous les pays' 
       ? 'Tous les pays' 
       : this.selectedCountries.join(', ');
     this.showUpdateMessage = true;
-    this.updateMessage = `Mise à jour des classements pour : ${selectedCountriesText}`;
+    this.updateMessage = `Mise à jour des classements pour : ${selectedCountryText}`;
     
     this.loadAgencyRankings();
     this.loadServiceRankings();
@@ -498,6 +491,13 @@ export class RankingComponent implements OnInit {
   }
 
   onCountryChange(): void {
+    // Si "Tous les pays" est sélectionné, on ne garde que cette valeur
+    if (this.selectedCountries.includes('Tous les pays')) {
+      this.selectedCountries = ['Tous les pays'];
+    } else if (this.selectedCountries.length === 0) {
+      // Si rien n'est sélectionné, on remet "Tous les pays"
+      this.selectedCountries = ['Tous les pays'];
+    }
     this.loadAgencyRankings();
     this.loadServiceRankings();
   }
@@ -513,10 +513,10 @@ export class RankingComponent implements OnInit {
    * Sélectionner/désélectionner tous les pays
    */
   toggleSelectAllCountries(): void {
-    if (this.selectedCountries.length === this.countries.length || (this.selectedCountries.includes('Tous les pays') && this.countries.length > 1)) {
-      this.selectedCountries = [];
+    if (this.selectedCountries.length === 1 && this.selectedCountries[0] === 'Tous les pays') {
+      this.selectedCountries = []; // Désélectionner tous les pays
     } else {
-      this.selectedCountries = this.countries.filter(c => c !== 'Tous les pays');
+      this.selectedCountries = ['Tous les pays']; // Sélectionner tous les pays
     }
     this.loadAgencyRankings();
     this.loadServiceRankings();

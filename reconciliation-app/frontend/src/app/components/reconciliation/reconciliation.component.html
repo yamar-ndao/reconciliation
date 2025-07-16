@@ -23,15 +23,16 @@
 </div>
 
 <div class="reconciliation-container">
-    <!-- Affichage de la progression -->
-    <div *ngIf="showProgress" class="progress-modal">
-        <div class="progress-bar">
-            <div class="progress-bar-inner" [style.width.%]="progressPercentage"></div>
-        </div>
-        <div class="progress-text">
-            Réconciliation en cours... {{progressPercentage}}%
-        </div>
-    </div>
+    <!-- Affichage de la progression avec le composant générique -->
+    <app-progress-popup
+      *ngIf="showProgress"
+      [title]="'Réconciliation en cours...'"
+      [progress]="progressPercentage"
+      [step]="progressStep"
+      [currentFile]="progressCurrentFile"
+      [totalFiles]="progressTotalFiles"
+      [message]="'Veuillez patienter, la réconciliation est en cours...'">
+    </app-progress-popup>
 
     <!-- Affichage des résultats -->
     <div *ngIf="reconciliationResponse && !isLoading" class="results-container">

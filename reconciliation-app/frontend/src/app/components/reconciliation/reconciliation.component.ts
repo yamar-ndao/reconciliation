@@ -25,6 +25,9 @@ export class ReconciliationComponent implements OnInit {
 
     // Popup de performance
     showPerformancePopup = false;
+    progressStep: string = '';
+    progressCurrentFile: number = 0;
+    progressTotalFiles: number = 0;
 
     constructor(
         private reconciliationService: ReconciliationService,

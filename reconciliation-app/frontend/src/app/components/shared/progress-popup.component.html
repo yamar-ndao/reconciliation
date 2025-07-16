@@ -1,0 +1,14 @@
+<div class="progress-popup-backdrop">
+  <div class="progress-popup">
+    <h3><i class="fas fa-spinner fa-spin"></i> {{ title }}</h3>
+    <div *ngIf="step">{{ step }}</div>
+    <div *ngIf="totalFiles > 0">
+      Fichier {{ currentFile }} / {{ totalFiles }}
+    </div>
+    <div class="progress-bar-container">
+      <div class="progress-bar" [style.width.%]="progress"></div>
+    </div>
+    <div class="progress-value">{{ progress | number: '1.0-0' }}%</div>
+    <div class="progress-message">{{ message }}</div>
+  </div>
+</div> 

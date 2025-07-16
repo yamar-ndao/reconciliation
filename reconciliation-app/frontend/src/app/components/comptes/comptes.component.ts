@@ -1,5 +1,5 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
-import { FormBuilder, FormGroup, Validators } from '@angular/forms';
+import { FormBuilder, FormGroup, Validators, FormControl } from '@angular/forms';
 import { Subscription } from 'rxjs';
 import { CompteService } from '../../services/compte.service';
 import { Compte, CompteFilter } from '../../models/compte.model';
@@ -95,6 +95,15 @@ export class ComptesComponent implements OnInit, OnDestroy {
         'transaction_cree'
     ];
 
+    selectedPays: string[] = [];
+    paysSearch: string = '';
+    filteredPaysList: string[] = [];
+    selectedCodesProprietaire: string[] = [];
+    codeProprietaireSearch: string = '';
+    filteredCodeProprietaireList: string[] = [];
+    paysSearchCtrl = new FormControl('');
+    codeProprietaireSearchCtrl = new FormControl('');
+
     constructor(
         private compteService: CompteService,
         private operationService: OperationService,
@@ -127,6 +136,16 @@ export class ComptesComponent implements OnInit, OnDestroy {
         this.loadComptes();
         this.loadFilterLists();
         this.loadOperationsPeriode();
+        this.filteredPaysList = this.paysList;
+        this.filteredCodeProprietaireList = this.codeProprietaireList;
+        this.paysSearchCtrl.valueChanges.subscribe(search => {
+            const s = (search || '').toLowerCase();
+            this.filteredPaysList = this.paysList.filter(p => p.toLowerCase().includes(s));
+        });
+        this.codeProprietaireSearchCtrl.valueChanges.subscribe(search => {
+            const s = (search || '').toLowerCase();
+            this.filteredCodeProprietaireList = this.codeProprietaireList.filter(c => c.toLowerCase().includes(s));
+        });
     }
 
     ngOnDestroy() {
@@ -569,6 +588,7 @@ export class ComptesComponent implements OnInit, OnDestroy {
             this.compteService.getDistinctPays().subscribe({
                 next: (paysList: string[]) => {
                     this.paysList = paysList;
+                    this.filteredPaysList = paysList;
                 },
                 error: (error: any) => {
                     console.error('Erreur lors du chargement de la liste des pays:', error);
@@ -580,12 +600,25 @@ export class ComptesComponent implements OnInit, OnDestroy {
             this.compteService.getDistinctCodeProprietaire().subscribe({
                 next: (codeProprietaireList: string[]) => {
                     this.codeProprietaireList = codeProprietaireList;
+                    this.filteredCodeProprietaireList = codeProprietaireList;
                 },
                 error: (error: any) => {
                     console.error('Erreur lors du chargement de la liste des codes propriétaires:', error);
                 }
             })
         );
+    }
+
+    onPaysChange() {
+        // Ici, appliquez la logique de filtrage sur les comptes selon selectedPays
+        // Par exemple, mettez à jour le formControl 'pays' si besoin :
+        this.filterForm.controls['pays'].setValue(this.selectedPays);
+        this.applyFilters();
+    }
+
+    onCodeProprietaireChange() {
+        this.filterForm.controls['codeProprietaire'].setValue(this.selectedCodesProprietaire);
+        this.applyFilters();
     }
 
     get pagedComptesCritiques() {

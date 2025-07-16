@@ -154,4 +154,19 @@ public interface OperationRepository extends JpaRepository<OperationEntity, Long
     // Trouver les opérations de frais liées à une opération nominale
     @Query("SELECT o FROM OperationEntity o WHERE o.parentOperationId = :parentOperationId AND o.typeOperation = 'FRAIS_TRANSACTION'")
     List<OperationEntity> findFraisByParentOperationId(@Param("parentOperationId") Long parentOperationId);
+
+    @Query("SELECT SUM(o.montant) FROM OperationEntity o WHERE o.typeOperation = :typeOperation"
+         + " AND (:agence IS NULL OR o.codeProprietaire = :agence)"
+         + " AND (:service IS NULL OR o.service = :service)"
+         + " AND (:pays IS NULL OR o.pays = :pays)"
+         + " AND (:startDate IS NULL OR o.dateOperation >= :startDate)"
+         + " AND (:endDate IS NULL OR o.dateOperation <= :endDate)")
+    Double sumMontantByTypeOperationWithFilters(
+        @Param("typeOperation") String typeOperation,
+        @Param("agence") String agence,
+        @Param("service") String service,
+        @Param("pays") String pays,
+        @Param("startDate") LocalDateTime startDate,
+        @Param("endDate") LocalDateTime endDate
+    );
 } 

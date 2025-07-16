@@ -312,6 +312,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
     filteredCountries: string[] = [];
     // filteredBanques: string[] = []; // supprimé
 
+    // SUPPRIMER testMulti et testOptions
+
     // Ajout des compteurs pour la barre récapitulative
     get totalClientsCount(): number {
       return (this.filteredAgencies?.filter(a => a !== 'Tous').length) || 0;
@@ -368,7 +370,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
         this.filteredAgencies = this.filterOptions?.agencies || [];
         this.filteredServices = this.filterOptions?.services || [];
         this.filteredCountries = this.filterOptions?.countries || [];
-        // this.filteredBanques = this.filterOptions?.banques || []; // supprimé
         this.agenceSearchCtrl.valueChanges.subscribe(search => {
           const s = (search || '').toLowerCase();
           this.filteredAgencies = (this.filterOptions?.agencies || []).filter(a => a.toLowerCase().includes(s));
@@ -424,7 +425,15 @@ export class DashboardComponent implements OnInit, OnDestroy {
                 this.filteredAgencies = options.agencies || [];
                 this.filteredServices = options.services || [];
                 this.filteredCountries = options.countries || [];
-                // this.filteredBanques = options.banques || []; // supprimé
+                // Forcer la valeur des contrôles de recherche à '' pour afficher toute la liste
+                this.agenceSearchCtrl.setValue('');
+                this.serviceSearchCtrl.setValue('');
+                this.paysSearchCtrl.setValue('');
+                // Initialiser les sélections à [] pour affichage automatique et choix multiple
+                this.selectedAgency = [];
+                this.selectedService = [];
+                this.selectedCountry = [];
+                this.onFilterChange();
                 console.log('Filter options loaded:', options);
             },
             error: (error) => {
@@ -448,12 +457,18 @@ export class DashboardComponent implements OnInit, OnDestroy {
     private loadDetailedMetrics() {
         this.detailedLoading = true;
         this.detailedError = null;
-
-        // Traiter les valeurs vides comme "Tous" (pas de filtre)
+        // Ajout de logs pour diagnostic
+        console.log('[loadDetailedMetrics] Appelée avec :');
+        console.log('selectedAgency:', this.selectedAgency);
+        console.log('selectedService:', this.selectedService);
+        console.log('selectedCountry:', this.selectedCountry);
+        console.log('selectedTimeFilter:', this.selectedTimeFilter);
+        console.log('startDate:', this.startDate);
+        console.log('endDate:', this.endDate);
+        // Adapter les filtres envoyés au backend
         const agencies = this.selectedAgency.length === 0 ? undefined : this.selectedAgency;
         const services = this.selectedService.length === 0 ? undefined : this.selectedService;
         const countries = this.selectedCountry.length === 0 ? undefined : this.selectedCountry;
-        // const banques = this.selectedBanque === 'Tous' ? undefined : [this.selectedBanque]; // supprimé
         const timeFilter = this.selectedTimeFilter !== 'Tous' ? this.selectedTimeFilter : undefined;
         
         this.dashboardService.getDetailedMetrics(
@@ -465,6 +480,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
             this.endDate || undefined
         ).subscribe({
             next: (metrics: DetailedMetrics) => {
+                // Log de la réponse du backend
+                console.log('[loadDetailedMetrics] Réponse du backend :', metrics);
                 // Si aucune donnée n'est trouvée, afficher un message explicite et vider les données
                 if (!metrics || (Array.isArray(metrics) && metrics.length === 0) || (typeof metrics === 'object' && Object.keys(metrics).length === 0)) {
                     this.detailedMetrics = null;
@@ -497,9 +514,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
     updateDashboardIndicators() {
       // Utiliser les données filtrées pour recalculer les indicateurs
       const agencySummaryFiltered = this.agencySummaryData.filter((s: any) =>
-        (this.selectedAgency.length === 0 || this.selectedAgency.includes(s.agency)) &&
-        (this.selectedService.length === 0 || this.selectedService.includes(s.service)) &&
-        (this.selectedCountry.length === 0 || this.selectedCountry.includes(s.pays)) &&
+        (this.selectedAgency?.length === 0 || this.selectedAgency?.includes(s.agency)) &&
+        (this.selectedService?.length === 0 || this.selectedService?.includes(s.service)) &&
+        (this.selectedCountry?.length === 0 || this.selectedCountry?.includes(s.pays)) &&
         // (this.selectedBanque === 'Tous' || this.selectedBanque === s.banque) && // supprimé
         (this.selectedTimeFilter === 'Tous' || (s.date && s.date.startsWith(this.selectedTimeFilter)))
       );
@@ -549,57 +566,57 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
     toggleAllAgencies(event: any) {
       if (event.target.checked) {
-        this.selectedAgency = []; // Clear all selected agencies
+        this.selectedAgency = [];
       }
       this.onFilterChange();
     }
     onAgencyCheckboxChange(agency: string, event: any) {
       if (event.target.checked) {
-        if (!this.selectedAgency.includes(agency)) {
-          this.selectedAgency.push(agency);
+        if (!this.selectedAgency?.includes(agency)) {
+          this.selectedAgency = [...(this.selectedAgency || []), agency];
         }
       } else {
-        this.selectedAgency = this.selectedAgency.filter(a => a !== agency);
-        if (this.selectedAgency.length === 0) {
-          this.selectedAgency = ['Tous']; // Ensure at least one is selected
+        this.selectedAgency = (this.selectedAgency || []).filter(a => a !== agency);
+        if (!this.selectedAgency || this.selectedAgency.length === 0) {
+          this.selectedAgency = [];
         }
       }
       this.onFilterChange();
     }
     toggleAllServices(event: any) {
       if (event.target.checked) {
-        this.selectedService = []; // Clear all selected services
+        this.selectedService = [];
       }
       this.onFilterChange();
     }
     onServiceCheckboxChange(service: string, event: any) {
       if (event.target.checked) {
-        if (!this.selectedService.includes(service)) {
-          this.selectedService.push(service);
+        if (!this.selectedService?.includes(service)) {
+          this.selectedService = [...(this.selectedService || []), service];
         }
       } else {
-        this.selectedService = this.selectedService.filter(s => s !== service);
-        if (this.selectedService.length === 0) {
-          this.selectedService = ['Tous']; // Ensure at least one is selected
+        this.selectedService = (this.selectedService || []).filter(s => s !== service);
+        if (!this.selectedService || this.selectedService.length === 0) {
+          this.selectedService = [];
         }
       }
       this.onFilterChange();
     }
     toggleAllCountries(event: any) {
       if (event.target.checked) {
-        this.selectedCountry = []; // Clear all selected countries
+        this.selectedCountry = [];
       }
       this.onFilterChange();
     }
     onCountryCheckboxChange(country: string, event: any) {
       if (event.target.checked) {
-        if (!this.selectedCountry.includes(country)) {
-          this.selectedCountry.push(country);
+        if (!this.selectedCountry?.includes(country)) {
+          this.selectedCountry = [...(this.selectedCountry || []), country];
         }
       } else {
-        this.selectedCountry = this.selectedCountry.filter(c => c !== country);
-        if (this.selectedCountry.length === 0) {
-          this.selectedCountry = ['Tous']; // Ensure at least one is selected
+        this.selectedCountry = (this.selectedCountry || []).filter(c => c !== country);
+        if (!this.selectedCountry || this.selectedCountry.length === 0) {
+          this.selectedCountry = [];
         }
       }
       this.onFilterChange();
@@ -816,9 +833,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
             ['Rapport des Métriques Détaillées'],
             [''],
             ['Filtres appliqués:'],
-            ['Agences', this.selectedAgency.join(', ')],
-            ['Services', this.selectedService.join(', ')],
-            ['Pays', this.selectedCountry.join(', ')],
+            ['Agences', this.selectedAgency?.join(', ') || 'Tous'],
+            ['Services', this.selectedService?.join(', ') || 'Tous'],
+            ['Pays', this.selectedCountry?.join(', ') || 'Tous'],
             // ['Banque', this.selectedBanque], // supprimé
             ['Période', this.selectedTimeFilter],
             [''],
@@ -910,9 +927,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
     loadAgencySummaryData() {
       const normalize = (str: string) => (str || '').toLowerCase().normalize('NFD').replace(/[ \u0300-\u036f]/g, '');
-      const agencies = this.selectedAgency.length === 0 ? undefined : this.selectedAgency;
-      const services = this.selectedService.length === 0 ? undefined : this.selectedService;
-      const countries = this.selectedCountry.length === 0 ? undefined : this.selectedCountry;
+      const agencies = this.selectedAgency?.length === 0 ? undefined : this.selectedAgency;
+      const services = this.selectedService?.length === 0 ? undefined : this.selectedService;
+      const countries = this.selectedCountry?.length === 0 ? undefined : this.selectedCountry;
       // const banques = this.selectedBanque === 'Tous' ? undefined : [normalize(this.selectedBanque)]; // supprimé
       this.agencySummaryService.getAllSummaries().subscribe({
         next: (data: any[]) => {
@@ -940,9 +957,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
     loadAllOperations() {
       const normalize = (str: string) => (str || '').toLowerCase().normalize('NFD').replace(/[ \u0300-\u036f]/g, '');
-      const agencies = this.selectedAgency.length === 0 ? undefined : this.selectedAgency;
-      const services = this.selectedService.length === 0 ? undefined : this.selectedService;
-      const countries = this.selectedCountry.length === 0 ? undefined : this.selectedCountry;
+      const agencies = this.selectedAgency?.length === 0 ? undefined : this.selectedAgency;
+      const services = this.selectedService?.length === 0 ? undefined : this.selectedService;
+      const countries = this.selectedCountry?.length === 0 ? undefined : this.selectedCountry;
       // const banques = this.selectedBanque === 'Tous' ? undefined : [normalize(this.selectedBanque)]; // supprimé
       this.operationService.getAllOperations().subscribe({
         next: (ops: any[]) => {

@@ -1,7 +1,7 @@
 <div class="ranking-container">
   <div class="ranking-header">
     <h1 class="ranking-title">🏆 Classements</h1>
-    <p>Découvrez les meilleures performances par agence et par service</p>
+    <p>Découvrez les meilleures performances par client et par service</p>
     
     <!-- Message de mise à jour -->
     <div *ngIf="showUpdateMessage" 
@@ -14,64 +14,29 @@
     <div style="display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start; justify-content: space-between;">
       <!-- Filtre par pays -->
       <div style="min-width: 200px;">
-        <label style="display: block; margin-bottom: 8px; font-weight: bold;">Filtrer par pays :</label>
-        <div style="position: relative;">
-          <div (click)="toggleCountryDropdown()" 
-               [style.opacity]="(loadingAgencies || loadingServices) ? '0.6' : '1'"
-               [style.pointer-events]="(loadingAgencies || loadingServices) ? 'none' : 'auto'"
-               style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #ddd; background-color: white; cursor: pointer; display: flex; align-items: center; justify-content: space-between;">
-            <span>
-              <ng-container *ngIf="selectedCountries.length === 0">Aucun pays sélectionné</ng-container>
-              <ng-container *ngIf="selectedCountries.length === 1">{{ selectedCountries[0] }}</ng-container>
-              <ng-container *ngIf="selectedCountries.length > 1">{{ selectedCountries.length }} pays sélectionnés</ng-container>
-            </span>
-            <span style="font-size: 1.2em;">▼</span>
-          </div>
-          <div *ngIf="loadingAgencies || loadingServices" 
-               style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); pointer-events: none;">
-            <div style="width: 16px; height: 16px; border: 2px solid #f3f3f3; border-top: 2px solid #3498db; border-radius: 50%; animation: spin 1s linear infinite;"></div>
-          </div>
-          <div *ngIf="showCountryDropdown" style="position: absolute; z-index: 10; background: #fff; border: 1px solid #ddd; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); width: 100%; max-height: 250px; overflow-y: auto; margin-top: 4px;">
-            <div style="padding: 8px; border-bottom: 1px solid #eee; display: flex; align-items: center; gap: 8px;">
-              <button (click)="toggleSelectAllCountries(); $event.stopPropagation();" style="background: #764ba2; color: #fff; border: none; border-radius: 4px; padding: 4px 10px; font-size: 0.9em; cursor: pointer;">
-                {{ selectedCountries.length === countries.length - 1 ? 'Tout désélectionner' : 'Tout sélectionner' }}
-              </button>
-            </div>
-            <div *ngFor="let country of countries" style="padding: 8px 12px; display: flex; align-items: center; gap: 8px; cursor: pointer;" (click)="toggleCountry(country); $event.stopPropagation();">
-              <input type="checkbox" [checked]="isCountrySelected(country)" style="margin: 0;"/>
-              <span>{{ country }}</span>
-            </div>
-          </div>
-        </div>
-        <div *ngIf="selectedCountries.length > 0" style="margin-top: 4px; font-size: 0.8rem; color: #27ae60; font-weight: 500;">
-          ✓ Pays sélectionnés : {{ selectedCountries.includes('Tous les pays') ? 'Tous les pays' : selectedCountries.join(', ') }}
-        </div>
+        <mat-form-field appearance="fill" class="filter-select">
+          <mat-label>Pays</mat-label>
+          <mat-select [(ngModel)]="selectedCountries" multiple (selectionChange)="onCountryChange()">
+            <ngx-mat-select-search [formControl]="paysSearchCtrl" placeholderLabel="Rechercher un pays..." noEntriesFoundLabel="Aucun pays trouvé"></ngx-mat-select-search>
+            <mat-option value="Tous les pays">Tous les pays</mat-option>
+            <mat-option *ngFor="let country of filteredCountries" [value]="country" [disabled]="country === 'Tous les pays'">
+              {{ country }}
+            </mat-option>
+          </mat-select>
+        </mat-form-field>
       </div>
-      
       <!-- Filtre par période -->
       <div style="min-width: 200px;">
-        <label style="display: block; margin-bottom: 8px; font-weight: bold;">Période de calcul :</label>
-        <div style="position: relative;">
-          <select 
-            [(ngModel)]="selectedPeriod" 
-            (change)="onPeriodChange()"
-            class="ranking-select"
-            [disabled]="loadingAgencies || loadingServices"
-            style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #ddd; background-color: white;">
-            <option value="all">Toute la période</option>
-            <option value="day">Par Jour</option>
-            <option value="week">Par Semaine</option>
-            <option value="month">Par Mois</option>
-            <option value="custom">Période personnalisée</option>
-          </select>
-          <div *ngIf="loadingAgencies || loadingServices" 
-               style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); pointer-events: none;">
-            <div style="width: 16px; height: 16px; border: 2px solid #f3f3f3; border-top: 2px solid #3498db; border-radius: 50%; animation: spin 1s linear infinite;"></div>
-          </div>
-        </div>
-        <div *ngIf="selectedPeriod && selectedPeriod !== 'custom'" style="margin-top: 4px; font-size: 0.8rem; color: #27ae60; font-weight: 500;">
-          ✓ {{ getPeriodDescription() }}
-        </div>
+        <mat-form-field appearance="fill" class="filter-select">
+          <mat-label>Période de calcul</mat-label>
+          <mat-select [(ngModel)]="selectedPeriod" (selectionChange)="onPeriodChange()">
+            <mat-option value="all">Toute la période</mat-option>
+            <mat-option value="day">Par Jour</mat-option>
+            <mat-option value="week">Par Semaine</mat-option>
+            <mat-option value="month">Par Mois</mat-option>
+            <mat-option value="custom">Période personnalisée</mat-option>
+          </mat-select>
+        </mat-form-field>
       </div>
     </div>
 
@@ -107,7 +72,7 @@
   </div>
 
   <div class="ranking-content">
-    <!-- Classement des Agences -->
+    <!-- Classement des Clients -->
     <div class="ranking-section">
       <div class="section-header">
         <h2 class="section-title">🏢 {{ getAgencyRankingTitle() }}</h2>
@@ -145,7 +110,7 @@
           <thead>
             <tr>
               <th class="position">Position</th>
-              <th class="agency-name">Agence</th>
+              <th class="agency-name">Client</th>
               <th class="transaction-count">Transactions</th>
               <th class="total-volume">Volume Total</th>
               <th class="total-fees">Revenu</th>
@@ -169,7 +134,7 @@
           </tbody>
         </table>
 
-        <!-- Pagination agences -->
+        <!-- Pagination clients -->
         <div *ngIf="agencyTotalPages > 1" class="pagination">
           <button (click)="prevAgencyPage()" [disabled]="agencyPage === 1">&lt;</button>
           <button *ngFor="let p of [].constructor(agencyTotalPages); let idx = index" (click)="setAgencyPage(idx+1)" [class.active]="agencyPage === (idx+1)">{{ idx+1 }}</button>
@@ -177,7 +142,7 @@
         </div>
 
         <div *ngIf="!loadingAgencies && !errorAgencies && agencyRankings.length === 0" class="no-data">
-          <p>Aucune donnée d'agence disponible</p>
+          <p>Aucune donnée de client disponible</p>
         </div>
       </div>
     </div>
@@ -224,7 +189,7 @@
               <th class="transaction-count">Transactions</th>
               <th class="total-volume">Volume Total</th>
               <th class="total-fees">Revenu</th>
-              <th class="unique-agencies">Agences</th>
+              <th class="unique-agencies">Clients</th>
               <th class="average-volume">Volume Moyen/{{ getPeriodLabel() }}</th>
               <th class="average-fees">Revenu Moyen/{{ getPeriodLabel() }}</th>
             </tr>

@@ -37,6 +37,7 @@ export interface FilterOptions {
     agencies: string[];
     services: string[];
     countries: string[];
+    banques: string[];
     timeFilters: string[];
 }
 

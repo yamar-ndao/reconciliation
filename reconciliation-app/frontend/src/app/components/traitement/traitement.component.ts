@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
 import * as Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 
@@ -97,6 +97,8 @@ export class TraitementComponent implements OnInit {
     absoluteValue: [], // Ajouté
     removeCharacters: [] // Nouvelle option pour supprimer des caractères
   };
+
+  constructor(private cd: ChangeDetectorRef) {}
 
   private showSuccess(key: string, msg: string) {
     this.successMsg[key] = msg;
@@ -303,6 +305,8 @@ export class TraitementComponent implements OnInit {
       this.processingProgress = 0;
       this.processingMessage = '';
     }
+    // Ajout : forcer la détection de changement après le traitement
+    this.cd.detectChanges();
   }
 
   // Méthode utilitaire pour créer un délai
@@ -514,6 +518,7 @@ export class TraitementComponent implements OnInit {
                           
                           console.log(`CSV traité avec succès: ${this.allRows.length} lignes ajoutées`);
                         }
+                        this.cd.detectChanges();
                         resolve();
                       } catch (error) {
                         console.error('Erreur lors du traitement CSV sans header:', error);
@@ -558,6 +563,7 @@ export class TraitementComponent implements OnInit {
                   
                   console.log(`CSV traité avec succès: ${this.allRows.length} lignes ajoutées, ${this.columns.length} colonnes`);
                 }
+                this.cd.detectChanges();
                 resolve();
               } catch (error) {
                 console.error('Erreur lors du traitement CSV avec header:', error);
