@@ -116,8 +116,8 @@
                 <div class="filter-group">
                   <mat-form-field appearance="fill" class="filter-select">
                     <mat-label>Client</mat-label>
-                    <mat-select [(ngModel)]="selectedAgency" multiple (selectionChange)="onFilterChange()" placeholder="Sélection multiple possible">
-                      <!-- <ngx-mat-select-search [formControl]="agenceSearchCtrl" placeholderLabel="Rechercher un client..." noEntriesFoundLabel="Aucun client trouvé"></ngx-mat-select-search> -->
+                    <mat-select #agencySelect [(ngModel)]="selectedAgency" multiple (selectionChange)="onFilterChange()" placeholder="Sélection multiple possible">
+                      <ngx-mat-select-search [formControl]="agenceSearchCtrl" placeholderLabel="Rechercher un client..." noEntriesFoundLabel="Aucun client trouvé"></ngx-mat-select-search>
                       <mat-option *ngFor="let agency of filteredAgencies" [value]="agency">
                         {{ agency }}
                       </mat-option>
@@ -127,8 +127,8 @@
                 <div class="filter-group">
                   <mat-form-field appearance="fill" class="filter-select">
                     <mat-label>Service</mat-label>
-                    <mat-select [(ngModel)]="selectedService" multiple (selectionChange)="onFilterChange()" placeholder="Sélection multiple possible">
-                      <!-- <ngx-mat-select-search [formControl]="serviceSearchCtrl" placeholderLabel="Rechercher un service..." noEntriesFoundLabel="Aucun service trouvé"></ngx-mat-select-search> -->
+                    <mat-select #serviceSelect [(ngModel)]="selectedService" multiple (selectionChange)="onFilterChange()" placeholder="Sélection multiple possible">
+                      <ngx-mat-select-search [formControl]="serviceSearchCtrl" placeholderLabel="Rechercher un service..." noEntriesFoundLabel="Aucun service trouvé"></ngx-mat-select-search>
                       <mat-option *ngFor="let service of filteredServices" [value]="service">
                         {{ service }}
                       </mat-option>
@@ -138,8 +138,8 @@
                 <div class="filter-group">
                   <mat-form-field appearance="fill" class="filter-select">
                     <mat-label>Pays</mat-label>
-                    <mat-select [(ngModel)]="selectedCountry" multiple (selectionChange)="onFilterChange()" placeholder="Sélection multiple possible">
-                      <!-- <ngx-mat-select-search [formControl]="paysSearchCtrl" placeholderLabel="Rechercher un pays..." noEntriesFoundLabel="Aucun pays trouvé"></ngx-mat-select-search> -->
+                    <mat-select #countrySelect [(ngModel)]="selectedCountry" multiple (selectionChange)="onFilterChange()" placeholder="Sélection multiple possible">
+                      <ngx-mat-select-search [formControl]="paysSearchCtrl" placeholderLabel="Rechercher un pays..." noEntriesFoundLabel="Aucun pays trouvé"></ngx-mat-select-search>
                       <mat-option *ngFor="let country of filteredCountries" [value]="country">
                         {{ country }}
                       </mat-option>

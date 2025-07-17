@@ -195,7 +195,7 @@ public class CompteService {
         return compteRepository.findDistinctCodeProprietaire();
     }
     
-    public List<Compte> filterComptes(String pays, Double soldeMin, String dateDebut, String dateFin, String codeProprietaire) {
+    public List<Compte> filterComptes(List<String> pays, Double soldeMin, String dateDebut, String dateFin, List<String> codeProprietaire) {
         System.out.println("Service: Filtrage des comptes");
         System.out.println("Service: Pays = " + pays);
         System.out.println("Service: SoldeMin = " + soldeMin);
@@ -207,9 +207,9 @@ public class CompteService {
         System.out.println("Service: Total entités trouvées = " + entities.size());
         
         List<Compte> result = entities.stream()
-                .filter(entity -> pays == null || pays.isEmpty() || pays.equals(entity.getPays()))
+                .filter(entity -> pays == null || pays.isEmpty() || pays.contains(entity.getPays()))
                 .filter(entity -> soldeMin == null || entity.getSolde() >= soldeMin)
-                .filter(entity -> codeProprietaire == null || codeProprietaire.isEmpty() || codeProprietaire.equals(entity.getCodeProprietaire()))
+                .filter(entity -> codeProprietaire == null || codeProprietaire.isEmpty() || codeProprietaire.contains(entity.getCodeProprietaire()))
                 .filter(entity -> {
                     if ((dateDebut == null || dateDebut.isEmpty()) && (dateFin == null || dateFin.isEmpty())) {
                         return true;

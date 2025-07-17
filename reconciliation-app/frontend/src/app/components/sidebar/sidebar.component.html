@@ -4,70 +4,70 @@
         <h2 class="title">Réconciliation</h2>
     </div>
     <ul class="nav-list">
-        <li>
+        <li *ngIf="isMenuAllowed('Dashboard')">
             <a routerLink="/dashboard" routerLinkActive="active">
-                <i class="fas fa-tachometer-alt"></i>
+                <i class="fas fa-tachometer-alt menu-icon dashboard"></i>
                 <span>Dashboard</span>
             </a>
         </li>
-        <li>
+        <li *ngIf="isMenuAllowed('Traitement')">
             <a routerLink="/traitement" routerLinkActive="active">
-                <i class="fas fa-tools"></i>
+                <i class="fas fa-tools menu-icon traitement"></i>
                 <span>Traitement</span>
             </a>
         </li>
-        <li>
+        <li *ngIf="isMenuAllowed('Réconciliation')">
             <a routerLink="/upload" routerLinkActive="active">
-                <i class="fas fa-file-upload"></i>
+                <i class="fas fa-file-upload menu-icon reconciliation"></i>
                 <span>Réconciliation</span>
             </a>
         </li>
-        <li>
+        <li *ngIf="isMenuAllowed('Résultats')">
             <a routerLink="/results" routerLinkActive="active">
-                <i class="fas fa-poll"></i>
+                <i class="fas fa-poll menu-icon resultats"></i>
                 <span>Résultats</span>
             </a>
         </li>
-        <li>
+        <li *ngIf="isMenuAllowed('Statistiques')">
             <a routerLink="/stats" routerLinkActive="active">
-                <i class="fas fa-chart-bar"></i>
+                <i class="fas fa-chart-bar menu-icon stats"></i>
                 <span>Statistiques</span>
             </a>
         </li>
-        <li>
+        <li *ngIf="isMenuAllowed('Classements')">
             <a routerLink="/ranking" routerLinkActive="active">
-                <i class="fas fa-trophy"></i>
+                <i class="fas fa-trophy menu-icon classements"></i>
                 <span>Classements</span>
             </a>
         </li>
-        <li>
+        <li *ngIf="isMenuAllowed('Comptes')">
             <a routerLink="/comptes" routerLinkActive="active">
-                <i class="fas fa-wallet"></i>
+                <i class="fas fa-wallet menu-icon comptes"></i>
                 <span>Comptes</span>
             </a>
         </li>
-        <li>
+        <li *ngIf="isMenuAllowed('Opérations')">
             <a routerLink="/operations" routerLinkActive="active">
-                <i class="fas fa-exchange-alt"></i>
+                <i class="fas fa-exchange-alt menu-icon operations"></i>
                 <span>Opérations</span>
             </a>
         </li>
-        <li>
+        <li *ngIf="isMenuAllowed('Frais')">
             <a routerLink="/frais" routerLinkActive="active">
-                <i class="fas fa-money-bill-wave"></i>
+                <i class="fas fa-money-bill-wave menu-icon frais"></i>
                 <span>Frais</span>
             </a>
         </li>
         <li>
             <a href="#" class="has-submenu" (click)="toggleParamSubmenu(); $event.preventDefault()">
-                <i class="fas fa-cog"></i>
+                <i class="fas fa-cog menu-icon parametre"></i>
                 <span>Paramètre</span>
                 <span class="submenu-arrow">{{ showParamSubmenu ? '▲' : '▼' }}</span>
             </a>
             <ul class="submenu" *ngIf="showParamSubmenu">
-                <li><a routerLink="/users"><i class="fas fa-user"></i> Utilisateur</a></li>
-                <li><a routerLink="/profil"><i class="fas fa-id-badge"></i> Profil</a></li>
-                <li><a routerLink="/log-utilisateur"><i class="fas fa-history"></i> Log utilisateur</a></li>
+                <li><a routerLink="/users"><i class="fas fa-user menu-icon parametre"></i> Utilisateur</a></li>
+                <li><a routerLink="/profils"><i class="fas fa-id-badge menu-icon parametre"></i> Profil</a></li>
+                <li><a routerLink="/log-utilisateur"><i class="fas fa-history menu-icon parametre"></i> Log utilisateur</a></li>
             </ul>
         </li>
     </ul>

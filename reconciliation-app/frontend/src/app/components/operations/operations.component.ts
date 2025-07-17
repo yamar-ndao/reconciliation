@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, OnDestroy, ViewChild } from '@angular/core';
 import { FormBuilder, FormGroup, Validators, FormControl } from '@angular/forms';
 import { Subscription } from 'rxjs';
 import { OperationService } from '../../services/operation.service';
@@ -7,6 +7,7 @@ import { Operation, OperationFilter, TypeOperation, StatutOperation, OperationUp
 import { Compte } from '../../models/compte.model';
 import * as ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
+import { MatSelect } from '@angular/material/select';
 
 @Component({
     selector: 'app-operations',
@@ -113,6 +114,13 @@ export class OperationsComponent implements OnInit, OnDestroy {
         return Array.from(new Set(this.operations.map(op => op.codeProprietaire).filter(c => !!c)));
     }
 
+    @ViewChild('typeOperationSelect') typeOperationSelect!: MatSelect;
+    @ViewChild('paysSelect') paysSelect!: MatSelect;
+    @ViewChild('statutSelect') statutSelect!: MatSelect;
+    @ViewChild('banqueSelect') banqueSelect!: MatSelect;
+    @ViewChild('codeProprietaireSelect') codeProprietaireSelect!: MatSelect;
+    @ViewChild('serviceSelect') serviceSelect!: MatSelect;
+
     private subscription = new Subscription();
 
     constructor(
@@ -170,9 +178,23 @@ export class OperationsComponent implements OnInit, OnDestroy {
         this.loadStatsByType();
         this.initializeStatutList();
         this.filteredTypeOperationList = this.filterTypeOptions;
-        this.typeOperationSearchCtrl.valueChanges.subscribe(search => {
+        this.typeOperationSearchCtrl.valueChanges.subscribe((search: string | null) => {
             const s = (search || '').toLowerCase();
             this.filteredTypeOperationList = this.filterTypeOptions.filter(opt => opt.label.toLowerCase().includes(s));
+            if (this.filteredTypeOperationList.length === 1 && !this.filterForm.value.typeOperation.includes(this.filteredTypeOperationList[0].value)) {
+                this.filterForm.controls['typeOperation'].setValue([this.filteredTypeOperationList[0].value]);
+                if (this.typeOperationSelect) { this.typeOperationSelect.close(); }
+                this.onFilterChange();
+            }
+        });
+        this.paysSearchCtrl.valueChanges.subscribe((search: string | null) => {
+            const s = (search || '').toLowerCase();
+            this.filteredPaysList = this.paysList.filter(p => p.toLowerCase().includes(s));
+            if (this.filteredPaysList.length === 1 && !this.filterForm.value.pays.includes(this.filteredPaysList[0])) {
+                this.filterForm.controls['pays'].setValue([this.filteredPaysList[0]]);
+                if (this.paysSelect) { this.paysSelect.close(); }
+                this.onFilterChange();
+            }
         });
         this.filteredPaysList = this.paysList;
         this.paysSearchCtrl.valueChanges.subscribe(search => {
@@ -180,24 +202,44 @@ export class OperationsComponent implements OnInit, OnDestroy {
             this.filteredPaysList = this.paysList.filter(p => p.toLowerCase().includes(s));
         });
         this.filteredStatutList = this.statutList;
-        this.statutSearchCtrl.valueChanges.subscribe(search => {
+        this.statutSearchCtrl.valueChanges.subscribe((search: string | null) => {
             const s = (search || '').toLowerCase();
             this.filteredStatutList = this.statutList.filter(st => st.toLowerCase().includes(s));
+            if (this.filteredStatutList.length === 1 && !this.filterForm.value.statut.includes(this.filteredStatutList[0])) {
+                this.filterForm.controls['statut'].setValue([this.filteredStatutList[0]]);
+                if (this.statutSelect) { this.statutSelect.close(); }
+                this.onFilterChange();
+            }
         });
         this.filteredBanqueList = this.banqueList;
-        this.banqueSearchCtrl.valueChanges.subscribe(search => {
+        this.banqueSearchCtrl.valueChanges.subscribe((search: string | null) => {
             const s = (search || '').toLowerCase();
             this.filteredBanqueList = this.banqueList.filter(b => b.toLowerCase().includes(s));
+            if (this.filteredBanqueList.length === 1 && !this.filterForm.value.banque.includes(this.filteredBanqueList[0])) {
+                this.filterForm.controls['banque'].setValue([this.filteredBanqueList[0]]);
+                if (this.banqueSelect) { this.banqueSelect.close(); }
+                this.onFilterChange();
+            }
         });
         this.filteredCodeProprietaireList = this.codeProprietaireList;
-        this.codeProprietaireSearchCtrl.valueChanges.subscribe(search => {
+        this.codeProprietaireSearchCtrl.valueChanges.subscribe((search: string | null) => {
             const s = (search || '').toLowerCase();
             this.filteredCodeProprietaireList = this.codeProprietaireList.filter(c => c.toLowerCase().includes(s));
+            if (this.filteredCodeProprietaireList.length === 1 && !this.filterForm.value.codeProprietaire.includes(this.filteredCodeProprietaireList[0])) {
+                this.filterForm.controls['codeProprietaire'].setValue([this.filteredCodeProprietaireList[0]]);
+                if (this.codeProprietaireSelect) { this.codeProprietaireSelect.close(); }
+                this.onFilterChange();
+            }
         });
         this.filteredServiceList = this.serviceList;
-        this.serviceSearchCtrl.valueChanges.subscribe(search => {
+        this.serviceSearchCtrl.valueChanges.subscribe((search: string | null) => {
             const s = (search || '').toLowerCase();
             this.filteredServiceList = this.serviceList.filter(sv => sv.toLowerCase().includes(s));
+            if (this.filteredServiceList.length === 1 && !this.filterForm.value.service.includes(this.filteredServiceList[0])) {
+                this.filterForm.controls['service'].setValue([this.filteredServiceList[0]]);
+                if (this.serviceSelect) { this.serviceSelect.close(); }
+                this.onFilterChange();
+            }
         });
         // Ajout des logs pour diagnostic
         setTimeout(() => {

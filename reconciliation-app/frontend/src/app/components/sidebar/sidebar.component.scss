@@ -124,4 +124,16 @@
 .logout-link:hover {
     background: #ffeaea;
     color: #b71c1c;
-} 
+}
+
+.menu-icon { font-size: 1.3em; margin-right: 10px; vertical-align: middle; }
+.menu-icon.dashboard       { color: #1976d2; }
+.menu-icon.traitement      { color: #388e3c; }
+.menu-icon.reconciliation  { color: #fbc02d; }
+.menu-icon.resultats       { color: #d32f2f; }
+.menu-icon.stats           { color: #7b1fa2; }
+.menu-icon.classements     { color: #ff9800; }
+.menu-icon.comptes         { color: #0288d1; }
+.menu-icon.operations      { color: #f57c00; }
+.menu-icon.frais           { color: #c2185b; }
+.menu-icon.parametre       { color: #455a64; } 

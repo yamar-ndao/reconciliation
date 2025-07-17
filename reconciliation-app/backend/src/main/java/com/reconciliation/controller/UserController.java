@@ -2,6 +2,8 @@ package com.reconciliation.controller;
 
 import com.reconciliation.entity.UserEntity;
 import com.reconciliation.repository.UserRepository;
+import com.reconciliation.entity.ProfilEntity;
+import com.reconciliation.repository.ProfilRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -16,6 +18,8 @@ public class UserController {
 
     @Autowired
     private UserRepository userRepository;
+    @Autowired
+    private ProfilRepository profilRepository;
 
     @GetMapping
     public ResponseEntity<List<UserEntity>> getAllUsers() {
@@ -37,7 +41,11 @@ public class UserController {
             if (userRepository.findByUsername(user.getUsername()).isPresent()) {
                 return ResponseEntity.badRequest().build();
             }
-            
+            // Associer le profil si fourni
+            if (user.getProfil() != null && user.getProfil().getId() != null) {
+                ProfilEntity profil = profilRepository.findById(user.getProfil().getId()).orElse(null);
+                user.setProfil(profil);
+            }
             UserEntity savedUser = userRepository.save(user);
             return ResponseEntity.ok(savedUser);
         } catch (Exception e) {
@@ -51,6 +59,11 @@ public class UserController {
             Optional<UserEntity> existingUser = userRepository.findById(id);
             if (existingUser.isPresent()) {
                 user.setId(id);
+                // Associer le profil si fourni
+                if (user.getProfil() != null && user.getProfil().getId() != null) {
+                    ProfilEntity profil = profilRepository.findById(user.getProfil().getId()).orElse(null);
+                    user.setProfil(profil);
+                }
                 UserEntity updatedUser = userRepository.save(user);
                 return ResponseEntity.ok(updatedUser);
             } else {

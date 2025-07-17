@@ -85,18 +85,22 @@ export class CompteService {
     // Filtrer les comptes avec des paramètres
     filterComptes(filter: CompteFilter): Observable<Compte[]> {
         let params = new HttpParams();
-        
-        if (filter.pays) {
-            params = params.set('pays', filter.pays);
+
+        if (filter.pays && Array.isArray(filter.pays)) {
+            filter.pays.forEach((p: string) => {
+                params = params.append('pays', p);
+            });
+        }
+        if (filter.codeProprietaire && Array.isArray(filter.codeProprietaire)) {
+            filter.codeProprietaire.forEach((c: string) => {
+                params = params.append('codeProprietaire', c);
+            });
         }
         if (filter.dateDebut) {
             params = params.set('dateDebut', filter.dateDebut);
         }
         if (filter.dateFin) {
             params = params.set('dateFin', filter.dateFin);
-        }
-        if (filter.codeProprietaire) {
-            params = params.set('codeProprietaire', filter.codeProprietaire);
         }
 
         return this.http.get<Compte[]>(`${this.apiUrl}/filter`, { params });

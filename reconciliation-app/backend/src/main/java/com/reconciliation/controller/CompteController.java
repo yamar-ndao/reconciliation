@@ -160,18 +160,15 @@ public class CompteController {
     
     @GetMapping("/filter")
     public ResponseEntity<List<Compte>> filterComptes(
-            @RequestParam(required = false) String pays,
+            @RequestParam(required = false) List<String> pays,
             @RequestParam(required = false) Double soldeMin,
             @RequestParam(required = false) String dateDebut,
             @RequestParam(required = false) String dateFin,
-            @RequestParam(required = false) String codeProprietaire) {
+            @RequestParam(required = false) List<String> codeProprietaire) {
         
-        System.out.println("=== FILTRE COMPTES ===");
-        System.out.println("Pays: " + pays);
-        System.out.println("SoldeMin: " + soldeMin);
-        System.out.println("DateDebut: " + dateDebut);
-        System.out.println("DateFin: " + dateFin);
-        System.out.println("CodeProprietaire: " + codeProprietaire);
+        System.out.println("=== FILTRE COMPTES (DEBUG) ===");
+        System.out.println("Pays (reçu): " + pays);
+        System.out.println("CodeProprietaire (reçu): " + codeProprietaire);
         
         List<Compte> comptes = compteService.filterComptes(pays, soldeMin, dateDebut, dateFin, codeProprietaire);
         System.out.println("Résultats: " + comptes.size() + " comptes trouvés");

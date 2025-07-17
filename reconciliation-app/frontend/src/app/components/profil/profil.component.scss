@@ -1,0 +1,45 @@
+.profil-container {
+  padding: 2rem;
+}
+.profil-list ul {
+  list-style: none;
+  padding: 0;
+}
+.profil-list li {
+  cursor: pointer;
+  padding: 0.5rem;
+  border-bottom: 1px solid #eee;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.profil-list li.selected {
+  background: #e0f7fa;
+}
+.profil-list button {
+  margin-left: 1rem;
+  color: #c00;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.loading-message {
+  color: #666;
+  font-style: italic;
+  margin: 10px 0;
+  padding: 10px;
+  background-color: #f5f5f5;
+  border-radius: 4px;
+  text-align: center;
+}
+
+.info-message {
+  color: #555;
+  font-size: 0.9rem;
+  margin: 10px 0;
+  padding: 8px;
+  background-color: #e3f2fd;
+  border-left: 3px solid #2196f3;
+  border-radius: 4px;
+} 

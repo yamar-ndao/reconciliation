@@ -1,89 +1,124 @@
-# Test des fonctionnalités utilisateurs
-Write-Host "=== Test des fonctionnalités utilisateurs ===" -ForegroundColor Green
+# Script pour tester et initialiser les utilisateurs
+Write-Host "=== Test des utilisateurs ===" -ForegroundColor Green
 
-# URL de base
-$baseUrl = "http://localhost:8080/api/users"
+# URL de base de l'API
+$baseUrl = "http://localhost:8080/api"
 
-# Test 1: Vérifier si l'admin existe
-Write-Host "`n1. Vérification de l'existence de l'admin..." -ForegroundColor Yellow
+# Test 1: Vérifier les utilisateurs existants
+Write-Host "`n1. Vérification des utilisateurs existants..." -ForegroundColor Yellow
 try {
-    $response = Invoke-RestMethod -Uri "$baseUrl/check-admin" -Method GET
-    Write-Host "Admin existe: $response" -ForegroundColor Green
-} catch {
-    Write-Host "Erreur lors de la vérification admin: $($_.Exception.Message)" -ForegroundColor Red
-}
-
-# Test 2: Lister tous les utilisateurs
-Write-Host "`n2. Liste de tous les utilisateurs..." -ForegroundColor Yellow
-try {
-    $users = Invoke-RestMethod -Uri $baseUrl -Method GET
-    Write-Host "Nombre d'utilisateurs: $($users.Count)" -ForegroundColor Green
-    foreach ($user in $users) {
-        Write-Host "  - ID: $($user.id), Username: $($user.username)" -ForegroundColor Cyan
+    $users = Invoke-RestMethod -Uri "$baseUrl/users" -Method GET
+    Write-Host "Utilisateurs trouvés: $($users.Count)" -ForegroundColor Green
+    if ($users.Count -eq 0) {
+        Write-Host "  ⚠️  Aucun utilisateur trouvé!" -ForegroundColor Yellow
+    } else {
+        $users | ForEach-Object { 
+            Write-Host "  - $($_.username) (ID: $($_.id))" -ForegroundColor Gray
+            if ($_.profil) {
+                Write-Host "    Profil: $($_.profil.nom)" -ForegroundColor Gray
+            } else {
+                Write-Host "    Profil: Aucun" -ForegroundColor Red
+            }
+        }
     }
 } catch {
     Write-Host "Erreur lors de la récupération des utilisateurs: $($_.Exception.Message)" -ForegroundColor Red
 }
 
-# Test 3: Créer un nouvel utilisateur
-Write-Host "`n3. Création d'un nouvel utilisateur..." -ForegroundColor Yellow
-$newUser = @{
-    username = "testuser"
-    password = "testpass123"
-} | ConvertTo-Json
-
+# Test 2: Vérifier les profils disponibles
+Write-Host "`n2. Vérification des profils disponibles..." -ForegroundColor Yellow
 try {
-    $createdUser = Invoke-RestMethod -Uri $baseUrl -Method POST -Body $newUser -ContentType "application/json"
-    Write-Host "Utilisateur créé avec succès:" -ForegroundColor Green
-    Write-Host "  - ID: $($createdUser.id), Username: $($createdUser.username)" -ForegroundColor Cyan
-} catch {
-    Write-Host "Erreur lors de la création de l'utilisateur: $($_.Exception.Message)" -ForegroundColor Red
-}
-
-# Test 4: Récupérer un utilisateur par ID
-Write-Host "`n4. Récupération d'un utilisateur par ID..." -ForegroundColor Yellow
-try {
-    $users = Invoke-RestMethod -Uri $baseUrl -Method GET
-    if ($users.Count -gt 0) {
-        $firstUser = $users[0]
-        $userById = Invoke-RestMethod -Uri "$baseUrl/$($firstUser.id)" -Method GET
-        Write-Host "Utilisateur récupéré: $($userById.username)" -ForegroundColor Green
+    $profils = Invoke-RestMethod -Uri "$baseUrl/profils" -Method GET
+    Write-Host "Profils trouvés: $($profils.Count)" -ForegroundColor Green
+    if ($profils.Count -eq 0) {
+        Write-Host "  ⚠️  Aucun profil trouvé!" -ForegroundColor Yellow
+    } else {
+        $profils | ForEach-Object { Write-Host "  - $($_.nom) (ID: $($_.id))" -ForegroundColor Gray }
     }
 } catch {
-    Write-Host "Erreur lors de la récupération par ID: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "Erreur lors de la récupération des profils: $($_.Exception.Message)" -ForegroundColor Red
 }
 
-# Test 5: Mettre à jour un utilisateur
-Write-Host "`n5. Mise à jour d'un utilisateur..." -ForegroundColor Yellow
+# Test 3: Créer un utilisateur admin si nécessaire
+Write-Host "`n3. Vérification de l'utilisateur admin..." -ForegroundColor Yellow
 try {
-    $users = Invoke-RestMethod -Uri $baseUrl -Method GET
-    $testUser = $users | Where-Object { $_.username -eq "testuser" }
-    if ($testUser) {
-        $updateData = @{
-            username = "testuser_updated"
-            password = "newpass123"
-        } | ConvertTo-Json
+    $adminExists = Invoke-RestMethod -Uri "$baseUrl/users/check-admin" -Method GET
+    if ($adminExists) {
+        Write-Host "  ✅ Utilisateur admin existe" -ForegroundColor Green
+    } else {
+        Write-Host "  ⚠️  Utilisateur admin n'existe pas" -ForegroundColor Yellow
         
-        $updatedUser = Invoke-RestMethod -Uri "$baseUrl/$($testUser.id)" -Method PUT -Body $updateData -ContentType "application/json"
-        Write-Host "Utilisateur mis à jour: $($updatedUser.username)" -ForegroundColor Green
-    }
-} catch {
-    Write-Host "Erreur lors de la mise à jour: $($_.Exception.Message)" -ForegroundColor Red
-}
-
-# Test 6: Supprimer un utilisateur de test
-Write-Host "`n6. Suppression d'un utilisateur de test..." -ForegroundColor Yellow
-try {
-    $users = Invoke-RestMethod -Uri $baseUrl -Method GET
-    $testUser = $users | Where-Object { $_.username -eq "testuser_updated" -or $_.username -eq "testuser" }
-    if ($testUser) {
-        $deleted = Invoke-RestMethod -Uri "$baseUrl/$($testUser.id)" -Method DELETE
-        if ($deleted) {
-            Write-Host "Utilisateur supprimé avec succès" -ForegroundColor Green
+        # Demander si on veut créer l'admin
+        $createAdmin = Read-Host "Voulez-vous créer l'utilisateur admin? (o/n)"
+        if ($createAdmin -eq "o" -or $createAdmin -eq "O") {
+            $adminUser = @{
+                username = "admin"
+                password = "admin"
+                profil = @{
+                    id = 1
+                    nom = "Default"
+                }
+            }
+            
+            try {
+                $newAdmin = Invoke-RestMethod -Uri "$baseUrl/users" -Method POST -Body ($adminUser | ConvertTo-Json) -ContentType "application/json"
+                Write-Host "  ✅ Utilisateur admin créé avec succès (ID: $($newAdmin.id))" -ForegroundColor Green
+            } catch {
+                Write-Host "  ❌ Erreur lors de la création de l'admin: $($_.Exception.Message)" -ForegroundColor Red
+            }
         }
     }
 } catch {
-    Write-Host "Erreur lors de la suppression: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "Erreur lors de la vérification de l'admin: $($_.Exception.Message)" -ForegroundColor Red
 }
 
-Write-Host "`n=== Tests terminés ===" -ForegroundColor Green 
+# Test 4: Créer des utilisateurs de test si aucun utilisateur n'existe
+Write-Host "`n4. Création d'utilisateurs de test..." -ForegroundColor Yellow
+try {
+    $users = Invoke-RestMethod -Uri "$baseUrl/users" -Method GET
+    if ($users.Count -eq 0) {
+        Write-Host "  Aucun utilisateur trouvé, création d'utilisateurs de test..." -ForegroundColor Yellow
+        
+        # Récupérer le premier profil disponible
+        $profils = Invoke-RestMethod -Uri "$baseUrl/profils" -Method GET
+        $defaultProfil = $profils | Select-Object -First 1
+        
+        if ($defaultProfil) {
+            $testUsers = @(
+                @{
+                    username = "test.user1"
+                    password = "password123"
+                    profil = @{
+                        id = $defaultProfil.id
+                        nom = $defaultProfil.nom
+                    }
+                },
+                @{
+                    username = "test.user2"
+                    password = "password123"
+                    profil = @{
+                        id = $defaultProfil.id
+                        nom = $defaultProfil.nom
+                    }
+                }
+            )
+            
+            foreach ($user in $testUsers) {
+                try {
+                    $newUser = Invoke-RestMethod -Uri "$baseUrl/users" -Method POST -Body ($user | ConvertTo-Json) -ContentType "application/json"
+                    Write-Host "  ✅ Utilisateur $($user.username) créé avec succès (ID: $($newUser.id))" -ForegroundColor Green
+                } catch {
+                    Write-Host "  ❌ Erreur lors de la création de $($user.username): $($_.Exception.Message)" -ForegroundColor Red
+                }
+            }
+        } else {
+            Write-Host "  ❌ Aucun profil disponible pour créer des utilisateurs de test" -ForegroundColor Red
+        }
+    } else {
+        Write-Host "  ✅ Des utilisateurs existent déjà, pas besoin de créer des utilisateurs de test" -ForegroundColor Green
+    }
+} catch {
+    Write-Host "Erreur lors de la création d'utilisateurs de test: $($_.Exception.Message)" -ForegroundColor Red
+}
+
+Write-Host "`n=== Test terminé ===" -ForegroundColor Green 

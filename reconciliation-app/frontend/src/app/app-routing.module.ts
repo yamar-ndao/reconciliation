@@ -13,6 +13,7 @@ import { RankingComponent } from './components/ranking/ranking.component';
 import { ColumnSelectionComponent } from './components/column-selection/column-selection.component';
 import { LoginComponent } from './login/login.component';
 import { TraitementComponent } from './components/traitement/traitement.component';
+import { ProfilComponent } from './components/profil/profil.component';
 
 const routes: Routes = [
   { path: '', redirectTo: '/upload', pathMatch: 'full' },
@@ -28,7 +29,8 @@ const routes: Routes = [
   { path: 'users', component: UsersComponent },
   { path: 'ranking', component: RankingComponent },
   { path: 'login', component: LoginComponent },
-  { path: 'traitement', component: TraitementComponent }
+  { path: 'traitement', component: TraitementComponent },
+  { path: 'profils', component: ProfilComponent }
 ];
 
 @NgModule({

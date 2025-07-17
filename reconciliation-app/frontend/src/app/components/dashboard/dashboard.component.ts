@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, OnDestroy, ViewChild } from '@angular/core';
 import { Router, NavigationEnd } from '@angular/router';
 import { filter } from 'rxjs/operators';
 import { Subscription } from 'rxjs';
@@ -15,6 +15,7 @@ import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { FormControl } from '@angular/forms';
 import { Chart } from 'chart.js';
 import ChartDataLabels from 'chartjs-plugin-datalabels';
+import { MatSelect } from '@angular/material/select';
 
 export type DashboardMetric = 'volume' | 'transactions' | 'revenu';
 
@@ -50,7 +51,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     selectedAgency: string[] = [];
     selectedService: string[] = [];
     selectedCountry: string[] = [];
-    selectedTimeFilter: string = 'Tous';
+    selectedTimeFilter: string = 'Ce mois';
     startDate: string = '';
     endDate: string = '';
     // selectedBanque: string = 'Tous'; // supprimé
@@ -312,6 +313,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
     filteredCountries: string[] = [];
     // filteredBanques: string[] = []; // supprimé
 
+    @ViewChild('agencySelect') agencySelect!: MatSelect;
+    @ViewChild('serviceSelect') serviceSelect!: MatSelect;
+    @ViewChild('countrySelect') countrySelect!: MatSelect;
+
     // SUPPRIMER testMulti et testOptions
 
     // Ajout des compteurs pour la barre récapitulative
@@ -382,6 +387,44 @@ export class DashboardComponent implements OnInit, OnDestroy {
           const s = (search || '').toLowerCase();
           this.filteredCountries = (this.filterOptions?.countries || []).filter(a => a.toLowerCase().includes(s));
         });
+
+        // Sélection automatique agence si un seul résultat dans la recherche
+        this.agenceSearchCtrl.valueChanges.subscribe((search: string | null) => {
+            if (!this.filterOptions?.agencies) return;
+            const filtered = this.filterOptions.agencies.filter(agency =>
+                agency.toLowerCase().includes((search || '').toLowerCase())
+            );
+            // Si un seul résultat et qu'il n'est pas déjà sélectionné
+            if (filtered.length === 1 && !this.selectedAgency.includes(filtered[0])) {
+                this.selectedAgency = [filtered[0]];
+                if (this.agencySelect) { this.agencySelect.close(); }
+                this.onFilterChange();
+            }
+        });
+        // Sélection automatique service si un seul résultat dans la recherche
+        this.serviceSearchCtrl.valueChanges.subscribe((search: string | null) => {
+            if (!this.filterOptions?.services) return;
+            const filtered = this.filterOptions.services.filter(service =>
+                service.toLowerCase().includes((search || '').toLowerCase())
+            );
+            if (filtered.length === 1 && !this.selectedService.includes(filtered[0])) {
+                this.selectedService = [filtered[0]];
+                if (this.serviceSelect) { this.serviceSelect.close(); }
+                this.onFilterChange();
+            }
+        });
+        // Sélection automatique pays si un seul résultat dans la recherche
+        this.paysSearchCtrl.valueChanges.subscribe((search: string | null) => {
+            if (!this.filterOptions?.countries) return;
+            const filtered = this.filterOptions.countries.filter(country =>
+                country.toLowerCase().includes((search || '').toLowerCase())
+            );
+            if (filtered.length === 1 && !this.selectedCountry.includes(filtered[0])) {
+                this.selectedCountry = [filtered[0]];
+                if (this.countrySelect) { this.countrySelect.close(); }
+                this.onFilterChange();
+            }
+        });
     }
 
     ngOnDestroy() {
@@ -426,9 +469,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
                 this.filteredServices = options.services || [];
                 this.filteredCountries = options.countries || [];
                 // Forcer la valeur des contrôles de recherche à '' pour afficher toute la liste
-                this.agenceSearchCtrl.setValue('');
-                this.serviceSearchCtrl.setValue('');
-                this.paysSearchCtrl.setValue('');
+                setTimeout(() => {
+                    this.agenceSearchCtrl.setValue('');
+                    this.serviceSearchCtrl.setValue('');
+                    this.paysSearchCtrl.setValue('');
+                }, 0);
                 // Initialiser les sélections à [] pour affichage automatique et choix multiple
                 this.selectedAgency = [];
                 this.selectedService = [];
@@ -449,7 +494,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
                 this.filteredAgencies = this.filterOptions.agencies;
                 this.filteredServices = this.filterOptions.services;
                 this.filteredCountries = this.filterOptions.countries;
-                // this.filteredBanques = this.filterOptions.banques; // supprimé
+                setTimeout(() => {
+                    this.agenceSearchCtrl.setValue('');
+                    this.serviceSearchCtrl.setValue('');
+                    this.paysSearchCtrl.setValue('');
+                }, 0);
             }
         });
     }

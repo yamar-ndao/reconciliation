@@ -38,6 +38,7 @@ import { Observable, of } from 'rxjs';
 import { LoginComponent } from './login/login.component';
 import { TraitementComponent } from './components/traitement/traitement.component';
 import { ProgressPopupComponent } from './components/shared/progress-popup.component';
+import { ProfilComponent } from './components/profil/profil.component';
 
 @NgModule({
     declarations: [
@@ -56,7 +57,8 @@ import { ProgressPopupComponent } from './components/shared/progress-popup.compo
         RankingComponent,
         LoginComponent,
         TraitementComponent,
-        ProgressPopupComponent
+        ProgressPopupComponent,
+        ProfilComponent
     ],
     imports: [
         BrowserModule,

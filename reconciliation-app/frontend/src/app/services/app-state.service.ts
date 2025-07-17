@@ -11,6 +11,12 @@ export interface ReconciliationState {
     needsRefresh: boolean;
 }
 
+export interface UserRights {
+  profil: string;
+  modules: string[];
+  permissions: { [module: string]: string[] };
+}
+
 @Injectable({
     providedIn: 'root'
 })
@@ -46,6 +52,9 @@ export class AppStateService {
     });
 
     private dataUpdateSubject = new BehaviorSubject<boolean>(false);
+
+    private userRights: UserRights | null = null;
+    private username: string | null = null;
 
     constructor(
         private http: HttpClient,
@@ -233,5 +242,26 @@ export class AppStateService {
     // Obtenir l'état actuel
     getCurrentState(): ReconciliationState {
         return this.reconciliationStateSubject.value;
+    }
+
+    setUserRights(rights: UserRights, username?: string) {
+        this.userRights = rights;
+        if (username) this.username = username;
+    }
+
+    getUserRights(): UserRights | null {
+        return this.userRights;
+    }
+
+    getUsername(): string | null {
+        return this.username;
+    }
+
+    isAdmin(): boolean {
+        return this.username === 'admin';
+    }
+
+    isModuleAllowed(module: string): boolean {
+        return this.userRights?.modules.includes(module) ?? false;
     }
 } 

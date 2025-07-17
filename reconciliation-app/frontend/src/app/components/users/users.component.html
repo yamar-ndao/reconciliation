@@ -1,9 +1,14 @@
 <div class="users-container">
   <div class="header">
     <h2>Gestion des utilisateurs</h2>
-    <button class="btn btn-primary" (click)="isCreating = !isCreating">
-      {{ isCreating ? 'Annuler' : 'Nouvel utilisateur' }}
-    </button>
+    <div class="header-actions">
+      <button class="btn btn-secondary" (click)="loadUsers()" title="Rafraîchir la liste">
+        <i class="fas fa-sync-alt"></i> Rafraîchir
+      </button>
+      <button class="btn btn-primary" (click)="showCreateForm = !showCreateForm">
+        {{ showCreateForm ? 'Annuler' : 'Nouvel utilisateur' }}
+      </button>
+    </div>
   </div>
 
   <!-- Messages d'erreur et de succès -->
@@ -15,7 +20,7 @@
   </div>
 
   <!-- Formulaire de création -->
-  <div *ngIf="isCreating" class="form-section">
+  <div *ngIf="showCreateForm" class="form-section">
     <h3>Créer un nouvel utilisateur</h3>
     <form (ngSubmit)="createUser()" #createForm="ngForm">
       <div class="form-group">
@@ -41,12 +46,19 @@
           class="form-control"
           placeholder="Entrez le mot de passe">
       </div>
+
+      <div class="form-group">
+        <label for="newProfil">Profil *</label>
+        <select id="newProfil" name="profil" [(ngModel)]="newUser.profil" required class="form-control">
+          <option *ngFor="let profil of profils" [ngValue]="profil">{{ profil.nom }}</option>
+        </select>
+      </div>
       
       <div class="form-actions">
         <button type="submit" class="btn btn-success" [disabled]="isCreating">
           {{ isCreating ? 'Création...' : 'Créer' }}
         </button>
-        <button type="button" class="btn btn-secondary" (click)="isCreating = false">
+        <button type="button" class="btn btn-secondary" (click)="showCreateForm = false">
           Annuler
         </button>
       </div>
@@ -79,6 +91,13 @@
           class="form-control"
           placeholder="Laissez vide pour ne pas changer">
       </div>
+
+      <div class="form-group">
+        <label for="editProfil">Profil *</label>
+        <select id="editProfil" name="profil" [(ngModel)]="editingUser.profil" required class="form-control">
+          <option *ngFor="let profil of profils" [ngValue]="profil">{{ profil.nom }}</option>
+        </select>
+      </div>
       
       <div class="form-actions">
         <button type="submit" class="btn btn-primary">
@@ -97,6 +116,17 @@
     
     <div *ngIf="users.length === 0" class="no-users">
       <p>Aucun utilisateur trouvé.</p>
+      <p class="help-text">
+        Si vous venez de démarrer l'application, les utilisateurs de test peuvent ne pas être encore créés.
+        <br>
+        <strong>Solutions :</strong>
+        <br>
+        1. Redémarrez le backend pour exécuter les migrations
+        <br>
+        2. Exécutez le script de test : <code>.\test-users.ps1</code>
+        <br>
+        3. Créez manuellement un nouvel utilisateur
+      </p>
     </div>
     
     <div *ngIf="users.length > 0" class="table-responsive">
@@ -105,6 +135,7 @@
           <tr>
             <th>ID</th>
             <th>Nom d'utilisateur</th>
+            <th>Profil</th>
             <th>Actions</th>
           </tr>
         </thead>
@@ -115,6 +146,7 @@
               <span class="username">{{ user.username }}</span>
               <span *ngIf="user.username === 'admin'" class="badge badge-primary">Admin</span>
             </td>
+            <td>{{ user.profil?.nom }}</td>
             <td class="actions">
               <button 
                 class="btn btn-sm btn-outline-primary" 

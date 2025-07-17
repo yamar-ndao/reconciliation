@@ -1,6 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
+import { AppStateService } from '../../services/app-state.service';
 
 @Component({
   selector: 'app-sidebar',
@@ -13,7 +14,8 @@ export class SidebarComponent implements OnInit {
 
   constructor(
     private http: HttpClient,
-    private router: Router
+    private router: Router,
+    private appState: AppStateService
   ) { }
 
   ngOnInit(): void {
@@ -33,5 +35,10 @@ export class SidebarComponent implements OnInit {
         this.router.navigate(['/login']);
       }
     });
+  }
+
+  isMenuAllowed(menu: string): boolean {
+    if (this.appState.isAdmin()) return true;
+    return this.appState.isModuleAllowed(menu);
   }
 } 

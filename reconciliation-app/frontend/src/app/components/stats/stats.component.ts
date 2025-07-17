@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, OnDestroy, ViewChild } from '@angular/core';
 import { AppStateService } from '../../services/app-state.service';
 import { DataNormalizationService } from '../../services/data-normalization.service';
 import { FormBuilder, FormGroup, FormControl } from '@angular/forms';
@@ -8,6 +8,7 @@ import { AgencySummaryService } from '../../services/agency-summary.service';
 import * as ExcelJS from 'exceljs';
 // @ts-ignore
 import * as FileSaver from 'file-saver';
+import { MatSelect } from '@angular/material/select';
 
 @Component({
     selector: 'app-stats',
@@ -46,6 +47,10 @@ export class StatsComponent implements OnInit, OnDestroy {
     filteredAgencies: string[] = [];
     filteredServices: string[] = [];
     filteredCountries: string[] = [];
+
+    @ViewChild('agenceSelect') agenceSelect!: MatSelect;
+    @ViewChild('serviceSelect') serviceSelect!: MatSelect;
+    @ViewChild('paysSelect') paysSelect!: MatSelect;
 
     constructor(
         private appStateService: AppStateService,
@@ -89,17 +94,32 @@ export class StatsComponent implements OnInit, OnDestroy {
         this.serviceSearchCtrl.setValue('');
         this.paysSearchCtrl.setValue('');
         // Gestion de la recherche dynamique
-        this.agenceSearchCtrl.valueChanges.subscribe(search => {
+        this.agenceSearchCtrl.valueChanges.subscribe((search: string | null) => {
             const s = (search || '').toLowerCase();
             this.filteredAgencies = this.getAllAgencies().filter(a => a.toLowerCase().includes(s));
+            if (this.filteredAgencies.length === 1 && !this.filterForm.value.agency.includes(this.filteredAgencies[0])) {
+                this.filterForm.controls['agency'].setValue([this.filteredAgencies[0]]);
+                if (this.agenceSelect) { this.agenceSelect.close(); }
+                this.onFilterChange();
+            }
         });
-        this.serviceSearchCtrl.valueChanges.subscribe(search => {
+        this.serviceSearchCtrl.valueChanges.subscribe((search: string | null) => {
             const s = (search || '').toLowerCase();
             this.filteredServices = this.getAllServices().filter(a => a.toLowerCase().includes(s));
+            if (this.filteredServices.length === 1 && !this.filterForm.value.service.includes(this.filteredServices[0])) {
+                this.filterForm.controls['service'].setValue([this.filteredServices[0]]);
+                if (this.serviceSelect) { this.serviceSelect.close(); }
+                this.onFilterChange();
+            }
         });
-        this.paysSearchCtrl.valueChanges.subscribe(search => {
+        this.paysSearchCtrl.valueChanges.subscribe((search: string | null) => {
             const s = (search || '').toLowerCase();
             this.filteredCountries = this.getAllCountries().filter(a => a.toLowerCase().includes(s));
+            if (this.filteredCountries.length === 1 && !this.filterForm.value.country.includes(this.filteredCountries[0])) {
+                this.filterForm.controls['country'].setValue([this.filteredCountries[0]]);
+                if (this.paysSelect) { this.paysSelect.close(); }
+                this.onFilterChange();
+            }
         });
     }
 

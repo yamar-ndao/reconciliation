@@ -16,7 +16,7 @@
       <div style="min-width: 200px;">
         <mat-form-field appearance="fill" class="filter-select">
           <mat-label>Pays</mat-label>
-          <mat-select [(ngModel)]="selectedCountries" multiple (selectionChange)="onCountryChange()">
+          <mat-select #paysSelect [(ngModel)]="selectedCountries" multiple (selectionChange)="onCountryChange()">
             <ngx-mat-select-search [formControl]="paysSearchCtrl" placeholderLabel="Rechercher un pays..." noEntriesFoundLabel="Aucun pays trouvé"></ngx-mat-select-search>
             <mat-option value="Tous les pays">Tous les pays</mat-option>
             <mat-option *ngFor="let country of filteredCountries" [value]="country" [disabled]="country === 'Tous les pays'">

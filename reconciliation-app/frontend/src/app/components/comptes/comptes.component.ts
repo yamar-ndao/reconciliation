@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, OnDestroy, ViewChild } from '@angular/core';
 import { FormBuilder, FormGroup, Validators, FormControl } from '@angular/forms';
 import { Subscription } from 'rxjs';
 import { CompteService } from '../../services/compte.service';
@@ -8,6 +8,7 @@ import { saveAs } from 'file-saver';
 import { OperationService } from '../../services/operation.service';
 import { Operation } from '../../models/operation.model';
 import * as XLSX from 'xlsx';
+import { MatSelect } from '@angular/material/select';
 
 @Component({
     selector: 'app-comptes',
@@ -104,6 +105,9 @@ export class ComptesComponent implements OnInit, OnDestroy {
     paysSearchCtrl = new FormControl('');
     codeProprietaireSearchCtrl = new FormControl('');
 
+    @ViewChild('paysSelect') paysSelect!: MatSelect;
+    @ViewChild('codeProprietaireSelect') codeProprietaireSelect!: MatSelect;
+
     constructor(
         private compteService: CompteService,
         private operationService: OperationService,
@@ -138,13 +142,25 @@ export class ComptesComponent implements OnInit, OnDestroy {
         this.loadOperationsPeriode();
         this.filteredPaysList = this.paysList;
         this.filteredCodeProprietaireList = this.codeProprietaireList;
-        this.paysSearchCtrl.valueChanges.subscribe(search => {
+        this.paysSearchCtrl.valueChanges.subscribe((search: string | null) => {
             const s = (search || '').toLowerCase();
             this.filteredPaysList = this.paysList.filter(p => p.toLowerCase().includes(s));
+            // Sélection automatique si un seul résultat
+            if (this.filteredPaysList.length === 1 && !this.selectedPays.includes(this.filteredPaysList[0])) {
+                this.selectedPays = [this.filteredPaysList[0]];
+                if (this.paysSelect) { this.paysSelect.close(); }
+                this.applyFilters();
+            }
         });
-        this.codeProprietaireSearchCtrl.valueChanges.subscribe(search => {
+        this.codeProprietaireSearchCtrl.valueChanges.subscribe((search: string | null) => {
             const s = (search || '').toLowerCase();
             this.filteredCodeProprietaireList = this.codeProprietaireList.filter(c => c.toLowerCase().includes(s));
+            // Sélection automatique si un seul résultat
+            if (this.filteredCodeProprietaireList.length === 1 && !this.selectedCodesProprietaire.includes(this.filteredCodeProprietaireList[0])) {
+                this.selectedCodesProprietaire = [this.filteredCodeProprietaireList[0]];
+                if (this.codeProprietaireSelect) { this.codeProprietaireSelect.close(); }
+                this.applyFilters();
+            }
         });
     }
 
@@ -246,7 +262,15 @@ export class ComptesComponent implements OnInit, OnDestroy {
     }
 
     applyFilters() {
-        const filter: CompteFilter = this.filterForm.value;
+        // Synchroniser les champs du formulaire avec les sélections UI
+        this.filterForm.controls['pays'].setValue(this.selectedPays);
+        this.filterForm.controls['codeProprietaire'].setValue(this.selectedCodesProprietaire);
+
+        const filter: CompteFilter = {
+            ...this.filterForm.value,
+            pays: this.selectedPays,
+            codeProprietaire: this.selectedCodesProprietaire
+        };
         console.log('Filtres appliqués:', filter);
         this.isLoading = true;
         
@@ -609,14 +633,16 @@ export class ComptesComponent implements OnInit, OnDestroy {
         );
     }
 
-    onPaysChange() {
-        // Ici, appliquez la logique de filtrage sur les comptes selon selectedPays
-        // Par exemple, mettez à jour le formControl 'pays' si besoin :
+    onPaysChange(event: any) {
+        this.selectedPays = event.value;
+        console.log('onPaysChange called, selectedPays:', this.selectedPays, 'event:', event);
         this.filterForm.controls['pays'].setValue(this.selectedPays);
         this.applyFilters();
     }
 
-    onCodeProprietaireChange() {
+    onCodeProprietaireChange(event: any) {
+        this.selectedCodesProprietaire = event.value;
+        console.log('onCodeProprietaireChange called, selectedCodesProprietaire:', this.selectedCodesProprietaire, 'event:', event);
         this.filterForm.controls['codeProprietaire'].setValue(this.selectedCodesProprietaire);
         this.applyFilters();
     }

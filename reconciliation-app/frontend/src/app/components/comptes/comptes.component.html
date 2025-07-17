@@ -97,7 +97,7 @@
                 <div class="form-field">
                     <mat-form-field appearance="fill" class="filter-select">
                         <mat-label>Pays</mat-label>
-                        <mat-select [(ngModel)]="selectedPays" multiple (selectionChange)="onPaysChange()">
+                        <mat-select #paysSelect [(ngModel)]="selectedPays" multiple (selectionChange)="onPaysChange($event)">
                             <ngx-mat-select-search [formControl]="paysSearchCtrl" placeholderLabel="Rechercher un pays..." noEntriesFoundLabel="Aucun pays trouvé"></ngx-mat-select-search>
                             <mat-option *ngFor="let pays of filteredPaysList" [value]="pays">
                                 {{ pays }}
@@ -108,7 +108,7 @@
                 <div class="form-field">
                     <mat-form-field appearance="fill" class="filter-select">
                         <mat-label>Code Propriétaire</mat-label>
-                        <mat-select [(ngModel)]="selectedCodesProprietaire" multiple (selectionChange)="onCodeProprietaireChange()">
+                        <mat-select #codeProprietaireSelect [(ngModel)]="selectedCodesProprietaire" multiple (selectionChange)="onCodeProprietaireChange($event)">
                             <ngx-mat-select-search [formControl]="codeProprietaireSearchCtrl" placeholderLabel="Rechercher un code..." noEntriesFoundLabel="Aucun code trouvé"></ngx-mat-select-search>
                             <mat-option *ngFor="let code of filteredCodeProprietaireList" [value]="code">
                                 {{ code }}

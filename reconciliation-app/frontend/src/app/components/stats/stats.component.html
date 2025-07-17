@@ -12,7 +12,7 @@
                 <div class="filter-group">
                     <mat-form-field appearance="fill" class="filter-select">
                         <mat-label>Client</mat-label>
-                        <mat-select formControlName="agency" multiple (selectionChange)="onFilterChange()">
+                        <mat-select #agenceSelect formControlName="agency" multiple (selectionChange)="onFilterChange()">
                             <ngx-mat-select-search [formControl]="agenceSearchCtrl" placeholderLabel="Rechercher un client..." noEntriesFoundLabel="Aucun client trouvé"></ngx-mat-select-search>
                             <mat-option *ngFor="let agency of filteredAgencies" [value]="agency">
                                 {{ agency }}
@@ -23,7 +23,7 @@
                 <div class="filter-group">
                     <mat-form-field appearance="fill" class="filter-select">
                         <mat-label>Service</mat-label>
-                        <mat-select formControlName="service" multiple (selectionChange)="onFilterChange()">
+                        <mat-select #serviceSelect formControlName="service" multiple (selectionChange)="onFilterChange()">
                             <ngx-mat-select-search [formControl]="serviceSearchCtrl" placeholderLabel="Rechercher un service..." noEntriesFoundLabel="Aucun service trouvé"></ngx-mat-select-search>
                             <mat-option *ngFor="let service of filteredServices" [value]="service">
                                 {{ service }}
@@ -34,7 +34,7 @@
                 <div class="filter-group">
                     <mat-form-field appearance="fill" class="filter-select">
                         <mat-label>Pays</mat-label>
-                        <mat-select formControlName="country" multiple (selectionChange)="onFilterChange()">
+                        <mat-select #paysSelect formControlName="country" multiple (selectionChange)="onFilterChange()">
                             <ngx-mat-select-search [formControl]="paysSearchCtrl" placeholderLabel="Rechercher un pays..." noEntriesFoundLabel="Aucun pays trouvé"></ngx-mat-select-search>
                             <mat-option *ngFor="let country of filteredCountries" [value]="country">
                                 {{ country }}

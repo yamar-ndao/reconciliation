@@ -1,7 +1,8 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, ViewChild } from '@angular/core';
 import { RankingService, RankingItem } from '../../services/ranking.service';
 import * as XLSX from 'xlsx';
 import { FormControl } from '@angular/forms';
+import { MatSelect } from '@angular/material/select';
 
 @Component({
   selector: 'app-ranking',
@@ -70,6 +71,8 @@ export class RankingComponent implements OnInit {
   paysSearchCtrl = new FormControl('');
   filteredCountries: string[] = [];
 
+  @ViewChild('paysSelect') paysSelect!: MatSelect;
+
   constructor(private rankingService: RankingService) { }
 
   ngOnInit(): void {
@@ -85,9 +88,16 @@ export class RankingComponent implements OnInit {
     });
     this.loadAgencyRankings();
     this.loadServiceRankings();
-    this.paysSearchCtrl.valueChanges.subscribe(search => {
+    this.paysSearchCtrl.valueChanges.subscribe((search: string | null) => {
       const s = (search || '').toLowerCase();
       this.filteredCountries = this.countries.filter(c => c.toLowerCase().includes(s));
+      // Sélection automatique si un seul résultat (hors "Tous les pays")
+      const filtered = this.filteredCountries.filter(c => c !== 'Tous les pays');
+      if (filtered.length === 1 && !this.selectedCountries.includes(filtered[0])) {
+        this.selectedCountries = [filtered[0]];
+        if (this.paysSelect) { this.paysSelect.close(); }
+        this.onCountryChange();
+      }
     });
   }
 

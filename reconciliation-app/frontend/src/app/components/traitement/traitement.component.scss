@@ -3,11 +3,12 @@
   width: calc(100vw - 260px);
   margin: 0 auto;
   background: #fff;
-  border-radius: 16px;
-  box-shadow: 0 4px 24px rgba(0,0,0,0.10);
-  padding: 40px 32px 32px 32px;
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+  padding: 24px 20px 20px 20px;
   min-height: auto;
   overflow-y: auto;
+  box-sizing: border-box;
 }
 body, .main-content, .app-root, .ng-star-inserted {
   background: #f4f8fb !important;
@@ -17,26 +18,26 @@ body, .main-content, .app-root, .ng-star-inserted {
 }
 .traitement-container h2 {
   text-align: center;
-  font-size: 2.1rem;
-  margin-bottom: 32px;
+  font-size: 1.8rem;
+  margin-bottom: 20px;
   color: #1a237e;
-  letter-spacing: 1px;
+  letter-spacing: 0.5px;
 }
 .section-title, .traitement-container h4 {
-  margin-top: 32px;
-  margin-bottom: 16px;
+  margin-top: 20px;
+  margin-bottom: 12px;
   color: #283593;
-  font-size: 1.18rem;
+  font-size: 1.1rem;
   font-weight: 600;
 }
 .upload-area {
-  border: 2.5px dashed #1976d2;
-  border-radius: 10px;
-  padding: 48px 20px 32px 20px;
+  border: 2px dashed #1976d2;
+  border-radius: 8px;
+  padding: 32px 16px 24px 16px;
   text-align: center;
   background: #f4f8fb;
   cursor: pointer;
-  margin-bottom: 28px;
+  margin-bottom: 20px;
   transition: border-color 0.2s, background 0.2s;
 }
 .upload-area:hover, .upload-area.dragover {
@@ -44,24 +45,24 @@ body, .main-content, .app-root, .ng-star-inserted {
   background: #e3eafc;
 }
 button {
-  margin-top: 14px;
+  margin-top: 10px;
   background: #1976d2;
   color: #fff;
   border: none;
-  border-radius: 5px;
-  padding: 11px 26px;
-  font-size: 1.05rem;
+  border-radius: 4px;
+  padding: 8px 20px;
+  font-size: 0.95rem;
   font-weight: 500;
   cursor: pointer;
   transition: background 0.2s, box-shadow 0.2s;
-  box-shadow: 0 2px 8px rgba(25, 118, 210, 0.08);
+  box-shadow: 0 1px 4px rgba(25, 118, 210, 0.08);
 }
 button:hover {
   background: #0d47a1;
 }
 .file-list {
-  margin-top: 18px;
-  margin-bottom: 18px;
+  margin-top: 12px;
+  margin-bottom: 12px;
 }
 .file-list ul {
   list-style: none;
@@ -69,14 +70,14 @@ button:hover {
 }
 .file-list li {
   background: #e3eafc;
-  margin-bottom: 6px;
-  padding: 8px 12px;
+  margin-bottom: 4px;
+  padding: 6px 10px;
   border-radius: 4px;
-  font-size: 1rem;
+  font-size: 0.9rem;
   color: #1a237e;
 }
 .preview-table {
-  margin-top: 36px;
+  margin-top: 24px;
 }
 .table-responsive {
   overflow-x: auto;
@@ -84,15 +85,20 @@ button:hover {
   border-radius: 8px;
   box-shadow: 0 1px 4px rgba(0,0,0,0.04);
   padding: 12px;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.98rem;
+  font-size: 0.85rem;
+  table-layout: auto;
+  min-width: 100%;
+  max-width: 100%;
 }
 th, td {
   border: 1px solid #e0e0e0;
-  padding: 7px 12px;
+  padding: 5px 8px;
   text-align: left;
 }
 th {
@@ -106,21 +112,21 @@ th {
   font-size: 0.95em;
 }
 .dedup-section, .format-section, .extract-section, .select-cols-section, .export-section {
-  margin-top: 32px;
-  margin-bottom: 12px;
-  padding: 18px 18px 10px 18px;
+  margin-top: 20px;
+  margin-bottom: 8px;
+  padding: 14px 14px 8px 14px;
   background: #f8fafd;
-  border-radius: 8px;
-  box-shadow: 0 1px 4px rgba(25, 118, 210, 0.04);
+  border-radius: 6px;
+  box-shadow: 0 1px 3px rgba(25, 118, 210, 0.04);
 }
 .dedup-cols, .select-cols, .format-options {
   display: flex;
   flex-wrap: wrap;
-  gap: 18px 24px;
-  margin-bottom: 12px;
+  gap: 12px 16px;
+  margin-bottom: 10px;
 }
 .dedup-cols label, .select-cols label, .format-options label {
-  font-size: 1rem;
+  font-size: 0.9rem;
   color: #283593;
   cursor: pointer;
 }
@@ -143,14 +149,14 @@ th {
 }
 .format-columns select {
   width: 100%;
-  min-width: 220px;
-  max-width: 600px;
-  height: 120px;
-  margin-bottom: 10px;
-  padding: 6px;
-  border-radius: 6px;
+  min-width: 200px;
+  max-width: 500px;
+  height: 100px;
+  margin-bottom: 8px;
+  padding: 4px;
+  border-radius: 4px;
   border: 1px solid #bdbdbd;
-  font-size: 1rem;
+  font-size: 0.9rem;
   background: #f8fafd;
 }
 .format-columns button {
@@ -162,9 +168,9 @@ th {
   background: #e8f5e9;
   border: 1px solid #c8e6c9;
   border-radius: 4px;
-  padding: 6px 12px;
-  margin-top: 8px;
-  font-size: 1rem;
+  padding: 5px 10px;
+  margin-top: 6px;
+  font-size: 0.9rem;
   font-weight: 500;
   display: inline-block;
 }
@@ -173,9 +179,9 @@ th {
   background: #ffebee;
   border: 1px solid #ffcdd2;
   border-radius: 4px;
-  padding: 6px 12px;
-  margin-top: 8px;
-  font-size: 1rem;
+  padding: 5px 10px;
+  margin-top: 6px;
+  font-size: 0.9rem;
   font-weight: 500;
   display: inline-block;
 }
@@ -266,16 +272,16 @@ th {
 
 .file-info-panel {
   background: #f8fafd;
-  border-radius: 8px;
-  padding: 20px;
-  margin-bottom: 20px;
+  border-radius: 6px;
+  padding: 14px;
+  margin-bottom: 14px;
   border: 1px solid #e3eafc;
 }
 
 .file-stats {
   display: flex;
-  gap: 24px;
-  margin-bottom: 16px;
+  gap: 16px;
+  margin-bottom: 12px;
   flex-wrap: wrap;
 }
 
@@ -283,39 +289,39 @@ th {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 12px 16px;
+  padding: 8px 12px;
   background: white;
-  border-radius: 6px;
+  border-radius: 4px;
   border: 1px solid #e3eafc;
-  min-width: 120px;
+  min-width: 100px;
 }
 
 .stat-label {
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   color: #607d8b;
-  margin-bottom: 4px;
+  margin-bottom: 3px;
 }
 
 .stat-value {
-  font-size: 1.1rem;
+  font-size: 1rem;
   font-weight: 600;
   color: #1976d2;
 }
 
 .performance-tips {
   display: flex;
-  gap: 12px;
+  gap: 10px;
   background: #fff3cd;
   border: 1px solid #ffeaa7;
-  border-radius: 6px;
-  padding: 16px;
+  border-radius: 4px;
+  padding: 12px;
   color: #856404;
 }
 
 .tip-icon {
-  font-size: 1.5rem;
+  font-size: 1.2rem;
   flex-shrink: 0;
-  margin-top: 2px;
+  margin-top: 1px;
 }
 
 .tip-content {
@@ -324,33 +330,34 @@ th {
 
 .tip-content strong {
   display: block;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
   color: #856404;
+  font-size: 0.9rem;
 }
 
 .tip-content ul {
   margin: 0;
-  padding-left: 20px;
+  padding-left: 16px;
 }
 
 .tip-content li {
-  margin-bottom: 4px;
-  font-size: 0.9rem;
+  margin-bottom: 3px;
+  font-size: 0.85rem;
 }
 
 .display-controls {
   background: #f8fafd;
-  border-radius: 8px;
-  padding: 16px;
-  margin-bottom: 16px;
+  border-radius: 6px;
+  padding: 12px;
+  margin-bottom: 12px;
   border: 1px solid #e3eafc;
 }
 
 .control-group {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 8px;
+  gap: 10px;
+  margin-bottom: 6px;
 }
 
 .control-group:last-child {
@@ -362,16 +369,17 @@ th {
   color: #283593;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   cursor: pointer;
+  font-size: 0.9rem;
 }
 
 .control-group select {
-  padding: 6px 12px;
+  padding: 4px 8px;
   border: 1px solid #bdbdbd;
-  border-radius: 4px;
+  border-radius: 3px;
   background: white;
-  font-size: 0.95rem;
+  font-size: 0.85rem;
 }
 
 .control-group input[type="checkbox"] {
@@ -381,44 +389,45 @@ th {
 
 .info-text {
   color: #607d8b;
-  font-size: 0.9rem;
+  font-size: 0.8rem;
   font-style: italic;
 }
 
 .pagination {
-  margin-top: 20px;
-  padding: 16px;
+  margin-top: 16px;
+  padding: 12px;
   background: #f8fafd;
-  border-radius: 8px;
+  border-radius: 6px;
   border: 1px solid #e3eafc;
 }
 
 .pagination-info {
   text-align: center;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
   color: #283593;
   font-weight: 500;
+  font-size: 0.9rem;
 }
 
 .pagination-controls {
   display: flex;
   justify-content: center;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
 }
 
 .pagination-btn {
-  padding: 8px 12px;
+  padding: 6px 10px;
   border: 1px solid #bdbdbd;
   background: white;
   color: #283593;
-  border-radius: 4px;
+  border-radius: 3px;
   cursor: pointer;
-  font-size: 0.9rem;
+  font-size: 0.8rem;
   transition: all 0.2s;
   margin: 0;
-  min-width: 40px;
+  min-width: 35px;
 }
 
 .pagination-btn:hover:not(:disabled) {
@@ -451,15 +460,16 @@ th {
 }
 
 .large-file-info {
-  margin-top: 16px;
+  margin-top: 12px;
 }
 
 .info-box {
   background: #fff3cd;
   border: 1px solid #ffeaa7;
-  border-radius: 6px;
-  padding: 12px 16px;
+  border-radius: 4px;
+  padding: 10px 12px;
   color: #856404;
+  font-size: 0.85rem;
 }
 
 .info-box strong {
@@ -473,12 +483,13 @@ th {
 
 // Amélioration de la table pour les gros fichiers
 .table-responsive {
-  max-height: 600px;
+  max-height: 500px;
   overflow-y: auto;
 }
 
 table {
   position: relative;
+  font-size: 0.85rem;
 }
 
 thead {
@@ -521,36 +532,36 @@ th {
 .remove-char-options {
   display: flex;
   flex-wrap: wrap;
-  gap: 16px;
-  margin-bottom: 12px;
-  padding: 12px;
+  gap: 12px;
+  margin-bottom: 10px;
+  padding: 10px;
   background: #f8fafd;
-  border-radius: 6px;
+  border-radius: 4px;
   border: 1px solid #e3eafc;
 }
 
 .option-group {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  min-width: 150px;
+  gap: 4px;
+  min-width: 120px;
 }
 
 .option-group label {
   font-weight: 500;
   color: #283593;
-  font-size: 0.9rem;
+  font-size: 0.8rem;
   margin: 0;
 }
 
 .option-group select,
 .option-group input[type="number"] {
-  padding: 6px 8px;
+  padding: 4px 6px;
   border: 1px solid #bdbdbd;
-  border-radius: 4px;
+  border-radius: 3px;
   background: white;
-  font-size: 0.9rem;
-  min-width: 120px;
+  font-size: 0.8rem;
+  min-width: 100px;
 }
 
 .option-group select:focus,
@@ -590,12 +601,12 @@ th {
 
 .processing-container {
   background: white;
-  border-radius: 12px;
-  padding: 32px;
-  max-width: 500px;
+  border-radius: 10px;
+  padding: 24px;
+  max-width: 450px;
   width: 90%;
   text-align: center;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.3);
   // S'assurer que le conteneur ne bloque pas le scroll
   position: relative;
   margin: auto;
@@ -603,14 +614,14 @@ th {
 
 .processing-header h3 {
   color: #1976d2;
-  margin-bottom: 8px;
-  font-size: 1.4rem;
+  margin-bottom: 6px;
+  font-size: 1.2rem;
 }
 
 .processing-header p {
   color: #666;
-  margin-bottom: 24px;
-  font-size: 1rem;
+  margin-bottom: 20px;
+  font-size: 0.9rem;
 }
 
 .progress-bar-container {
@@ -653,19 +664,20 @@ th {
 .progress-text {
   font-weight: 600;
   color: #1976d2;
-  font-size: 1.1rem;
+  font-size: 1rem;
 }
 
 .processing-info p {
-  margin: 8px 0;
+  margin: 6px 0;
   color: #666;
+  font-size: 0.9rem;
 }
 
 .processing-tip {
-  font-size: 0.9rem;
+  font-size: 0.8rem;
   color: #888;
   font-style: italic;
-  margin-top: 16px;
+  margin-top: 12px;
 }
 
 // Amélioration du bouton désactivé

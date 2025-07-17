@@ -270,21 +270,24 @@ export class TraitementComponent implements OnInit {
       this.columns = [...this.allColumns];
       
       console.log('Fusion multi-fichiers :', this.allColumns);
-      this.updateDisplayedRows();
       
       // Par défaut, aucune colonne n'est sélectionnée pour la sélection, mais tout est affiché
       this.selectedCols = [];
       this.selectionApplied = false;
-      this.combinedRows = [...this.allRows];
-      this.columns = [...this.allColumns];
-      this.originalRows = [...this.allRows]; // À la fin du chargement :
       
       console.log('Traitement terminé - Total lignes:', this.allRows.length, 'Colonnes:', this.columns.length);
       console.log('CombinedRows:', this.combinedRows.length);
       console.log('Premières colonnes:', this.columns.slice(0, 5));
       
-      // Forcer la mise à jour de l'affichage
+      // Forcer la mise à jour de l'affichage avec pagination
       this.updateDisplayedRows();
+      this.updatePagination();
+      
+      // Attendre un peu pour s'assurer que l'affichage est mis à jour
+      await this.delay(100);
+      
+      // Forcer la détection de changement
+      this.cd.detectChanges();
       
       // Afficher un message de succès avec les informations sur le fichier
       if (this.allRows.length > 0) {
@@ -593,6 +596,7 @@ export class TraitementComponent implements OnInit {
   updateDisplayedRows() {
     console.log('updateDisplayedRows appelée - selectionApplied:', this.selectionApplied, 'selectedCols.length:', this.selectedCols.length);
     console.log('allRows.length:', this.allRows.length, 'allColumns.length:', this.allColumns.length);
+    
     if (!this.selectionApplied || this.selectedCols.length === 0) {
       this.combinedRows = [...this.allRows];
       this.columns = [...this.allColumns];
@@ -609,26 +613,58 @@ export class TraitementComponent implements OnInit {
       console.log('Affichage filtré - combinedRows.length:', this.combinedRows.length, 'columns.length:', this.columns.length);
     }
     
+    // Réinitialiser la pagination pour le premier chargement
+    this.currentPage = 1;
+    this.showAllRows = false;
+    
     // Optimisation automatique pour les gros fichiers
     this.optimizeForLargeFiles();
     
     // Mettre à jour l'affichage paginé
     this.updatePagination();
+    
+    // Forcer la détection de changement avec un délai pour s'assurer que le DOM est prêt
+    setTimeout(() => {
+      this.cd.detectChanges();
+      // Forcer un second rafraîchissement pour s'assurer que tout est bien affiché
+      setTimeout(() => {
+        this.cd.detectChanges();
+      }, 100);
+    }, 50);
   }
 
   updatePagination() {
-    this.currentPage = 1;
+    // S'assurer que la pagination est correctement initialisée
+    if (this.currentPage > this.totalPages) {
+      this.currentPage = 1;
+    }
     this.updateDisplayedRowsForPage();
+    
+    // Forcer la détection de changement
+    this.cd.detectChanges();
   }
 
   updateDisplayedRowsForPage() {
+    console.log('updateDisplayedRowsForPage - combinedRows.length:', this.combinedRows.length, 'showAllRows:', this.showAllRows, 'maxDisplayedRows:', this.maxDisplayedRows);
+    
     if (this.showAllRows || this.combinedRows.length <= this.maxDisplayedRows) {
       this.displayedRows = this.combinedRows;
+      console.log('Affichage complet - displayedRows.length:', this.displayedRows.length);
     } else {
       const startIndex = (this.currentPage - 1) * this.rowsPerPage;
       const endIndex = startIndex + this.rowsPerPage;
       this.displayedRows = this.combinedRows.slice(startIndex, endIndex);
+      console.log('Affichage paginé - page:', this.currentPage, 'startIndex:', startIndex, 'endIndex:', endIndex, 'displayedRows.length:', this.displayedRows.length);
     }
+    
+    // Forcer la détection de changement avec un délai pour s'assurer que le DOM est prêt
+    setTimeout(() => {
+      this.cd.detectChanges();
+      // Forcer un second rafraîchissement pour s'assurer que tout est bien affiché
+      setTimeout(() => {
+        this.cd.detectChanges();
+      }, 100);
+    }, 50);
   }
 
   get totalPages(): number {
@@ -1405,10 +1441,53 @@ export class TraitementComponent implements OnInit {
   }
 
   refreshPage() {
-    window.location.reload();
+    // Réinitialiser l'affichage sans recharger la page
+    this.currentPage = 1;
+    this.showAllRows = false;
+    
+    // Réinitialiser les messages
+    this.successMsg = {};
+    this.errorMsg = {};
+    
+    // Mettre à jour l'affichage
+    this.updateDisplayedRows();
+    this.updatePagination();
+    
+    // Forcer la détection de changement avec des délais pour s'assurer que le DOM est prêt
+    setTimeout(() => {
+      this.cd.detectChanges();
+      setTimeout(() => {
+        this.cd.detectChanges();
+        // Afficher un message de confirmation
+        this.showSuccess('refresh', 'Affichage rafraîchi avec succès.');
+      }, 100);
+    }, 50);
   }
 
   ngOnInit() {
-    // Initialisation du composant
+    // Initialiser l'affichage au démarrage
+    this.currentPage = 1;
+    this.showAllRows = false;
+    this.displayedRows = [];
+    this.combinedRows = [];
+    this.columns = [];
+    
+    // Optimiser l'affichage initial
+    this.optimizeInitialDisplay();
+    
+    // Forcer la détection de changement
+    this.cd.detectChanges();
+  }
+
+  // Méthode pour optimiser l'affichage initial
+  private optimizeInitialDisplay() {
+    // S'assurer que les éléments sont correctement dimensionnés
+    setTimeout(() => {
+      this.cd.detectChanges();
+      // Forcer un second rafraîchissement pour s'assurer que tout est bien affiché
+      setTimeout(() => {
+        this.cd.detectChanges();
+      }, 100);
+    }, 50);
   }
 } 

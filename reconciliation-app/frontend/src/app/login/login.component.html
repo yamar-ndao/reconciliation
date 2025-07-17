@@ -18,15 +18,34 @@
       <mat-icon matSuffix>lock</mat-icon>
     </mat-form-field>
     
-    <button mat-raised-button color="primary" type="submit" [disabled]="loginForm.invalid || loading">
+    <button mat-raised-button color="primary" type="submit" [disabled]="loginForm.invalid || loading" class="login-button">
       <mat-icon *ngIf="!loading">login</mat-icon>
       <mat-spinner *ngIf="loading" diameter="20"></mat-spinner>
       {{ loading ? 'Connexion...' : 'Se connecter' }}
     </button>
     
+    <div class="login-actions">
+      <button type="button" mat-button color="accent" (click)="resetToDefault()" class="reset-button">
+        <mat-icon>refresh</mat-icon>
+        Utiliser Admin
+      </button>
+    </div>
+    
     <div *ngIf="error" class="login-error">
       <mat-icon>error</mat-icon>
       {{ error }}
+    </div>
+    
+    <div class="login-info" *ngIf="adminExists">
+      <p><strong>Compte par défaut :</strong></p>
+      <p>Utilisateur : <code>admin</code></p>
+      <p>Mot de passe : <code>admin</code></p>
+    </div>
+    
+    <div class="login-warning" *ngIf="!adminExists">
+      <mat-icon>warning</mat-icon>
+      <p><strong>Attention :</strong> L'utilisateur admin n'existe pas.</p>
+      <p>Veuillez créer un compte administrateur ou utiliser un autre compte.</p>
     </div>
   </form>
 </div>

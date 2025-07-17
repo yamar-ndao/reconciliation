@@ -1,6 +1,8 @@
 import { Component, OnInit } from '@angular/core';
 import { UserService } from '../../services/user.service';
 import { User } from '../../models/user.model';
+import { Profil } from '../../models/profil.model';
+import { ProfilService } from '../../services/profil.service';
 
 @Component({
   selector: 'app-users',
@@ -9,29 +11,41 @@ import { User } from '../../models/user.model';
 })
 export class UsersComponent implements OnInit {
   users: User[] = [];
+  profils: Profil[] = [];
   newUser: User = { username: '', password: '' };
   editingUser: User | null = null;
-  isCreating = false;
+  showCreateForm = false; // Ajouté pour afficher/masquer le formulaire
+  isCreating = false; // Sert uniquement à désactiver le bouton pendant la création
   isEditing = false;
   errorMessage = '';
   successMessage = '';
 
-  constructor(private userService: UserService) { }
+  constructor(private userService: UserService, private profilService: ProfilService) { }
 
   ngOnInit(): void {
     this.loadUsers();
+    this.loadProfils();
   }
 
   loadUsers(): void {
+    console.log('Chargement des utilisateurs...');
     this.userService.getAllUsers().subscribe({
       next: (users) => {
+        console.log('Utilisateurs chargés:', users);
         this.users = users;
+        if (users.length === 0) {
+          this.errorMessage = 'Aucun utilisateur trouvé dans la base de données. Vérifiez que les migrations ont été exécutées.';
+        }
       },
       error: (error) => {
-        this.errorMessage = 'Erreur lors du chargement des utilisateurs';
         console.error('Error loading users:', error);
+        this.errorMessage = `Erreur lors du chargement des utilisateurs: ${error.message || 'Erreur de connexion au serveur'}`;
       }
     });
+  }
+
+  loadProfils(): void {
+    this.profilService.getProfils().subscribe(profils => this.profils = profils);
   }
 
   createUser(): void {
@@ -46,6 +60,7 @@ export class UsersComponent implements OnInit {
         this.users.push(user);
         this.newUser = { username: '', password: '' };
         this.isCreating = false;
+        this.showCreateForm = false; // Masquer le formulaire après création
         this.successMessage = 'Utilisateur créé avec succès';
         this.clearMessages();
       },

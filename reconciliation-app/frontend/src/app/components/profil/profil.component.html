@@ -1,0 +1,86 @@
+<div class="profil-container">
+  <h2>Gestion des profils</h2>
+  <div class="profil-list">
+    <h3>Liste des profils</h3>
+    <ul>
+      <li *ngFor="let profil of profils" (click)="selectProfil(profil)" [class.selected]="selectedProfil?.id === profil.id">
+        {{ profil.nom }}
+        <button (click)="deleteProfil(profil); $event.stopPropagation()">Supprimer</button>
+      </li>
+    </ul>
+    <input [(ngModel)]="newProfilName" placeholder="Nom du nouveau profil">
+    <button (click)="createProfil()">Créer</button>
+  </div>
+
+  <div *ngIf="selectedProfil" class="profil-droits">
+    <h3>Droits du profil : {{ selectedProfil?.nom }}</h3>
+    <table class="droits-table">
+      <thead>
+        <tr>
+          <th>Module</th>
+          <th *ngFor="let permission of permissions">{{ permission.nom }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let module of getAssociatedModules()">
+          <td>{{ module.nom }}</td>
+          <td *ngFor="let permission of permissions">
+            <input type="checkbox"
+              [checked]="hasPermission(module, permission)"
+              (change)="togglePermission(module, permission, $event)"
+            />
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div *ngIf="selectedProfil" class="module-action-management">
+    <h3>Choisir un menu (module)</h3>
+    <select [(ngModel)]="selectedModuleId" (change)="onModuleChange()">
+      <option value="" disabled>Choisir un menu</option>
+      <option *ngFor="let module of modules" [value]="module.id">{{ module.nom }}</option>
+    </select>
+  </div>
+
+  <div *ngIf="selectedProfil && selectedModuleId" class="permission-management">
+    <h3>Ajouter une action (permission) au menu sélectionné</h3>
+    
+    <div *ngIf="loadingModulePermissions" class="loading-message">
+      Chargement des actions disponibles...
+    </div>
+    
+    <div *ngIf="!loadingModulePermissions">
+      <p class="info-message">
+        Sélectionnez une action dans la liste ci-dessous. Les actions déjà attribuées à ce profil pour ce module sont désactivées.
+      </p>
+      <select [(ngModel)]="selectedPermissionName">
+        <option value="" disabled>Choisir une action existante</option>
+        <option *ngFor="let permission of availableModulePermissions" [value]="permission.nom" [disabled]="permissionExistsForModule(permission.nom)">
+          {{ permission.nom }}{{ permissionExistsForModule(permission.nom) ? ' (déjà attribuée)' : '' }}
+        </option>
+      </select>
+      <button (click)="addExistingPermissionToModule()" [disabled]="!selectedPermissionName || permissionExistsForModule(selectedPermissionName)">Ajouter l'action sélectionnée</button>
+      <br><br>
+      <input [(ngModel)]="newPermissionName" placeholder="Nouvelle action (ex: Valider)">
+      <button (click)="createPermissionForModule()" [disabled]="!newPermissionName || permissionExistsForModule(newPermissionName)">Ajouter la nouvelle action</button>
+    </div>
+  </div>
+
+  <div *ngIf="selectedProfil" class="module-management">
+    <h3>Gestion des menus (modules)</h3>
+    <ul>
+      <li *ngFor="let module of modules">
+        {{ module.nom }}
+        <button (click)="deleteModule(module)">Supprimer</button>
+      </li>
+    </ul>
+    <select [(ngModel)]="selectedMenuName">
+      <option value="" disabled>Choisir un menu</option>
+      <option *ngFor="let menu of appMenus" [value]="menu" [disabled]="menuExists(menu)">
+        {{ menu }}
+      </option>
+    </select>
+    <button (click)="createModule()" [disabled]="!selectedMenuName || menuExists(selectedMenuName)">Ajouter le menu</button>
+  </div>
+</div> 

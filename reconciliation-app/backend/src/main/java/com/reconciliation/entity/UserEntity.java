@@ -15,6 +15,10 @@ public class UserEntity {
     @Column(nullable = false)
     private String password;
 
+    @ManyToOne
+    @JoinColumn(name = "profil_id")
+    private ProfilEntity profil;
+
     // Getters et setters
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
@@ -22,4 +26,6 @@ public class UserEntity {
     public void setUsername(String username) { this.username = username; }
     public String getPassword() { return password; }
     public void setPassword(String password) { this.password = password; }
+    public ProfilEntity getProfil() { return profil; }
+    public void setProfil(ProfilEntity profil) { this.profil = profil; }
 } 
