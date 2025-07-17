@@ -164,36 +164,51 @@
     <!-- Filtres -->
     <div class="filters-section">
         <h3>Filtres</h3>
-        <form [formGroup]="filterForm" (ngSubmit)="applyFilters()" class="filters-form">
-            <div class="form-row">
+        <form [formGroup]="filterForm" class="filters-form">
+            <div class="form-row single-line">
                 <div class="form-group">
                     <label>Service</label>
-                    <app-autocomplete-input
-                        [options]="services"
-                        formControlName="service"
-                        placeholder="Tous les services">
-                    </app-autocomplete-input>
+                    <mat-form-field appearance="fill" class="filter-select">
+                        <mat-label>Service</mat-label>
+                        <mat-select #serviceSelect formControlName="services" multiple (selectionChange)="onServiceChange($event)">
+                            <ngx-mat-select-search [formControl]="serviceSearchCtrl" placeholderLabel="Rechercher un service..." noEntriesFoundLabel="Aucun service trouvé"></ngx-mat-select-search>
+                            <mat-option *ngFor="let service of filteredServicesList" [value]="service">
+                                {{ service }}
+                            </mat-option>
+                        </mat-select>
+                    </mat-form-field>
                 </div>
                 <div class="form-group">
                     <label>Client</label>
-                    <app-autocomplete-input
-                        [options]="agences"
-                        formControlName="agence"
-                        placeholder="Tous les clients">
-                    </app-autocomplete-input>
+                    <mat-form-field appearance="fill" class="filter-select">
+                        <mat-label>Client</mat-label>
+                        <mat-select #agenceSelect formControlName="agences" multiple (selectionChange)="onAgenceChange($event)">
+                            <ngx-mat-select-search [formControl]="agenceSearchCtrl" placeholderLabel="Rechercher un client..." noEntriesFoundLabel="Aucun client trouvé"></ngx-mat-select-search>
+                            <mat-option *ngFor="let agence of filteredAgencesList" [value]="agence">
+                                {{ agence }}
+                            </mat-option>
+                        </mat-select>
+                    </mat-form-field>
                 </div>
                 <div class="form-group">
                     <label>Statut</label>
-                    <select formControlName="actif">
+                    <select formControlName="actif" (change)="applyFilters()">
                         <option value="">Tous</option>
                         <option [value]="true">Actif</option>
                         <option [value]="false">Inactif</option>
                     </select>
                 </div>
-            </div>
-            <div class="form-actions">
-                <button type="submit">Appliquer les filtres</button>
-                <button type="button" (click)="clearFilters()">Effacer les filtres</button>
+                <div class="form-group">
+                    <label for="dateDebut">Date de début</label>
+                    <input id="dateDebut" type="date" [value]="dateDebut" (change)="onDateDebutChange($event)">
+                </div>
+                <div class="form-group">
+                    <label for="dateFin">Date de fin</label>
+                    <input id="dateFin" type="date" [value]="dateFin" (change)="onDateFinChange($event)">
+                </div>
+                <div class="form-group">
+                    <button type="button" (click)="clearFilters()">Effacer les filtres</button>
+                </div>
             </div>
         </form>
     </div>

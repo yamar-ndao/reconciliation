@@ -1,9 +1,10 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
-import { FormBuilder, FormGroup, Validators } from '@angular/forms';
+import { Component, OnInit, OnDestroy, ViewChild } from '@angular/core';
+import { FormBuilder, FormGroup, Validators, FormControl } from '@angular/forms';
 import { Subscription } from 'rxjs';
 import { FraisTransactionService } from '../../services/frais-transaction.service';
 import { FraisTransaction, FraisTransactionRequest } from '../../models/frais-transaction.model';
 import * as XLSX from 'xlsx';
+import { MatSelect } from '@angular/material/select';
 
 interface ExportFraisData {
     'ID'?: number | undefined;
@@ -58,6 +59,18 @@ export class FraisComponent implements OnInit, OnDestroy {
     testNombreTransactions: number = 1;
     testResult: any = null;
     
+    // Filtres avancés
+    serviceSearch: string = '';
+    filteredServicesList: string[] = [];
+    agenceSearch: string = '';
+    filteredAgencesList: string[] = [];
+    serviceSearchCtrl = new FormControl('');
+    agenceSearchCtrl = new FormControl('');
+    dateDebut: string = '';
+    dateFin: string = '';
+    @ViewChild('serviceSelect') serviceSelect!: MatSelect;
+    @ViewChild('agenceSelect') agenceSelect!: MatSelect;
+    
     private subscription = new Subscription();
     
     constructor(
@@ -86,9 +99,11 @@ export class FraisComponent implements OnInit, OnDestroy {
         });
         
         this.filterForm = this.fb.group({
-            service: [''],
-            agence: [''],
-            actif: ['']
+            services: [[]],
+            agences: [[]],
+            actif: [''],
+            dateDebut: [''],
+            dateFin: ['']
         });
     }
     
@@ -96,6 +111,24 @@ export class FraisComponent implements OnInit, OnDestroy {
         this.loadFraisTransactions();
         this.loadServices();
         this.loadAgences();
+        this.serviceSearchCtrl.valueChanges.subscribe((search: string | null) => {
+            const s = (search || '').toLowerCase();
+            this.filteredServicesList = this.services.filter(p => p.toLowerCase().includes(s));
+            if (this.filteredServicesList.length === 1 && !this.filterForm.controls['services'].value.includes(this.filteredServicesList[0])) {
+                this.filterForm.controls['services'].setValue([this.filteredServicesList[0]]);
+                if (this.serviceSelect) { this.serviceSelect.close(); }
+                this.applyFilters();
+            }
+        });
+        this.agenceSearchCtrl.valueChanges.subscribe((search: string | null) => {
+            const s = (search || '').toLowerCase();
+            this.filteredAgencesList = this.agences.filter(c => c.toLowerCase().includes(s));
+            if (this.filteredAgencesList.length === 1 && !this.filterForm.controls['agences'].value.includes(this.filteredAgencesList[0])) {
+                this.filterForm.controls['agences'].setValue([this.filteredAgencesList[0]]);
+                if (this.agenceSelect) { this.agenceSelect.close(); }
+                this.applyFilters();
+            }
+        });
     }
     
     ngOnDestroy() {
@@ -125,6 +158,7 @@ export class FraisComponent implements OnInit, OnDestroy {
             this.fraisTransactionService.getAllServices().subscribe({
                 next: (services) => {
                     this.services = services;
+                    this.filteredServicesList = services; // Correction ici
                 },
                 error: (err) => {
                     console.error('Erreur de chargement des services', err);
@@ -138,6 +172,7 @@ export class FraisComponent implements OnInit, OnDestroy {
             this.fraisTransactionService.getAllAgences().subscribe({
                 next: (agences) => {
                     this.agences = agences;
+                    this.filteredAgencesList = agences; // Correction ici
                 },
                 error: (err) => {
                     console.error('Erreur de chargement des agences', err);
@@ -275,16 +310,31 @@ export class FraisComponent implements OnInit, OnDestroy {
     }
     
     applyFilters() {
-        const filters = this.filterForm.value;
-        
-        this.filteredFrais = this.fraisTransactions.filter(frais => {
-            return (!filters.service || frais.service === filters.service) &&
-                   (!filters.agence || frais.agence === filters.agence) &&
-                   (filters.actif === '' || frais.actif === filters.actif);
-        });
-        
-        this.currentPage = 1;
-        this.updatePagedFrais();
+        // Synchroniser les champs du formulaire avec les sélections UI
+        this.filterForm.controls['services'].setValue(this.filterForm.controls['services'].value);
+        this.filterForm.controls['agences'].setValue(this.filterForm.controls['agences'].value);
+        const filter = {
+            ...this.filterForm.value,
+            services: this.filterForm.controls['services'].value,
+            agences: this.filterForm.controls['agences'].value,
+            dateDebut: this.dateDebut,
+            dateFin: this.dateFin
+        };
+        this.isLoading = true;
+        this.subscription.add(
+            this.fraisTransactionService.filterFraisTransactions(filter).subscribe({
+                next: (frais) => {
+                    this.fraisTransactions = frais;
+                    this.filteredFrais = [...frais];
+                    this.updatePagedFrais();
+                    this.isLoading = false;
+                },
+                error: (error) => {
+                    console.error('Erreur lors du filtrage:', error);
+                    this.isLoading = false;
+                }
+            })
+        );
     }
     
     clearFilters() {
@@ -580,5 +630,24 @@ export class FraisComponent implements OnInit, OnDestroy {
                 }
             })
         );
+    }
+
+    onServiceChange(event: any) {
+        this.filterForm.controls['services'].setValue(event.value);
+        this.applyFilters();
+    }
+    onAgenceChange(event: any) {
+        this.filterForm.controls['agences'].setValue(event.value);
+        this.applyFilters();
+    }
+    onDateDebutChange(event: any) {
+        this.dateDebut = event.target.value;
+        this.filterForm.controls['dateDebut'].setValue(this.dateDebut);
+        this.applyFilters();
+    }
+    onDateFinChange(event: any) {
+        this.dateFin = event.target.value;
+        this.filterForm.controls['dateFin'].setValue(this.dateFin);
+        this.applyFilters();
     }
 } 
