@@ -5,6 +5,7 @@ import { Subscription } from 'rxjs';
 import { DashboardService, DashboardMetrics, DetailedMetrics, TransactionCreatedStats, ServiceStat } from '../../services/dashboard.service';
 import { AppStateService } from '../../services/app-state.service';
 import * as XLSX from 'xlsx';
+import * as ExcelJS from 'exceljs';
 import { ChartConfiguration } from 'chart.js';
 import { AgencySummaryService } from '../../services/agency-summary.service';
 import { OperationService } from '../../services/operation.service';
@@ -1173,9 +1174,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
     exportDetailedMetricsExcel() {
         if (!this.detailedMetrics) return;
-        const wb = XLSX.utils.book_new();
+        
+        const workbook = new ExcelJS.Workbook();
 
         // 1. Feuille Métriques principales avec couleurs
+        const sheetMain = workbook.addWorksheet('Métriques');
         const mainMetrics = [
             ['Métrique', 'Valeur'],
             ['Volume Total', this.detailedMetrics.totalVolume],
@@ -1185,235 +1188,300 @@ export class DashboardComponent implements OnInit, OnDestroy {
             ['Volume Moyen/Jour', this.detailedMetrics.averageVolume],
             ['Frais moyen/Jour', this.detailedMetrics.averageFeesPerDay],
         ];
-        const wsMain = XLSX.utils.aoa_to_sheet(mainMetrics);
         
-        // Appliquer des styles et couleurs
-        wsMain['!cols'] = [{ width: 25 }, { width: 20 }];
-        
-        // Style pour l'en-tête
-        if (wsMain['A1']) {
-            wsMain['A1'].s = {
-                fill: { fgColor: { rgb: "4F81BD" } },
-                font: { color: { rgb: "FFFFFF" }, bold: true },
-                alignment: { horizontal: "center" }
-            };
-        }
-        if (wsMain['B1']) {
-            wsMain['B1'].s = {
-                fill: { fgColor: { rgb: "4F81BD" } },
-                font: { color: { rgb: "FFFFFF" }, bold: true },
-                alignment: { horizontal: "center" }
-            };
-        }
-        
-        // Styles pour les métriques
-        for (let i = 2; i <= mainMetrics.length; i++) {
-            const cellA = wsMain[`A${i}`];
-            const cellB = wsMain[`B${i}`];
-            
-            if (cellA) {
-                cellA.s = {
-                    fill: { fgColor: { rgb: "E7E6E6" } },
-                    font: { bold: true },
-                    alignment: { horizontal: "left" }
-                };
+        mainMetrics.forEach((row, index) => {
+            const excelRow = sheetMain.addRow(row);
+            if (index === 0) {
+                // En-tête
+                excelRow.eachCell((cell) => {
+                    cell.fill = {
+                        type: 'pattern',
+                        pattern: 'solid',
+                        fgColor: { argb: 'FF4F81BD' } // Bleu
+                    };
+                    cell.font = {
+                        color: { argb: 'FFFFFFFF' },
+                        bold: true,
+                        size: 11
+                    };
+                    cell.alignment = {
+                        vertical: 'middle',
+                        horizontal: 'center',
+                        wrapText: true
+                    };
+                    cell.border = {
+                        top: { style: 'thin', color: { argb: 'FF000000' } },
+                        left: { style: 'thin', color: { argb: 'FF000000' } },
+                        bottom: { style: 'thin', color: { argb: 'FF000000' } },
+                        right: { style: 'thin', color: { argb: 'FF000000' } }
+                    };
+                });
+            } else {
+                // Données
+                excelRow.eachCell((cell, colNumber) => {
+                    const isEven = index % 2 === 0;
+                    cell.fill = {
+                        type: 'pattern',
+                        pattern: 'solid',
+                        fgColor: { argb: colNumber === 1 ? 'FFE7E6E6' : (isEven ? 'FFF2F2F2' : 'FFFFFFFF') }
+                    };
+                    cell.font = {
+                        bold: colNumber === 1,
+                        size: 11
+                    };
+                    cell.alignment = {
+                        vertical: 'middle',
+                        horizontal: colNumber === 1 ? 'left' : 'right',
+                        wrapText: true
+                    };
+                    cell.border = {
+                        top: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+                        left: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+                        bottom: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+                        right: { style: 'thin', color: { argb: 'FFCCCCCC' } }
+                    };
+                    if (colNumber === 2 && (index === 1 || index === 4 || index === 5)) {
+                        cell.numFmt = '#,##0';
+                    }
+                });
             }
-            
-            if (cellB) {
-                cellB.s = {
-                    fill: { fgColor: { rgb: "F2F2F2" } },
-                    font: { color: { rgb: "000000" } },
-                    alignment: { horizontal: "right" },
-                    numFmt: i === 2 || i === 5 || i === 6 ? "#,##0" : "0"
-                };
-            }
-        }
+        });
         
-        XLSX.utils.book_append_sheet(wb, wsMain, 'Métriques');
+        sheetMain.columns = [{ width: 25 }, { width: 20 }];
+        sheetMain.views = [{ state: 'frozen', ySplit: 1 }];
 
         // 2. Feuille Statistiques par type d'opération avec couleurs
         if (this.filteredOperationStats && this.filteredOperationStats.length > 0) {
+            const sheetOp = workbook.addWorksheet('Stats opérations');
             const opHeader = ['Type d\'opération', 'Transactions', 'Volume total', 'Volume moyen'];
-            const opData = this.filteredOperationStats.map(stat => [
-                stat.operationType,
-                stat.transactionCount,
-                stat.totalVolume,
-                stat.averageVolume
-            ]);
-            const wsOp = XLSX.utils.aoa_to_sheet([opHeader, ...opData]);
+            const headerRow = sheetOp.addRow(opHeader);
             
-            // Appliquer des styles
-            wsOp['!cols'] = [{ width: 20 }, { width: 15 }, { width: 18 }, { width: 18 }];
+            // Style en-tête
+            headerRow.eachCell((cell) => {
+                cell.fill = {
+                    type: 'pattern',
+                    pattern: 'solid',
+                    fgColor: { argb: 'FF70AD47' } // Vert
+                };
+                cell.font = {
+                    color: { argb: 'FFFFFFFF' },
+                    bold: true,
+                    size: 11
+                };
+                cell.alignment = {
+                    vertical: 'middle',
+                    horizontal: 'center',
+                    wrapText: true
+                };
+                cell.border = {
+                    top: { style: 'thin', color: { argb: 'FF000000' } },
+                    left: { style: 'thin', color: { argb: 'FF000000' } },
+                    bottom: { style: 'thin', color: { argb: 'FF000000' } },
+                    right: { style: 'thin', color: { argb: 'FF000000' } }
+                };
+            });
             
-            // Style pour l'en-tête
-            for (let col = 0; col < opHeader.length; col++) {
-                const cell = wsOp[XLSX.utils.encode_cell({ r: 0, c: col })];
-                if (cell) {
-                    cell.s = {
-                        fill: { fgColor: { rgb: "70AD47" } },
-                        font: { color: { rgb: "FFFFFF" }, bold: true },
-                        alignment: { horizontal: "center" }
+            // Données
+            this.filteredOperationStats.forEach((stat, index) => {
+                const row = sheetOp.addRow([
+                    stat.operationType,
+                    stat.transactionCount,
+                    stat.totalVolume,
+                    stat.averageVolume
+                ]);
+                
+                const isEven = index % 2 === 0;
+                row.eachCell((cell, colNumber) => {
+                    cell.fill = {
+                        type: 'pattern',
+                        pattern: 'solid',
+                        fgColor: { argb: isEven ? 'FFF2F2F2' : 'FFFFFFFF' }
                     };
-                }
-            }
-            
-            // Styles pour les données
-            for (let row = 1; row <= opData.length; row++) {
-                for (let col = 0; col < opHeader.length; col++) {
-                    const cell = wsOp[XLSX.utils.encode_cell({ r: row, c: col })];
-                    if (cell) {
-                        const isEven = row % 2 === 0;
-                        cell.s = {
-                            fill: { fgColor: { rgb: isEven ? "F2F2F2" : "FFFFFF" } },
-                            font: { color: { rgb: "000000" } },
-                            alignment: { horizontal: col === 0 ? "left" : "right" },
-                            numFmt: col >= 1 ? "#,##0" : "0"
-                        };
+                    cell.border = {
+                        top: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+                        left: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+                        bottom: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+                        right: { style: 'thin', color: { argb: 'FFCCCCCC' } }
+                    };
+                    cell.alignment = {
+                        vertical: 'middle',
+                        horizontal: colNumber === 1 ? 'left' : 'right',
+                        wrapText: true
+                    };
+                    if (colNumber > 1) {
+                        cell.numFmt = '#,##0';
                     }
-                }
-            }
+                });
+            });
             
-            XLSX.utils.book_append_sheet(wb, wsOp, 'Stats opérations');
+            sheetOp.columns = [{ width: 20 }, { width: 15 }, { width: 18 }, { width: 18 }];
+            sheetOp.views = [{ state: 'frozen', ySplit: 1 }];
         }
 
         // 3. Feuille Fréquence avec couleurs
         if (this.filteredFrequencyStats && this.filteredFrequencyStats.length > 0) {
+            const sheetFreq = workbook.addWorksheet('Fréquence');
             const freqHeader = ['Type d\'opération', 'Fréquence'];
-            const freqData = this.filteredFrequencyStats.map(stat => [
-                stat.operationType,
-                stat.frequency
-            ]);
-            const wsFreq = XLSX.utils.aoa_to_sheet([freqHeader, ...freqData]);
+            const headerRow = sheetFreq.addRow(freqHeader);
             
-            // Appliquer des styles
-            wsFreq['!cols'] = [{ width: 20 }, { width: 15 }];
+            // Style en-tête
+            headerRow.eachCell((cell) => {
+                cell.fill = {
+                    type: 'pattern',
+                    pattern: 'solid',
+                    fgColor: { argb: 'FFFFC000' } // Orange
+                };
+                cell.font = {
+                    color: { argb: 'FF000000' },
+                    bold: true,
+                    size: 11
+                };
+                cell.alignment = {
+                    vertical: 'middle',
+                    horizontal: 'center',
+                    wrapText: true
+                };
+                cell.border = {
+                    top: { style: 'thin', color: { argb: 'FF000000' } },
+                    left: { style: 'thin', color: { argb: 'FF000000' } },
+                    bottom: { style: 'thin', color: { argb: 'FF000000' } },
+                    right: { style: 'thin', color: { argb: 'FF000000' } }
+                };
+            });
             
-            // Style pour l'en-tête
-            for (let col = 0; col < freqHeader.length; col++) {
-                const cell = wsFreq[XLSX.utils.encode_cell({ r: 0, c: col })];
-                if (cell) {
-                    cell.s = {
-                        fill: { fgColor: { rgb: "FFC000" } },
-                        font: { color: { rgb: "000000" }, bold: true },
-                        alignment: { horizontal: "center" }
+            // Données
+            this.filteredFrequencyStats.forEach((stat, index) => {
+                const row = sheetFreq.addRow([
+                    stat.operationType,
+                    stat.frequency
+                ]);
+                
+                const isEven = index % 2 === 0;
+                row.eachCell((cell, colNumber) => {
+                    cell.fill = {
+                        type: 'pattern',
+                        pattern: 'solid',
+                        fgColor: { argb: isEven ? 'FFFFF2CC' : 'FFFFFFFF' }
                     };
-                }
-            }
+                    cell.border = {
+                        top: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+                        left: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+                        bottom: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+                        right: { style: 'thin', color: { argb: 'FFCCCCCC' } }
+                    };
+                    cell.alignment = {
+                        vertical: 'middle',
+                        horizontal: colNumber === 1 ? 'left' : 'right',
+                        wrapText: true
+                    };
+                });
+            });
             
-            // Styles pour les données
-            for (let row = 1; row <= freqData.length; row++) {
-                for (let col = 0; col < freqHeader.length; col++) {
-                    const cell = wsFreq[XLSX.utils.encode_cell({ r: row, c: col })];
-                    if (cell) {
-                        const isEven = row % 2 === 0;
-                        cell.s = {
-                            fill: { fgColor: { rgb: isEven ? "FFF2CC" : "FFFFFF" } },
-                            font: { color: { rgb: "000000" } },
-                            alignment: { horizontal: col === 0 ? "left" : "right" },
-                            numFmt: col === 1 ? "0" : "0"
-                        };
-                    }
-                }
-            }
-            
-            XLSX.utils.book_append_sheet(wb, wsFreq, 'Fréquence');
+            sheetFreq.columns = [{ width: 20 }, { width: 15 }];
+            sheetFreq.views = [{ state: 'frozen', ySplit: 1 }];
         }
 
         // 4. Feuille de résumé avec filtres appliqués
-        const summaryData = [
-            ['Rapport des Métriques Détaillées'],
-            [''],
-            ['Filtres appliqués:'],
-            ['Agences', this.selectedAgency?.join(', ') || 'Tous'],
-            ['Services', this.selectedService?.join(', ') || 'Tous'],
-            ['Pays', this.selectedCountry?.join(', ') || 'Tous'],
-            // ['Banque', this.selectedBanque], // supprimé
-            ['Période', this.selectedTimeFilter],
-            [''],
-            ['Date de génération', new Date().toLocaleString('fr-FR')]
-        ];
+        const sheetSummary = workbook.addWorksheet('Résumé');
+        const titleRow = sheetSummary.addRow(['Rapport des Métriques Détaillées']);
+        sheetSummary.addRow(['']);
+        sheetSummary.addRow(['Filtres appliqués:']);
+        sheetSummary.addRow(['Agences', this.selectedAgency?.join(', ') || 'Tous']);
+        sheetSummary.addRow(['Services', this.selectedService?.join(', ') || 'Tous']);
+        sheetSummary.addRow(['Pays', this.selectedCountry?.join(', ') || 'Tous']);
+        sheetSummary.addRow(['Période', this.selectedTimeFilter]);
+        sheetSummary.addRow(['']);
+        sheetSummary.addRow(['Date de génération', new Date().toLocaleString('fr-FR')]);
         
-        const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
+        // Style titre
+        const titleCell = titleRow.getCell(1);
+        titleCell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FF4472C4' } // Bleu foncé
+        };
+        titleCell.font = {
+            color: { argb: 'FFFFFFFF' },
+            bold: true,
+            size: 14
+        };
+        titleCell.alignment = {
+            vertical: 'middle',
+            horizontal: 'center'
+        };
+        sheetSummary.mergeCells('A1:B1');
         
-        // Ajuster les largeurs de colonnes selon le contenu
-        const maxLabelLength = Math.max(...summaryData.map(row => row[0]?.toString().length || 0));
-        const maxValueLength = Math.max(...summaryData.map(row => row[1]?.toString().length || 0));
-        
-        wsSummary['!cols'] = [
-            { width: Math.max(maxLabelLength + 2, 15) }, // Label + marge
-            { width: Math.max(maxValueLength + 2, 30) }  // Valeur + marge
-        ];
-        
-        // Style pour le titre
-        if (wsSummary['A1']) {
-            wsSummary['A1'].s = {
-                fill: { fgColor: { rgb: "4472C4" } },
-                font: { color: { rgb: "FFFFFF" }, bold: true, size: 14 },
-                alignment: { horizontal: "center", vertical: "center" }
-            };
-            // Fusionner les cellules pour le titre
-            wsSummary['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 1 } }];
-        }
-        
-        // Style pour "Filtres appliqués"
-        if (wsSummary['A3']) {
-            wsSummary['A3'].s = {
-                fill: { fgColor: { rgb: "E7E6E6" } },
-                font: { bold: true, size: 12 },
-                alignment: { horizontal: "left", vertical: "center" }
-            };
-            // Fusionner les cellules pour "Filtres appliqués"
-            wsSummary['!merges'] = wsSummary['!merges'] || [];
-            wsSummary['!merges'].push({ s: { r: 2, c: 0 }, e: { r: 2, c: 1 } });
-        }
+        // Style "Filtres appliqués"
+        const filterTitleCell = sheetSummary.getCell('A3');
+        filterTitleCell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFE7E6E6' }
+        };
+        filterTitleCell.font = {
+            bold: true,
+            size: 12
+        };
+        sheetSummary.mergeCells('A3:B3');
         
         // Styles pour les filtres
         for (let i = 4; i <= 7; i++) {
-            const cellA = wsSummary[`A${i}`];
-            const cellB = wsSummary[`B${i}`];
+            const cellA = sheetSummary.getCell(`A${i}`);
+            const cellB = sheetSummary.getCell(`B${i}`);
             
-            if (cellA) {
-                cellA.s = {
-                    fill: { fgColor: { rgb: "F8F9FA" } },
-                    font: { bold: true },
-                    alignment: { horizontal: "left", vertical: "center" },
-                    border: { 
-                        right: { style: "thin", color: { rgb: "CCCCCC" } }
-                    }
-                };
-            }
-            
-            if (cellB) {
-                cellB.s = {
-                    fill: { fgColor: { rgb: "FFFFFF" } },
-                    font: { color: { rgb: "333333" } },
-                    alignment: { horizontal: "left", vertical: "center" },
-                    border: { 
-                        left: { style: "thin", color: { rgb: "CCCCCC" } }
-                    }
-                };
-            }
-        }
-        
-        // Style pour la date de génération
-        if (wsSummary['A9']) {
-            wsSummary['A9'].s = {
-                fill: { fgColor: { rgb: "E7E6E6" } },
-                font: { bold: true, italic: true },
-                alignment: { horizontal: "left", vertical: "center" }
+            cellA.fill = {
+                type: 'pattern',
+                pattern: 'solid',
+                fgColor: { argb: 'FFF8F9FA' }
             };
-        }
-        if (wsSummary['B9']) {
-            wsSummary['B9'].s = {
-                fill: { fgColor: { rgb: "F2F2F2" } },
-                font: { italic: true, color: { rgb: "666666" } },
-                alignment: { horizontal: "left", vertical: "center" }
+            cellA.font = { bold: true };
+            cellA.border = {
+                right: { style: 'thin', color: { argb: 'FFCCCCCC' } }
+            };
+            
+            cellB.fill = {
+                type: 'pattern',
+                pattern: 'solid',
+                fgColor: { argb: 'FFFFFFFF' }
+            };
+            cellB.border = {
+                left: { style: 'thin', color: { argb: 'FFCCCCCC' } }
             };
         }
         
-        XLSX.utils.book_append_sheet(wb, wsSummary, 'Résumé');
+        // Style date
+        const dateLabelCell = sheetSummary.getCell('A9');
+        dateLabelCell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFE7E6E6' }
+        };
+        dateLabelCell.font = { bold: true, italic: true };
+        
+        const dateValueCell = sheetSummary.getCell('B9');
+        dateValueCell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFF2F2F2' }
+        };
+        dateValueCell.font = { italic: true, color: { argb: 'FF666666' } };
+        
+        sheetSummary.columns = [
+            { width: 20 },
+            { width: 40 }
+        ];
 
-        XLSX.writeFile(wb, 'metriques_detaillees.xlsx');
+        // Générer le fichier
+        workbook.xlsx.writeBuffer().then(buffer => {
+            const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            const date = new Date().toISOString().split('T')[0];
+            link.download = `metriques_detaillees_${date}.xlsx`;
+            link.click();
+            window.URL.revokeObjectURL(url);
+        });
     }
 
     loadAgencySummaryData() {

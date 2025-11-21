@@ -800,5 +800,383 @@ export class ServiceReferencesComponent implements OnInit {
         const code = normalizedCode.toLowerCase();
         this.flagLoadError[code] = true;
     }
+
+    exportReferencesExcel(): void {
+        if (this.filteredReferences.length === 0) {
+            alert('Aucune donnée à exporter');
+            return;
+        }
+
+        const workbook = new ExcelJS.Workbook();
+        const sheet = workbook.addWorksheet('Référentiel Services');
+
+        // En-têtes avec couleurs
+        const headers = [
+            'Pays',
+            'Code Service', 
+            'Service',
+            'Code RECO',
+            'Type',
+            'Opérateur',
+            'Réseau',
+            'Statut',
+            'Réconciliable',
+            'Motif',
+            'Retenu Opérateur'
+        ];
+
+        const headerRow = sheet.addRow(headers);
+        
+        // Style de l'en-tête
+        headerRow.eachCell((cell, colNumber) => {
+            cell.fill = {
+                type: 'pattern',
+                pattern: 'solid',
+                fgColor: { argb: 'FF4F81BD' } // Bleu
+            };
+            cell.font = {
+                color: { argb: 'FFFFFFFF' },
+                bold: true,
+                size: 11
+            };
+            cell.alignment = {
+                vertical: 'middle',
+                horizontal: 'center',
+                wrapText: true
+            };
+            cell.border = {
+                top: { style: 'thin', color: { argb: 'FF000000' } },
+                left: { style: 'thin', color: { argb: 'FF000000' } },
+                bottom: { style: 'thin', color: { argb: 'FF000000' } },
+                right: { style: 'thin', color: { argb: 'FF000000' } }
+            };
+        });
+
+        // Données avec couleurs conditionnelles
+        this.filteredReferences.forEach((ref) => {
+            const row = sheet.addRow([
+                ref.pays,
+                ref.codeService,
+                ref.serviceLabel,
+                ref.codeReco,
+                ref.serviceType || '-',
+                ref.operateur || '-',
+                ref.reseau || '-',
+                ref.status || 'ACTIF',
+                ref.reconciliable ? 'OUI' : 'NON',
+                ref.motif || '-',
+                ref.retenuOperateur || '-'
+            ]);
+
+            // Couleur de fond alternée pour les lignes
+            const isEven = sheet.rowCount % 2 === 0;
+            const bgColor = isEven ? 'FFF2F2F2' : 'FFFFFFFF';
+
+            row.eachCell((cell, colNumber) => {
+                cell.fill = {
+                    type: 'pattern',
+                    pattern: 'solid',
+                    fgColor: { argb: bgColor }
+                };
+                cell.border = {
+                    top: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+                    left: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+                    bottom: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+                    right: { style: 'thin', color: { argb: 'FFCCCCCC' } }
+                };
+                cell.alignment = {
+                    vertical: 'middle',
+                    horizontal: colNumber <= 4 ? 'left' : 'center',
+                    wrapText: true
+                };
+            });
+
+            // Couleur conditionnelle pour le statut
+            const statusCell = row.getCell(8);
+            if (ref.status === 'INACTIF') {
+                statusCell.fill = {
+                    type: 'pattern',
+                    pattern: 'solid',
+                    fgColor: { argb: 'FFFFE6E6' } // Rouge clair
+                };
+                statusCell.font = {
+                    color: { argb: 'FFCC0000' },
+                    bold: true
+                };
+            } else {
+                statusCell.fill = {
+                    type: 'pattern',
+                    pattern: 'solid',
+                    fgColor: { argb: 'FFE6F3E6' } // Vert clair
+                };
+                statusCell.font = {
+                    color: { argb: 'FF006600' },
+                    bold: true
+                };
+            }
+
+            // Couleur conditionnelle pour réconciliable
+            const reconciliableCell = row.getCell(9);
+            if (ref.reconciliable) {
+                reconciliableCell.fill = {
+                    type: 'pattern',
+                    pattern: 'solid',
+                    fgColor: { argb: 'FFE6F3E6' } // Vert clair
+                };
+                reconciliableCell.font = {
+                    color: { argb: 'FF006600' },
+                    bold: true
+                };
+            } else {
+                reconciliableCell.fill = {
+                    type: 'pattern',
+                    pattern: 'solid',
+                    fgColor: { argb: 'FFFFE6E6' } // Rouge clair
+                };
+                reconciliableCell.font = {
+                    color: { argb: 'FFCC0000' },
+                    bold: true
+                };
+            }
+        });
+
+        // Ajuster la largeur des colonnes
+        sheet.columns.forEach((column, index) => {
+            if (index === 2 || index === 3) { // Service et Code RECO
+                column.width = 35;
+            } else if (index === 9 || index === 10) { // Motif et Retenu Opérateur
+                column.width = 25;
+            } else {
+                column.width = 15;
+            }
+        });
+
+        // Geler la première ligne
+        sheet.views = [
+            {
+                state: 'frozen',
+                ySplit: 1
+            }
+        ];
+
+        // Générer le fichier
+        workbook.xlsx.writeBuffer().then(buffer => {
+            const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            const date = new Date().toISOString().split('T')[0];
+            link.download = `referentiel_services_${date}.xlsx`;
+            link.click();
+            window.URL.revokeObjectURL(url);
+        });
+    }
+
+    exportDashboardExcel(): void {
+        if (this.filteredDashboardStats.length === 0) {
+            alert('Aucune donnée à exporter');
+            return;
+        }
+
+        const workbook = new ExcelJS.Workbook();
+        const sheet = workbook.addWorksheet('Dashboard Référentiel');
+
+        // En-têtes avec couleurs
+        const headers = [
+            'Pays',
+            'Volume Total',
+            'Transactions Totales',
+            'Volume Net',
+            'Transactions Net',
+            'Volume Non Réconciliable',
+            'Transactions Non Réconciliables',
+            'Trx_Recon_Brut (%)',
+            'Trx_Recon_Net (%)',
+            'Trx_Non_Recon (%)'
+        ];
+
+        const headerRow = sheet.addRow(headers);
+        
+        // Style de l'en-tête
+        headerRow.eachCell((cell, colNumber) => {
+            cell.fill = {
+                type: 'pattern',
+                pattern: 'solid',
+                fgColor: { argb: 'FF70AD47' } // Vert
+            };
+            cell.font = {
+                color: { argb: 'FFFFFFFF' },
+                bold: true,
+                size: 11
+            };
+            cell.alignment = {
+                vertical: 'middle',
+                horizontal: 'center',
+                wrapText: true
+            };
+            cell.border = {
+                top: { style: 'thin', color: { argb: 'FF000000' } },
+                left: { style: 'thin', color: { argb: 'FF000000' } },
+                bottom: { style: 'thin', color: { argb: 'FF000000' } },
+                right: { style: 'thin', color: { argb: 'FF000000' } }
+            };
+        });
+
+        // Données avec couleurs
+        this.filteredDashboardStats.forEach((stat) => {
+            const trxNonRecon = this.getTrxNonReconPercentage(stat);
+            const row = sheet.addRow([
+                stat.country,
+                stat.totalVolume || 0,
+                stat.totalTransactions || 0,
+                stat.reconcilableVolume || 0,
+                stat.reconcilableTransactions || 0,
+                stat.nonReconcilableVolume || 0,
+                stat.nonReconcilableTransactions || 0,
+                stat.trxReconBrut || 0,
+                stat.trxReconNet || 0,
+                trxNonRecon
+            ]);
+
+            // Couleur de fond alternée
+            const isEven = sheet.rowCount % 2 === 0;
+            const bgColor = isEven ? 'FFF2F2F2' : 'FFFFFFFF';
+
+            row.eachCell((cell, colNumber) => {
+                cell.fill = {
+                    type: 'pattern',
+                    pattern: 'solid',
+                    fgColor: { argb: bgColor }
+                };
+                cell.border = {
+                    top: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+                    left: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+                    bottom: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+                    right: { style: 'thin', color: { argb: 'FFCCCCCC' } }
+                };
+                cell.alignment = {
+                    vertical: 'middle',
+                    horizontal: colNumber === 1 ? 'left' : 'right',
+                    wrapText: true
+                };
+                
+                // Format numérique pour les colonnes numériques
+                if (colNumber > 1) {
+                    cell.numFmt = colNumber >= 8 ? '0.00' : '#,##0';
+                }
+            });
+
+            // Couleurs conditionnelles pour les pourcentages
+            const brutCell = row.getCell(8);
+            const netCell = row.getCell(9);
+            const nonReconCell = row.getCell(10);
+
+            // Trx_Recon_Brut - vert si >= 80%, orange si >= 50%, rouge sinon
+            const brutValue = stat.trxReconBrut || 0;
+            if (brutValue >= 80) {
+                brutCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFC6EFCE' } };
+                brutCell.font = { color: { argb: 'FF006100' }, bold: true };
+            } else if (brutValue >= 50) {
+                brutCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFEB9C' } };
+                brutCell.font = { color: { argb: 'FF9C6500' }, bold: true };
+            } else {
+                brutCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFC7CE' } };
+                brutCell.font = { color: { argb: 'FF9C0006' }, bold: true };
+            }
+
+            // Trx_Recon_Net - vert si >= 80%, orange si >= 50%, rouge sinon
+            const netValue = stat.trxReconNet || 0;
+            if (netValue >= 80) {
+                netCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFC6EFCE' } };
+                netCell.font = { color: { argb: 'FF006100' }, bold: true };
+            } else if (netValue >= 50) {
+                netCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFEB9C' } };
+                netCell.font = { color: { argb: 'FF9C6500' }, bold: true };
+            } else {
+                netCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFC7CE' } };
+                netCell.font = { color: { argb: 'FF9C0006' }, bold: true };
+            }
+
+            // Trx_Non_Recon - rouge si >= 20%, orange si >= 10%, vert sinon
+            if (trxNonRecon >= 20) {
+                nonReconCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFC7CE' } };
+                nonReconCell.font = { color: { argb: 'FF9C0006' }, bold: true };
+            } else if (trxNonRecon >= 10) {
+                nonReconCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFEB9C' } };
+                nonReconCell.font = { color: { argb: 'FF9C6500' }, bold: true };
+            } else {
+                nonReconCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFC6EFCE' } };
+                nonReconCell.font = { color: { argb: 'FF006100' }, bold: true };
+            }
+        });
+
+        // Ligne de totaux
+        const totalRow = sheet.addRow([
+            'TOTAL',
+            this.dashboardTotalVolume,
+            this.dashboardTotalTransactions,
+            this.dashboardNetVolume,
+            this.dashboardNetTransactions,
+            this.dashboardNonReconcilableVolume,
+            this.dashboardNonReconcilableTransactions,
+            '',
+            '',
+            ''
+        ]);
+
+        totalRow.eachCell((cell, colNumber) => {
+            cell.fill = {
+                type: 'pattern',
+                pattern: 'solid',
+                fgColor: { argb: 'FFD9E1F2' } // Bleu clair
+            };
+            cell.font = {
+                bold: true,
+                size: 11
+            };
+            cell.border = {
+                top: { style: 'medium', color: { argb: 'FF000000' } },
+                left: { style: 'thin', color: { argb: 'FF000000' } },
+                bottom: { style: 'thin', color: { argb: 'FF000000' } },
+                right: { style: 'thin', color: { argb: 'FF000000' } }
+            };
+            cell.alignment = {
+                vertical: 'middle',
+                horizontal: colNumber === 1 ? 'left' : 'right'
+            };
+            if (colNumber > 1 && colNumber <= 7) {
+                cell.numFmt = '#,##0';
+            }
+        });
+
+        // Ajuster la largeur des colonnes
+        sheet.columns.forEach((column, index) => {
+            if (index === 0) {
+                column.width = 15;
+            } else {
+                column.width = 20;
+            }
+        });
+
+        // Geler la première ligne
+        sheet.views = [
+            {
+                state: 'frozen',
+                ySplit: 1
+            }
+        ];
+
+        // Générer le fichier
+        workbook.xlsx.writeBuffer().then(buffer => {
+            const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            const date = new Date().toISOString().split('T')[0];
+            link.download = `dashboard_referentiel_${date}.xlsx`;
+            link.click();
+            window.URL.revokeObjectURL(url);
+        });
+    }
 }
 

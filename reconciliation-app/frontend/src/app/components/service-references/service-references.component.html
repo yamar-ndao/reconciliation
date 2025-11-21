@@ -19,6 +19,12 @@
             <button class="btn outline" (click)="triggerFileUpload()" [disabled]="isImporting || isLoading">
                 ⬆️ Importer un fichier
             </button>
+            <button class="btn outline" (click)="exportReferencesExcel()" [disabled]="isLoading || filteredReferences.length === 0" *ngIf="!isDashboardVisible">
+                📊 Exporter Excel
+            </button>
+            <button class="btn outline" (click)="exportDashboardExcel()" [disabled]="isDashboardLoading || filteredDashboardStats.length === 0" *ngIf="isDashboardVisible">
+                📊 Exporter Dashboard Excel
+            </button>
             <input #fileInput type="file" accept=".xlsx,.xls,.csv" (change)="handleFileInput($event)" hidden>
         </div>
     </div>
@@ -255,10 +261,10 @@
             </form>
         </div>
         </div>
-    </ng-container>
+    </ng-container> 
 </div>
 
-<ng-template #dashboardView>
+    <ng-template #dashboardView>
     <div class="dashboard-container">
         <div class="dashboard-filters" *ngIf="availableCountries.length > 0">
             <div class="filter-section">
