@@ -173,6 +173,29 @@ export class DashboardReconciliationComponent implements OnInit, OnDestroy {
         return `${rate.toFixed(2)}%`;
     }
 
+    /**
+     * Calcule l'écart en cours (différence entre réconciliation nette et taux de correspondance)
+     */
+    getEcartEnCours(trxReconNet: number, bkRecoBanque: number): number {
+        const net = trxReconNet || 0;
+        const correspondance = bkRecoBanque || 0;
+        const ecart = net - correspondance;
+        return Math.round(ecart * 100) / 100;
+    }
+
+    formatEcartEnCours(ecart: number): string {
+        if (isNaN(ecart)) return '--';
+        const sign = ecart >= 0 ? '+' : '';
+        return `${sign}${ecart.toFixed(2)}%`;
+    }
+
+    getEcartEnCoursClass(ecart: number): string {
+        if (isNaN(ecart)) return 'rate-empty';
+        if (ecart <= 0) return 'rate-excellent';  // Vert : écart négatif ou nul (bon)
+        if (ecart <= 5) return 'rate-good';       // Orange : écart faible (acceptable)
+        return 'rate-poor';                       // Rouge : écart élevé (problématique)
+    }
+
     formatDiscrepancyPercentage(rate?: number): string {
         if (rate === undefined || rate === null || isNaN(rate)) return '--';
         return `${rate.toFixed(2)}%`;
@@ -197,6 +220,19 @@ export class DashboardReconciliationComponent implements OnInit, OnDestroy {
             return 0;
         }
         return (serviceMetrics.boDiscrepancyCount || 0) + (serviceMetrics.partnerDiscrepancyCount || 0);
+    }
+
+    /**
+     * Calcule le pourcentage général des écarts (somme des taux BO et Partenaire)
+     */
+    getGeneralDiscrepancyRate(serviceMetrics: any): number {
+        if (!serviceMetrics) {
+            return 0;
+        }
+        const boRate = serviceMetrics.boDiscrepancyRate || 0;
+        const partnerRate = serviceMetrics.partnerDiscrepancyRate || 0;
+        const totalRate = boRate + partnerRate;
+        return Math.round(totalRate * 100) / 100;
     }
 
     isTraiteView(): boolean {

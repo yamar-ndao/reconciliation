@@ -191,6 +191,11 @@
                                     <div class="metric-label">Taux de Correspondance</div>
                                     <div class="metric-value">{{ formatPercentage(serviceEntry.value.bkRecoBanque) }}</div>
                                 </div>
+                                
+                                <div class="metric-item metric-item-centered" [ngClass]="getEcartEnCoursClass(getEcartEnCours(serviceEntry.value.trxReconNet, serviceEntry.value.bkRecoBanque))">
+                                    <div class="metric-label">Ecart en cours...</div>
+                                    <div class="metric-value">{{ formatEcartEnCours(getEcartEnCours(serviceEntry.value.trxReconNet, serviceEntry.value.bkRecoBanque)) }}</div>
+                                </div>
                             </div>
                             <div *ngSwitchCase="'traite'" class="metrics-grid discrepancy-grid">
                                 <div class="metric-item" [ngClass]="getDiscrepancyRateClass(serviceEntry.value.boDiscrepancyRate)">
@@ -221,14 +226,20 @@
                                         écart(s) Part.
                                     </div>
                                 </div>
-                                <div class="metric-item metric-item-centered discrepancy-total">
+                                <div class="metric-item metric-item-centered discrepancy-total" [ngClass]="getDiscrepancyRateClass(getGeneralDiscrepancyRate(serviceEntry.value))">
                                     <div class="metric-content">
-                                        <div class="metric-label">Total écarts exploités</div>
+                                        <div class="metric-label">Taux écarts général</div>
                                         <div class="metric-value"
-                                             [ngClass]="getPositiveValueClass(getTotalDiscrepancies(serviceEntry.value))">
-                                            {{ getTotalDiscrepancies(serviceEntry.value) }}
+                                             [ngClass]="getPositiveValueClass(getGeneralDiscrepancyRate(serviceEntry.value))">
+                                            {{ formatDiscrepancyPercentage(getGeneralDiscrepancyRate(serviceEntry.value)) }}
                                         </div>
-                                        <div class="metric-subtext">d'après les commentaires</div>
+                                        <div class="metric-subtext">
+                                            <span class="metric-count-badge"
+                                                  [ngClass]="getPositiveValueClass(getTotalDiscrepancies(serviceEntry.value))">
+                                                {{ getTotalDiscrepancies(serviceEntry.value) }}
+                                            </span>
+                                            écart(s) total
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -241,6 +252,11 @@
                                 <div class="metric-item" [ngClass]="getRateClass(serviceEntry.value.bkRecoBanque)">
                                     <div class="metric-label">Taux de Correspondance</div>
                                     <div class="metric-value">{{ formatPercentage(serviceEntry.value.bkRecoBanque) }}</div>
+                                </div>
+                                
+                                <div class="metric-item metric-item-centered" [ngClass]="getEcartEnCoursClass(getEcartEnCours(serviceEntry.value.trxReconNet, serviceEntry.value.bkRecoBanque))">
+                                    <div class="metric-label">Ecart en cours...</div>
+                                    <div class="metric-value">{{ formatEcartEnCours(getEcartEnCours(serviceEntry.value.trxReconNet, serviceEntry.value.bkRecoBanque)) }}</div>
                                 </div>
                             </div>
                         </ng-container>
