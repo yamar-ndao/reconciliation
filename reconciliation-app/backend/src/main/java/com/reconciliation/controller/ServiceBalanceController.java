@@ -106,6 +106,31 @@ public class ServiceBalanceController {
     }
     
     /**
+     * Fusionne plusieurs sous-comptes (codes propriétaires) en un nouveau compte consolidé
+     */
+    @PostMapping("/merge-sub-comptes")
+    public ResponseEntity<FusionResult> mergeSubComptes(@RequestBody MergeSubComptesRequest request) {
+        try {
+            logger.info("🔧 Fusion des sous-comptes - Nom: {}, Pays: {}, Sous-comptes: {}", 
+                       request.getNouveauNomCompte(), request.getPays(), request.getSubComptes().size());
+            
+            FusionResult result = serviceBalanceService.mergeSubComptes(
+                request.getSubComptes(),
+                request.getNouveauNomCompte(),
+                request.getPays()
+            );
+            
+            logger.info("✅ Fusion des sous-comptes réussie - Nouveau compte ID: {}, Solde total: {}", 
+                       result.getNouveauCompteId(), result.getTotalSolde());
+            
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            logger.error("❌ Erreur lors de la fusion des sous-comptes: {}", e.getMessage(), e);
+            return ResponseEntity.badRequest().body(null);
+        }
+    }
+    
+    /**
      * Classe de requête pour la fusion
      */
     public static class MergeRequest {
@@ -130,7 +155,38 @@ public class ServiceBalanceController {
         public void setNouveauNomCompte(String nouveauNomCompte) { this.nouveauNomCompte = nouveauNomCompte; }
         
         public String getPays() { return pays; }
-        public void setPays(String pays) { this.pays = pays;         }
+        public void setPays(String pays) { this.pays = pays; }
+    }
+    
+    /**
+     * Classe de requête pour la fusion des sous-comptes
+     */
+    public static class MergeSubComptesRequest {
+        private List<ServiceBalanceService.SubCompteRequest> subComptes;
+        private String nouveauNomCompte;
+        private String pays;
+        
+        // Constructeurs
+        public MergeSubComptesRequest() {}
+        
+        public MergeSubComptesRequest(List<ServiceBalanceService.SubCompteRequest> subComptes, 
+                                     String nouveauNomCompte, String pays) {
+            this.subComptes = subComptes;
+            this.nouveauNomCompte = nouveauNomCompte;
+            this.pays = pays;
+        }
+        
+        // Getters et Setters
+        public List<ServiceBalanceService.SubCompteRequest> getSubComptes() { return subComptes; }
+        public void setSubComptes(List<ServiceBalanceService.SubCompteRequest> subComptes) { 
+            this.subComptes = subComptes; 
+        }
+        
+        public String getNouveauNomCompte() { return nouveauNomCompte; }
+        public void setNouveauNomCompte(String nouveauNomCompte) { this.nouveauNomCompte = nouveauNomCompte; }
+        
+        public String getPays() { return pays; }
+        public void setPays(String pays) { this.pays = pays; }
     }
     
     /**

@@ -42,16 +42,19 @@
                 <i class="fas fa-check-circle"></i>
             </div>
             <div class="stat-content">
-                <div class="stat-number">{{ getSelectedComptesCount() }}</div>
+                <div class="stat-number">{{ getTotalSelectedCount() }}</div>
                 <div class="stat-label">Sélectionnés</div>
+                <div class="stat-sublabel" *ngIf="getSelectedSubComptesCount() > 0">
+                    ({{ getSelectedComptesCount() }} compte(s), {{ getSelectedSubComptesCount() }} sous-compte(s))
+                </div>
             </div>
         </div>
-        <div class="stat-card" *ngIf="getSelectedComptesCount() > 0">
+        <div class="stat-card" *ngIf="getTotalSelectedCount() > 0">
             <div class="stat-icon">
                 <i class="fas fa-coins"></i>
             </div>
             <div class="stat-content">
-                <div class="stat-number">{{ getTotalSelectedSolde() | currency:'XAF':'symbol':'1.0-0' }}</div>
+                <div class="stat-number">{{ getTotalSelectedSoldeIncludingSubComptes() | currency:'XAF':'symbol':'1.0-0' }}</div>
                 <div class="stat-label">Solde Total</div>
             </div>
         </div>
@@ -82,9 +85,12 @@
             <button 
                 class="btn btn-primary" 
                 (click)="showMergeDialog()"
-                [disabled]="getSelectedComptesCount() < 2">
+                [disabled]="getTotalSelectedCount() < 2">
                 <i class="fas fa-layer-group"></i>
-                Regrouper les comptes sélectionnés ({{ getSelectedComptesCount() }})
+                Regrouper les éléments sélectionnés ({{ getTotalSelectedCount() }})
+                <span *ngIf="getSelectedSubComptesCount() > 0" class="sub-selection-count">
+                    - {{ getSelectedComptesCount() }} compte(s), {{ getSelectedSubComptesCount() }} sous-compte(s)
+                </span>
             </button>
         </div>
 
@@ -110,6 +116,24 @@
                         <option value="positive">Soldes positifs</option>
                         <option value="negative">Soldes négatifs</option>
                         <option value="zero">Soldes à zéro</option>
+                    </select>
+                    
+                    <select 
+                        [(ngModel)]="filterByType" 
+                        (change)="onFilterChange()"
+                        class="filter-select">
+                        <option value="all">Tous les types</option>
+                        <option *ngFor="let type of compteTypes" [value]="type">{{ type }}</option>
+                        <option value="none">Sans type</option>
+                    </select>
+                    
+                    <select 
+                        [(ngModel)]="filterByCategorie" 
+                        (change)="onFilterChange()"
+                        class="filter-select">
+                        <option value="all">Toutes les catégories</option>
+                        <option *ngFor="let categorie of compteCategories" [value]="categorie">{{ categorie }}</option>
+                        <option value="none">Sans catégorie</option>
                     </select>
                     
                     <select 
@@ -140,7 +164,7 @@
             <div class="results-info">
                 <span class="results-count">
                     {{ getTotalFilteredCount() }} compte(s) trouvé(s)
-                    <span *ngIf="searchTerm || filterBySolde !== 'all'" class="filtered-indicator">
+                    <span *ngIf="searchTerm || filterBySolde !== 'all' || filterByType !== 'all' || filterByCategorie !== 'all'" class="filtered-indicator">
                         (filtré sur {{ filteredServiceComptes.length }} compte(s) au total)
                     </span>
                 </span>
@@ -153,26 +177,80 @@
                 *ngFor="let compte of paginatedComptes" 
                 class="compte-card"
                 [class.selected]="isCompteSelected(compte)"
-                (click)="toggleCompteSelection(compte)">
-                <div class="compte-header">
-                    <div class="compte-checkbox">
-                        <i class="fas fa-check" *ngIf="isCompteSelected(compte)"></i>
+                [class.service-compte]="isServiceCompte(compte)">
+                <div class="compte-main" (click)="toggleCompteSelection(compte)">
+                    <div class="compte-header">
+                        <div class="compte-checkbox">
+                            <i class="fas fa-check" *ngIf="isCompteSelected(compte)"></i>
+                        </div>
+                        <div class="compte-info">
+                            <div class="compte-name">{{ compte.numeroCompte }}</div>
+                            <div class="compte-details">
+                                <span class="compte-agence" *ngIf="compte.agence">
+                                    <i class="fas fa-building"></i> {{ compte.agence }}
+                                </span>
+                                <span class="compte-date">
+                                    <i class="fas fa-calendar"></i> {{ compte.dateDerniereMaj | date:'dd/MM/yyyy HH:mm' }}
+                                </span>
+                                <span class="compte-type" *ngIf="compte.type">
+                                    <i class="fas fa-tag"></i> {{ compte.type }}
+                                </span>
+                            </div>
+                        </div>
                     </div>
-                    <div class="compte-info">
-                        <div class="compte-name">{{ compte.numeroCompte }}</div>
-                        <div class="compte-details">
-                            <span class="compte-agence" *ngIf="compte.agence">
-                                <i class="fas fa-building"></i> {{ compte.agence }}
-                            </span>
-                            <span class="compte-date">
-                                <i class="fas fa-calendar"></i> {{ compte.dateDerniereMaj | date:'dd/MM/yyyy HH:mm' }}
-                            </span>
+                    <div class="compte-solde">
+                        <div class="solde-amount" [class.positive]="compte.solde >= 0" [class.negative]="compte.solde < 0">
+                            {{ compte.solde | currency:'XAF':'symbol':'1.0-0' }}
                         </div>
                     </div>
                 </div>
-                <div class="compte-solde">
-                    <div class="solde-amount" [class.positive]="compte.solde >= 0" [class.negative]="compte.solde < 0">
-                        {{ compte.solde | currency:'XAF':'symbol':'1.0-0' }}
+                
+                <!-- Sous-comptes pour les comptes Service -->
+                <div class="sub-comptes-section" *ngIf="isServiceCompte(compte)">
+                    <div class="sub-comptes-toggle" (click)="toggleSubComptes(compte); $event.stopPropagation()">
+                        <i class="fas" [class.fa-chevron-down]="isExpanded(compte)" [class.fa-chevron-right]="!isExpanded(compte)"></i>
+                        <span>Voir les sous-comptes par code propriétaire</span>
+                        <span class="sub-comptes-count" *ngIf="getSubComptes(compte).length > 0">
+                            ({{ getSubComptes(compte).length }})
+                        </span>
+                    </div>
+                    
+                    <div class="sub-comptes-list" *ngIf="isExpanded(compte)">
+                        <div class="loading-sub-comptes" *ngIf="isLoadingSubComptes(compte)">
+                            <i class="fas fa-spinner fa-spin"></i>
+                            <span>Chargement des sous-comptes...</span>
+                        </div>
+                        
+                        <div class="sub-comptes-content" *ngIf="!isLoadingSubComptes(compte)">
+                            <div 
+                                class="sub-compte-item" 
+                                *ngFor="let subCompte of getSubComptes(compte)"
+                                [class.selected]="isSubCompteSelected(subCompte)"
+                                (click)="toggleSubCompteSelection(subCompte, $event)">
+                                <div class="sub-compte-checkbox">
+                                    <i class="fas fa-check" *ngIf="isSubCompteSelected(subCompte)"></i>
+                                </div>
+                                <div class="sub-compte-info">
+                                    <div class="sub-compte-code">
+                                        <i class="fas fa-user-circle"></i>
+                                        {{ subCompte.codeProprietaire }}
+                                    </div>
+                                    <div class="sub-compte-ops">
+                                        {{ subCompte.nombreOperations }} opération(s)
+                                    </div>
+                                </div>
+                                <div class="sub-compte-solde">
+                                    <div class="solde-amount" [class.positive]="subCompte.solde >= 0" [class.negative]="subCompte.solde < 0">
+                                        {{ subCompte.solde | currency:'XAF':'symbol':'1.0-0' }}
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="no-sub-comptes" *ngIf="getSubComptes(compte).length === 0">
+                                <i class="fas fa-info-circle"></i>
+                                <span>Aucun sous-compte trouvé pour ce service</span>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -265,7 +343,11 @@
                         </div>
                         <div class="summary-item">
                             <span class="label">Solde total :</span>
-                            <span class="value">{{ getTotalSelectedSolde() | currency:'XAF':'symbol':'1.0-0' }}</span>
+                            <span class="value">{{ getTotalSelectedSoldeIncludingSubComptes() | currency:'XAF':'symbol':'1.0-0' }}</span>
+                        </div>
+                        <div class="summary-item" *ngIf="getSelectedSubComptesCount() > 0">
+                            <span class="label">Sous-comptes sélectionnés :</span>
+                            <span class="value">{{ getSelectedSubComptesCount() }}</span>
                         </div>
                         <div class="summary-item">
                             <span class="label">Pays :</span>
@@ -309,6 +391,20 @@
                         <div *ngFor="let compte of selectedComptes" class="compte-item">
                             <div class="compte-name">{{ compte.numeroCompte }}</div>
                             <div class="compte-solde">{{ compte.solde | currency:'XAF':'symbol':'1.0-0' }}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Liste des sous-comptes sélectionnés -->
+                <div class="sub-comptes-to-merge" *ngIf="getSelectedSubComptesCount() > 0">
+                    <h4><i class="fas fa-list-ul"></i> Sous-comptes sélectionnés ({{ getSelectedSubComptesCount() }})</h4>
+                    <div class="sub-comptes-list-merge">
+                        <div *ngFor="let subCompte of selectedSubComptes" class="sub-compte-item-merge">
+                            <div class="sub-compte-info-merge">
+                                <div class="sub-compte-service">{{ subCompte.serviceCompteNumero }}</div>
+                                <div class="sub-compte-code-merge">{{ subCompte.codeProprietaire }}</div>
+                            </div>
+                            <div class="sub-compte-solde-merge">{{ subCompte.solde | currency:'XAF':'symbol':'1.0-0' }}</div>
                         </div>
                     </div>
                 </div>

@@ -162,6 +162,13 @@
   font-weight: 500;
 }
 
+.stat-sublabel {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  margin-top: 2px;
+  opacity: 0.8;
+}
+
 /* Sélection du pays */
 .country-selection {
   margin-bottom: 32px;
@@ -330,6 +337,193 @@
   &.negative {
     color: var(--danger-color);
   }
+}
+
+/* Styles pour les sous-comptes Service */
+.compte-card {
+  &.service-compte {
+    border-left: 4px solid var(--info-color);
+  }
+}
+
+.compte-main {
+  width: 100%;
+}
+
+.sub-comptes-section {
+  margin-top: 16px;
+  border-top: 1px solid var(--border-color);
+  padding-top: 12px;
+}
+
+.sub-comptes-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--light-gray);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: var(--transition);
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+
+  &:hover {
+    background: #e0e0e0;
+    color: var(--text-primary);
+  }
+
+  i {
+    transition: transform 0.3s ease;
+  }
+}
+
+.sub-comptes-count {
+  margin-left: auto;
+  font-size: 0.85rem;
+  color: var(--info-color);
+}
+
+.sub-comptes-list {
+  margin-top: 12px;
+  animation: slideDown 0.3s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.loading-sub-comptes {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 20px;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+
+  i {
+    color: var(--info-color);
+  }
+}
+
+.sub-comptes-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sub-compte-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px;
+  background: white;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  transition: var(--transition);
+  cursor: pointer;
+  gap: 12px;
+
+  &:hover {
+    border-color: var(--info-color);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  }
+
+  &.selected {
+    border-color: var(--primary-color);
+    background: var(--primary-light);
+  }
+}
+
+.sub-compte-checkbox {
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--border-color);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: white;
+  transition: var(--transition);
+  flex-shrink: 0;
+
+  .sub-compte-item.selected & {
+    background: var(--primary-color);
+    border-color: var(--primary-color);
+    color: white;
+  }
+
+  i {
+    font-size: 0.75rem;
+  }
+}
+
+.sub-compte-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sub-compte-code {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: 0.95rem;
+
+  i {
+    color: var(--info-color);
+  }
+}
+
+.sub-compte-ops {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  margin-left: 24px;
+}
+
+.sub-compte-solde {
+  text-align: right;
+
+  .solde-amount {
+    font-size: 1.1rem;
+    font-weight: 600;
+  }
+}
+
+.no-sub-comptes {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 20px;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  font-style: italic;
+
+  i {
+    color: var(--info-color);
+  }
+}
+
+.compte-type {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  color: var(--info-color);
+  font-weight: 500;
 }
 
 /* Messages d'état */
@@ -554,6 +748,88 @@
 .compte-item .compte-solde {
   font-weight: 600;
   color: var(--text-secondary);
+}
+
+/* Sous-comptes dans le modal de fusion */
+.sub-comptes-to-merge {
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 2px solid var(--border-color);
+}
+
+.sub-comptes-to-merge h4 {
+  color: var(--text-primary);
+  margin-bottom: 16px;
+  font-size: 1.1rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sub-comptes-list-merge {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 200px;
+  overflow-y: auto;
+  margin-bottom: 12px;
+}
+
+.sub-compte-item-merge {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  background: white;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+}
+
+.sub-compte-info-merge {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sub-compte-service {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+.sub-compte-code-merge {
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: 0.95rem;
+}
+
+.sub-compte-solde-merge {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.sub-comptes-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  background: #fff3cd;
+  border: 1px solid #ffc107;
+  border-radius: 6px;
+  color: #856404;
+  font-size: 0.9rem;
+
+  i {
+    color: #ffc107;
+  }
+}
+
+.sub-selection-count {
+  font-size: 0.85rem;
+  opacity: 0.8;
+  margin-left: 4px;
 }
 
 /* Actions du modal */

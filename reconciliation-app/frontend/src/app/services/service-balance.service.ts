@@ -17,6 +17,12 @@ export interface FusionResult {
   pays: string;
 }
 
+export interface SubCompteRequest {
+  codeProprietaire: string;
+  serviceCompteId: number;
+  serviceCompteNumero: string;
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -65,6 +71,24 @@ export class ServiceBalanceService {
     
     console.log('Envoi de la requête de fusion:', request);
     return this.http.post<FusionResult>(`${this.apiUrl}/merge`, request, {
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+  }
+
+  /**
+   * Fusionne plusieurs sous-comptes (codes propriétaires) en un nouveau compte consolidé
+   */
+  mergeSubComptes(subComptes: SubCompteRequest[], nouveauNomCompte: string, pays: string): Observable<FusionResult> {
+    const request = {
+      subComptes,
+      nouveauNomCompte,
+      pays
+    };
+    
+    console.log('Envoi de la requête de fusion des sous-comptes:', request);
+    return this.http.post<FusionResult>(`${this.apiUrl}/merge-sub-comptes`, request, {
       headers: {
         'Content-Type': 'application/json'
       }

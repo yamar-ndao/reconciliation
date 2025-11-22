@@ -188,6 +188,182 @@ public class ServiceBalanceService {
     }
     
     /**
+     * Fusionne plusieurs sous-comptes (codes propriétaires) en un nouveau compte consolidé
+     * Les sous-comptes sont des codes propriétaires qui impactent un service
+     * 
+     * @param subComptes Liste des sous-comptes à fusionner (codeProprietaire + serviceCompteId)
+     * @param nouveauNomCompte Nom du nouveau compte fusionné
+     * @param pays Pays du nouveau compte
+     * @return Résultat de la fusion avec le solde total
+     */
+    @Transactional
+    public FusionResult mergeSubComptes(List<SubCompteRequest> subComptes, String nouveauNomCompte, String pays) {
+        logger.info("=== DÉBUT mergeSubComptes ===");
+        logger.info("Sous-comptes à fusionner: {}", subComptes);
+        logger.info("Nouveau nom: {}, Pays: {}", nouveauNomCompte, pays);
+        
+        try {
+            if (subComptes == null || subComptes.isEmpty()) {
+                throw new IllegalArgumentException("Aucun sous-compte fourni pour la fusion");
+            }
+            
+            if (subComptes.size() < 2) {
+                throw new IllegalArgumentException("Au moins 2 sous-comptes sont requis pour la fusion");
+            }
+            
+            double soldeTotal = 0.0;
+            List<String> codesProprietaires = new java.util.ArrayList<>();
+            
+            // 1. Pour chaque sous-compte, récupérer les opérations et calculer le solde
+            for (SubCompteRequest subCompte : subComptes) {
+                String codeProprietaire = subCompte.getCodeProprietaire();
+                Long serviceCompteId = subCompte.getServiceCompteId();
+                
+                if (codeProprietaire == null || codeProprietaire.trim().isEmpty()) {
+                    logger.warn("Sous-compte ignoré: codeProprietaire vide");
+                    continue;
+                }
+                
+                if (serviceCompteId == null) {
+                    logger.warn("Sous-compte ignoré: serviceCompteId vide pour {}", codeProprietaire);
+                    continue;
+                }
+                
+                // Récupérer le compte service
+                CompteEntity serviceCompte = compteRepository.findById(serviceCompteId)
+                    .orElseThrow(() -> new IllegalArgumentException("Compte service introuvable: " + serviceCompteId));
+                
+                String serviceNumero = serviceCompte.getNumeroCompte();
+                
+                // Récupérer toutes les opérations du service avec ce codeProprietaire
+                List<OperationEntity> operations = operationRepository.findByServiceOrderByDateOperationDesc(serviceNumero)
+                    .stream()
+                    .filter(op -> codeProprietaire.equals(op.getCodeProprietaire()))
+                    .collect(java.util.stream.Collectors.toList());
+                
+                logger.info("Trouvé {} opérations pour service {} avec codeProprietaire {}", 
+                           operations.size(), serviceNumero, codeProprietaire);
+                
+                // Calculer le solde pour ce sous-compte
+                double soldeSubCompte = operations.stream()
+                    .mapToDouble(op -> calculateOperationImpact(op))
+                    .sum();
+                
+                soldeTotal += soldeSubCompte;
+                codesProprietaires.add(codeProprietaire);
+                
+                logger.info("Solde calculé pour {}: {}", codeProprietaire, soldeSubCompte);
+            }
+            
+            if (codesProprietaires.isEmpty()) {
+                throw new IllegalArgumentException("Aucun code propriétaire valide trouvé");
+            }
+            
+            logger.info("Solde total calculé: {}", soldeTotal);
+            
+            // 2. Créer le nouveau compte consolidé
+            CompteEntity nouveauCompte = new CompteEntity();
+            nouveauCompte.setNumeroCompte(nouveauNomCompte);
+            nouveauCompte.setSolde(soldeTotal);
+            nouveauCompte.setPays(pays);
+            nouveauCompte.setDateDerniereMaj(LocalDateTime.now());
+            nouveauCompte.setAgence("REGROUPEMENT_SUBCOMPTES");
+            nouveauCompte.setCategorie("Service");
+            
+            // Définir le codeProprietaire avec les codes propriétaires fusionnés
+            String codeProprietaire = String.join(",", codesProprietaires);
+            nouveauCompte.setCodeProprietaire(codeProprietaire);
+            logger.info("Code propriétaire défini pour le compte fusionné: {}", codeProprietaire);
+            
+            // 3. Sauvegarder le nouveau compte
+            CompteEntity compteSauvegarde = compteRepository.save(nouveauCompte);
+            logger.info("Nouveau compte créé avec ID: {}", compteSauvegarde.getId());
+            
+            // 4. Créer une opération de regroupement pour tracer la fusion
+            OperationEntity operationRegroupement = new OperationEntity();
+            operationRegroupement.setTypeOperation("regroupement_sous_comptes");
+            operationRegroupement.setMontant(soldeTotal);
+            operationRegroupement.setCompte(compteSauvegarde);
+            operationRegroupement.setDateOperation(LocalDateTime.now());
+            operationRegroupement.setStatut("VALIDE");
+            operationRegroupement.setReference("REGROUPEMENT_SUBCOMPTES_" + nouveauNomCompte + "_" + System.currentTimeMillis());
+            operationRegroupement.setCodeProprietaire(codeProprietaire);
+            operationRegroupement.setPays(pays);
+            operationRegroupement.setSoldeAvant(0.0);
+            operationRegroupement.setSoldeApres(soldeTotal);
+            
+            operationRepository.save(operationRegroupement);
+            logger.info("Opération de regroupement créée pour le nouveau compte: {}", nouveauNomCompte);
+            
+            logger.info("=== FIN mergeSubComptes ===");
+            
+            return new FusionResult(
+                compteSauvegarde.getId(),
+                nouveauNomCompte,
+                soldeTotal,
+                codesProprietaires.size(),
+                pays
+            );
+            
+        } catch (Exception e) {
+            logger.error("Erreur lors de la fusion des sous-comptes: {}", e.getMessage(), e);
+            throw new RuntimeException("Erreur lors de la fusion des sous-comptes: " + e.getMessage(), e);
+        }
+    }
+    
+    /**
+     * Calcule l'impact d'une opération sur le solde
+     */
+    private double calculateOperationImpact(OperationEntity operation) {
+        // Utiliser la différence de solde si disponible
+        if (operation.getSoldeAvant() != null && operation.getSoldeApres() != null) {
+            return operation.getSoldeApres() - operation.getSoldeAvant();
+        }
+        
+        // Sinon, utiliser le montant selon le type d'opération
+        String type = operation.getTypeOperation() != null ? operation.getTypeOperation().toLowerCase() : "";
+        double montant = operation.getMontant() != null ? operation.getMontant() : 0.0;
+        
+        // Opérations qui augmentent le solde
+        if (type.contains("cashin") || type.contains("appro") || type.contains("ajustement") || type.contains("transaction_cree")) {
+            return montant;
+        }
+        
+        // Opérations qui diminuent le solde
+        if (type.contains("paiement") || type.contains("compense") || type.contains("frais") || type.contains("annulation")) {
+            return -montant;
+        }
+        
+        return 0.0;
+    }
+    
+    /**
+     * Classe de requête pour les sous-comptes
+     */
+    public static class SubCompteRequest {
+        private String codeProprietaire;
+        private Long serviceCompteId;
+        private String serviceCompteNumero;
+        
+        public SubCompteRequest() {}
+        
+        public SubCompteRequest(String codeProprietaire, Long serviceCompteId, String serviceCompteNumero) {
+            this.codeProprietaire = codeProprietaire;
+            this.serviceCompteId = serviceCompteId;
+            this.serviceCompteNumero = serviceCompteNumero;
+        }
+        
+        public String getCodeProprietaire() { return codeProprietaire; }
+        public void setCodeProprietaire(String codeProprietaire) { this.codeProprietaire = codeProprietaire; }
+        
+        public Long getServiceCompteId() { return serviceCompteId; }
+        public void setServiceCompteId(Long serviceCompteId) { this.serviceCompteId = serviceCompteId; }
+        
+        public String getServiceCompteNumero() { return serviceCompteNumero; }
+        public void setServiceCompteNumero(String serviceCompteNumero) { this.serviceCompteNumero = serviceCompteNumero; }
+    }
+    
+    /**
      * Classe de résultat pour la fusion
      */
     public static class FusionResult {
