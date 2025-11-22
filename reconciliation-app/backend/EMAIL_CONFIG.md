@@ -78,6 +78,19 @@ MAIL_USERNAME=votre_email@outlook.com
 MAIL_PASSWORD=votre_mot_de_passe
 ```
 
+**Important pour Outlook :**
+- Pour les comptes **Outlook.com** (pas Office365), utilisez votre mot de passe normal
+- Pour les comptes **Office365** (@intouchgroup.net), vous devrez peut-être :
+  1. Activer l'authentification par application dans le portail Azure AD
+  2. Ou utiliser un mot de passe d'application si disponible
+  3. Ou configurer OAuth2 (plus complexe)
+
+**Si les emails sont envoyés mais non reçus :**
+1. **Vérifiez le dossier SPAM/Courrier indésirable** - C'est la cause la plus fréquente
+2. **Vérifiez les règles de boîte de réception** dans Outlook qui pourraient filtrer les emails
+3. **Vérifiez que l'adresse d'expéditeur** (`touch@intouchgroup.net`) est autorisée dans votre organisation
+4. **Pour Office365**, vérifiez les paramètres de sécurité du compte dans le portail Microsoft 365
+
 ### Yahoo Mail
 ```
 MAIL_HOST=smtp.mail.yahoo.com
@@ -134,6 +147,47 @@ Après avoir configuré les variables d'environnement :
 - Vérifiez votre connexion internet
 - Vérifiez que le pare-feu autorise les connexions sortantes sur le port 587
 - Essayez d'augmenter les timeouts dans `application.properties`
+
+### L'email apparaît dans "Messages envoyés" mais le destinataire ne le reçoit pas
+
+**Symptôme :** L'email est visible dans les "Messages envoyés" du compte Outlook configuré, mais le destinataire ne le reçoit pas.
+
+**Causes possibles :**
+
+1. **Filtres anti-spam côté serveur de réception**
+   - L'email est bloqué par les filtres anti-spam du serveur de destination
+   - **Solution :** Demander au destinataire de vérifier son dossier SPAM et d'ajouter l'expéditeur à sa liste blanche
+
+2. **Problème de réputation de l'expéditeur (Office365)**
+   - Le compte expéditeur peut avoir une mauvaise réputation
+   - **Solution :** Contacter l'administrateur IT pour vérifier la réputation du compte dans Microsoft 365
+
+3. **Configuration SPF/DKIM/DMARC manquante**
+   - Les enregistrements DNS pour l'authentification email ne sont pas configurés
+   - **Solution :** Demander à l'administrateur IT de configurer les enregistrements SPF, DKIM et DMARC pour le domaine `intouchgroup.net`
+
+4. **Politiques de sécurité Office365**
+   - Les politiques de sécurité peuvent bloquer les emails sortants
+   - **Solution :** Vérifier dans le portail Microsoft 365 Admin Center :
+     - Exchange Admin Center > Protection > Anti-spam
+     - Vérifier les règles de transport qui pourraient bloquer les emails
+
+5. **Quota ou limitation de taux**
+   - Le compte peut avoir atteint une limite d'envoi
+   - **Solution :** Vérifier les limites d'envoi dans Office365 (généralement 10 000 emails/jour pour les comptes standard)
+
+**Actions à prendre :**
+
+1. Vérifier les logs du serveur de réception (si accessible)
+2. Demander au destinataire de vérifier :
+   - Le dossier SPAM/Courrier indésirable
+   - Les règles de boîte de réception
+   - Les filtres anti-spam
+3. Contacter l'administrateur IT pour :
+   - Vérifier les logs Exchange/Office365
+   - Vérifier la configuration SPF/DKIM/DMARC
+   - Vérifier les politiques de sécurité
+4. Tester avec un autre compte email pour isoler le problème
 
 ## Notes de sécurité
 

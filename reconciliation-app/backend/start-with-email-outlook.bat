@@ -29,6 +29,11 @@ echo.
 echo IMPORTANT: Assurez-vous d'avoir modifié MAIL_USERNAME et MAIL_PASSWORD
 echo dans ce script avant de l'exécuter!
 echo.
+echo NOTE: Si les emails sont envoyés mais non reçus:
+echo   - Vérifiez le dossier SPAM/Courrier indésirable
+echo   - Vérifiez que le compte Outlook autorise les applications moins sécurisées
+echo   - Pour Outlook/Office365, vous devrez peut-être utiliser un mot de passe d'application
+echo.
 
 REM Configuration JVM optimisée
 REM Note: MaxPermSize n'existe plus dans Java 8+, supprimé

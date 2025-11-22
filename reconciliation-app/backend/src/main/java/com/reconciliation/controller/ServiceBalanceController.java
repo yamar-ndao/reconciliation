@@ -240,4 +240,24 @@ public class ServiceBalanceController {
             ));
         }
     }
+    
+    /**
+     * Récupère les statistiques de consommation des services
+     */
+    @GetMapping("/stats/consumption")
+    public ResponseEntity<Map<String, Object>> getServiceConsumptionStats() {
+        try {
+            logger.info("📊 Récupération des statistiques de consommation des services");
+            Map<String, Object> stats = serviceBalanceService.getServiceConsumptionStats();
+            logger.info("✅ Statistiques récupérées avec succès");
+            return ResponseEntity.ok(stats);
+        } catch (Exception e) {
+            logger.error("❌ Erreur lors de la récupération des statistiques: {}", e.getMessage(), e);
+            return ResponseEntity.status(500).body(Map.of(
+                "status", "ERROR",
+                "message", "Erreur lors de la récupération des statistiques: " + e.getMessage(),
+                "timestamp", java.time.LocalDateTime.now().toString()
+            ));
+        }
+    }
 }

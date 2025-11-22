@@ -13,6 +13,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
+import java.util.ArrayList;
 import java.util.stream.Collectors;
 
 @Service
@@ -139,16 +142,23 @@ public class ServiceBalanceService {
     }
     
     /**
-     * Récupère tous les comptes service (comptes avec des noms longs contenant des underscores)
+     * Récupère tous les comptes service (comptes avec catégorie "Service" ou noms longs contenant des underscores)
      */
     public List<CompteEntity> getServiceComptes() {
         logger.info("Récupération des comptes service");
         
         List<CompteEntity> allComptes = compteRepository.findAll();
         
-        // Filtrer les comptes service (noms longs avec underscores)
+        // Filtrer les comptes service par catégorie "Service" ou par pattern de nom
         List<CompteEntity> serviceComptes = allComptes.stream()
-            .filter(compte -> isServiceCompte(compte.getNumeroCompte()))
+            .filter(compte -> {
+                // Vérifier d'abord la catégorie
+                if (compte.getCategorie() != null && "Service".equalsIgnoreCase(compte.getCategorie())) {
+                    return true;
+                }
+                // Sinon, vérifier le pattern du nom
+                return isServiceCompte(compte.getNumeroCompte());
+            })
             .toList();
         
         logger.info("Nombre de comptes service trouvés: {}", serviceComptes.size());
@@ -163,6 +173,88 @@ public class ServiceBalanceService {
         List<CompteEntity> allComptes = compteRepository.findAll();
         logger.info("Nombre total de comptes: {}", allComptes.size());
         return allComptes;
+    }
+    
+    /**
+     * Récupère les statistiques de consommation des services
+     * Retourne des statistiques par service : nombre d'opérations, volume total, etc.
+     */
+    public Map<String, Object> getServiceConsumptionStats() {
+        logger.info("Récupération des statistiques de consommation des services");
+        
+        try {
+            // Récupérer tous les comptes service
+            List<CompteEntity> serviceComptes = getServiceComptes();
+            
+            Map<String, Object> stats = new java.util.HashMap<>();
+            List<Map<String, Object>> serviceStatsList = new java.util.ArrayList<>();
+            
+            double totalVolume = 0.0;
+            int totalOperations = 0;
+            
+            // Pour chaque compte service, récupérer les statistiques
+            for (CompteEntity serviceCompte : serviceComptes) {
+                String serviceNumero = serviceCompte.getNumeroCompte();
+                
+                // Récupérer toutes les opérations de ce service
+                List<OperationEntity> operations = operationRepository.findByServiceOrderByDateOperationDesc(serviceNumero);
+                
+                if (operations.isEmpty()) {
+                    continue;
+                }
+                
+                // Calculer les statistiques
+                double serviceVolume = operations.stream()
+                    .mapToDouble(op -> op.getMontant() != null ? op.getMontant() : 0.0)
+                    .sum();
+                
+                int operationCount = operations.size();
+                
+                // Grouper par code propriétaire
+                Map<String, Long> codeProprietaireCount = operations.stream()
+                    .filter(op -> op.getCodeProprietaire() != null && !op.getCodeProprietaire().trim().isEmpty())
+                    .collect(java.util.stream.Collectors.groupingBy(
+                        OperationEntity::getCodeProprietaire,
+                        java.util.stream.Collectors.counting()
+                    ));
+                
+                Map<String, Object> serviceStat = new java.util.HashMap<>();
+                serviceStat.put("serviceName", serviceNumero);
+                serviceStat.put("serviceId", serviceCompte.getId());
+                serviceStat.put("pays", serviceCompte.getPays());
+                serviceStat.put("solde", serviceCompte.getSolde());
+                serviceStat.put("totalVolume", serviceVolume);
+                serviceStat.put("operationCount", operationCount);
+                serviceStat.put("uniqueCodeProprietaires", codeProprietaireCount.size());
+                serviceStat.put("codeProprietaireDetails", codeProprietaireCount);
+                
+                serviceStatsList.add(serviceStat);
+                
+                totalVolume += serviceVolume;
+                totalOperations += operationCount;
+            }
+            
+            // Trier par volume décroissant
+            serviceStatsList.sort((a, b) -> {
+                double volumeA = (Double) a.get("totalVolume");
+                double volumeB = (Double) b.get("totalVolume");
+                return Double.compare(volumeB, volumeA);
+            });
+            
+            stats.put("services", serviceStatsList);
+            stats.put("totalServices", serviceStatsList.size());
+            stats.put("totalVolume", totalVolume);
+            stats.put("totalOperations", totalOperations);
+            
+            logger.info("Statistiques récupérées: {} services, {} opérations, volume total: {}", 
+                       serviceStatsList.size(), totalOperations, totalVolume);
+            
+            return stats;
+            
+        } catch (Exception e) {
+            logger.error("Erreur lors de la récupération des statistiques de consommation: {}", e.getMessage(), e);
+            throw new RuntimeException("Erreur lors de la récupération des statistiques: " + e.getMessage(), e);
+        }
     }
     
     /**

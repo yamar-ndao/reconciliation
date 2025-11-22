@@ -1,12 +1,14 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, OnDestroy, ViewChild } from '@angular/core';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { Subscription, forkJoin } from 'rxjs';
 import { CompteService } from '../../services/compte.service';
 import { Compte } from '../../models/compte.model';
-import { ServiceBalanceService, SubCompteRequest } from '../../services/service-balance.service';
+import { ServiceBalanceService, SubCompteRequest, ServiceConsumptionStats, ServiceStat } from '../../services/service-balance.service';
 import { PopupService } from '../../services/popup.service';
 import { OperationService } from '../../services/operation.service';
 import { Operation } from '../../models/operation.model';
+import { ChartConfiguration, ChartData, ChartType } from 'chart.js';
+import { BaseChartDirective } from 'ng2-charts';
 
 // Interface pour les sous-comptes par code propriétaire
 interface SubCompte {
@@ -55,8 +57,109 @@ export class ServiceBalanceComponent implements OnInit, OnDestroy {
     isLoading = false;
     isMerging = false;
     showMergeForm = false;
+    showDashboard = false;
     
     mergeForm: FormGroup;
+    
+    // Dashboard stats
+    consumptionStats: ServiceConsumptionStats | null = null;
+    loadingStats = false;
+    selectedServiceForDashboard: string = '';
+    selectedServiceStats: ServiceStat | null = null;
+    serviceOperations: Operation[] = [];
+    loadingServiceStats = false;
+    showServiceDetailsTable = false;
+    
+    // Pagination pour le tableau des services
+    servicesTablePage: number = 1;
+    servicesTablePageSize: number = 10;
+    servicesTableTotalPages: number = 1;
+    paginatedServices: ServiceStat[] = [];
+    
+    // Graphiques
+    @ViewChild(BaseChartDirective) chart?: BaseChartDirective;
+    
+    // Graphique en barres - Volume par code propriétaire pour le service sélectionné
+    public barChartType: ChartType = 'bar';
+    public barChartData: ChartData<'bar'> = {
+        labels: [],
+        datasets: []
+    };
+    public barChartOptions: ChartConfiguration['options'] = {
+        responsive: true,
+        plugins: {
+            legend: {
+                display: true,
+                position: 'top'
+            },
+            title: {
+                display: true,
+                text: 'Volume par code propriétaire'
+            },
+            tooltip: {
+                callbacks: {
+                    label: (context) => {
+                        return `${context.dataset.label}: ${context.parsed.y?.toLocaleString('fr-FR')} XAF`;
+                    }
+                }
+            }
+        },
+        scales: {
+            y: {
+                beginAtZero: true,
+                ticks: {
+                    callback: (value) => {
+                        return value?.toLocaleString('fr-FR') + ' XAF';
+                    }
+                }
+            }
+        }
+    };
+    
+    // Graphique en ligne - Évolution des opérations par date
+    public lineChartType: ChartType = 'line';
+    public lineChartData: ChartData<'line'> = {
+        labels: [],
+        datasets: []
+    };
+    public lineChartOptions: ChartConfiguration['options'] = {
+        responsive: true,
+        plugins: {
+            legend: {
+                display: true,
+                position: 'top'
+            },
+            title: {
+                display: true,
+                text: 'Évolution des opérations par date'
+            }
+        },
+        scales: {
+            y: {
+                beginAtZero: true
+            }
+        }
+    };
+    
+    // Graphique en donut - Répartition par code propriétaire
+    public doughnutChartType: ChartType = 'doughnut';
+    public doughnutChartData: ChartData<'doughnut'> = {
+        labels: [],
+        datasets: []
+    };
+    public doughnutChartOptions: ChartConfiguration['options'] = {
+        responsive: true,
+        plugins: {
+            legend: {
+                display: true,
+                position: 'right'
+            },
+            title: {
+                display: true,
+                text: 'Répartition par code propriétaire'
+            }
+        }
+    };
     
     // Sous-comptes par code propriétaire pour les comptes Service
     serviceSubComptes: { [compteId: number]: SubCompte[] } = {};
@@ -639,5 +742,260 @@ export class ServiceBalanceComponent implements OnInit, OnDestroy {
         
         // Par défaut, retourner 0 si on ne peut pas déterminer l'impact
         return 0;
+    }
+
+    // Méthodes pour le Dashboard
+    openDashboard() {
+        this.showDashboard = true;
+        this.loadConsumptionStats();
+    }
+
+    closeDashboard() {
+        this.showDashboard = false;
+    }
+
+    loadConsumptionStats() {
+        this.loadingStats = true;
+        this.subscriptions.push(
+            this.serviceBalanceService.getServiceConsumptionStats().subscribe({
+                next: (stats) => {
+                    this.consumptionStats = stats;
+                    this.updateCharts(stats);
+                    this.loadingStats = false;
+                },
+                error: (error) => {
+                    console.error('Erreur lors du chargement des statistiques:', error);
+                    this.popupService.showError('Erreur', 'Impossible de charger les statistiques de consommation');
+                    this.loadingStats = false;
+                }
+            })
+        );
+    }
+
+    updateCharts(stats: ServiceConsumptionStats) {
+        // Stocker les stats pour le sélecteur de service
+        this.consumptionStats = stats;
+        
+        // Initialiser la pagination du tableau
+        this.updateServicesTablePagination();
+        
+        // Si un service est sélectionné, afficher ses graphiques
+        if (this.selectedServiceForDashboard) {
+            this.loadServiceStats(this.selectedServiceForDashboard);
+        }
+    }
+
+    toggleServiceDetailsTable() {
+        this.showServiceDetailsTable = !this.showServiceDetailsTable;
+    }
+
+    updateServicesTablePagination() {
+        if (!this.consumptionStats) return;
+        
+        this.servicesTableTotalPages = Math.ceil(this.consumptionStats.services.length / this.servicesTablePageSize);
+        if (this.servicesTablePage > this.servicesTableTotalPages) {
+            this.servicesTablePage = Math.max(1, this.servicesTableTotalPages);
+        }
+        
+        const startIndex = (this.servicesTablePage - 1) * this.servicesTablePageSize;
+        const endIndex = startIndex + this.servicesTablePageSize;
+        this.paginatedServices = this.consumptionStats.services.slice(startIndex, endIndex);
+    }
+
+    goToServicesPage(page: number) {
+        if (page >= 1 && page <= this.servicesTableTotalPages) {
+            this.servicesTablePage = page;
+            this.updateServicesTablePagination();
+        }
+    }
+
+    nextServicesPage() {
+        if (this.servicesTablePage < this.servicesTableTotalPages) {
+            this.goToServicesPage(this.servicesTablePage + 1);
+        }
+    }
+
+    previousServicesPage() {
+        if (this.servicesTablePage > 1) {
+            this.goToServicesPage(this.servicesTablePage - 1);
+        }
+    }
+
+    getServicesPageNumbers(): number[] {
+        const pages: number[] = [];
+        const maxVisiblePages = 5;
+        let startPage = Math.max(1, this.servicesTablePage - Math.floor(maxVisiblePages / 2));
+        let endPage = Math.min(this.servicesTableTotalPages, startPage + maxVisiblePages - 1);
+
+        if (endPage - startPage + 1 < maxVisiblePages) {
+            startPage = Math.max(1, endPage - maxVisiblePages + 1);
+        }
+
+        for (let i = startPage; i <= endPage; i++) {
+            pages.push(i);
+        }
+        return pages;
+    }
+
+    onServiceSelectedForDashboard() {
+        if (this.selectedServiceForDashboard) {
+            this.loadServiceStats(this.selectedServiceForDashboard);
+        } else {
+            // Réinitialiser les graphiques
+            this.barChartData = { labels: [], datasets: [] };
+            this.lineChartData = { labels: [], datasets: [] };
+            this.doughnutChartData = { labels: [], datasets: [] };
+            this.selectedServiceStats = null;
+            this.serviceOperations = [];
+        }
+    }
+
+    loadServiceStats(serviceName: string) {
+        this.loadingServiceStats = true;
+        
+        // Trouver le service dans les stats
+        const serviceStat = this.consumptionStats?.services.find(s => s.serviceName === serviceName);
+        
+        if (!serviceStat) {
+            this.loadingServiceStats = false;
+            return;
+        }
+        
+        this.selectedServiceStats = serviceStat;
+        
+        // Charger les opérations du service
+        this.subscriptions.push(
+            this.operationService.getOperationsByService(serviceName).subscribe({
+                next: (operations) => {
+                    this.serviceOperations = operations;
+                    this.updateServiceCharts(serviceStat, operations);
+                    this.loadingServiceStats = false;
+                },
+                error: (error) => {
+                    console.error('Erreur lors du chargement des opérations:', error);
+                    this.popupService.showError('Erreur', 'Impossible de charger les opérations du service');
+                    this.loadingServiceStats = false;
+                }
+            })
+        );
+    }
+
+    updateServiceCharts(serviceStat: ServiceStat, operations: Operation[]) {
+        // Graphique en barres - Volume par code propriétaire
+        const codeProprietaireMap = new Map<string, number>();
+        operations.forEach(op => {
+            const codeProprietaire = op.codeProprietaire || 'Non défini';
+            // Utiliser la différence de solde si disponible, sinon le montant
+            let impact = 0;
+            if (op.soldeAvant !== undefined && op.soldeApres !== undefined) {
+                impact = op.soldeApres - op.soldeAvant;
+            } else {
+                impact = op.montant || 0;
+            }
+            const currentVolume = codeProprietaireMap.get(codeProprietaire) || 0;
+            codeProprietaireMap.set(codeProprietaire, currentVolume + Math.abs(impact));
+        });
+        
+        const codeProprietaires = Array.from(codeProprietaireMap.entries())
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 10) // Top 10
+            .map(([cp]) => cp);
+        
+        this.barChartData = {
+            labels: codeProprietaires,
+            datasets: [{
+                label: 'Volume total (XAF)',
+                data: codeProprietaires.map(cp => codeProprietaireMap.get(cp)!),
+                backgroundColor: 'rgba(25, 118, 210, 0.8)',
+                borderColor: 'rgba(25, 118, 210, 1)',
+                borderWidth: 1
+            }]
+        };
+        
+        if (this.barChartOptions?.plugins?.title) {
+            this.barChartOptions.plugins.title.text = `Volume par code propriétaire - ${serviceStat.serviceName}`;
+        }
+        
+        // Graphique en ligne - Évolution par date
+        const dateMap = new Map<string, number>();
+        operations.forEach(op => {
+            if (op.dateOperation) {
+                const date = new Date(op.dateOperation);
+                const dateKey = date.toISOString().split('T')[0]; // Format YYYY-MM-DD pour le tri
+                dateMap.set(dateKey, (dateMap.get(dateKey) || 0) + 1);
+            }
+        });
+        
+        const dates = Array.from(dateMap.keys())
+            .sort()
+            .map(dateKey => {
+                const date = new Date(dateKey);
+                return date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+            });
+        
+        this.lineChartData = {
+            labels: dates,
+            datasets: [{
+                label: 'Nombre d\'opérations',
+                data: Array.from(dateMap.values()),
+                borderColor: 'rgba(76, 175, 80, 1)',
+                backgroundColor: 'rgba(76, 175, 80, 0.2)',
+                fill: true,
+                tension: 0.4,
+                pointRadius: 4
+            }]
+        };
+        
+        if (this.lineChartOptions?.plugins?.title) {
+            this.lineChartOptions.plugins.title.text = `Évolution des opérations par date - ${serviceStat.serviceName}`;
+        }
+        
+        // Graphique en donut - Répartition par code propriétaire
+        const codeProprietaireCounts = Array.from(codeProprietaireMap.entries())
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 10); // Top 10
+        
+        const colors = this.generateColors(codeProprietaireCounts.length);
+        
+        this.doughnutChartData = {
+            labels: codeProprietaireCounts.map(([cp]) => cp),
+            datasets: [{
+                label: 'Volume (XAF)',
+                data: codeProprietaireCounts.map(([, volume]) => volume),
+                backgroundColor: colors,
+                borderColor: colors.map(c => c.replace('0.8', '1')),
+                borderWidth: 2
+            }]
+        };
+        
+        if (this.doughnutChartOptions?.plugins?.title) {
+            this.doughnutChartOptions.plugins.title.text = `Répartition par code propriétaire - ${serviceStat.serviceName}`;
+        }
+        
+        // Mettre à jour les graphiques
+        if (this.chart) {
+            this.chart.update();
+        }
+    }
+
+    generateColors(count: number): string[] {
+        const colors = [
+            'rgba(25, 118, 210, 0.8)',
+            'rgba(76, 175, 80, 0.8)',
+            'rgba(255, 152, 0, 0.8)',
+            'rgba(233, 30, 99, 0.8)',
+            'rgba(156, 39, 176, 0.8)',
+            'rgba(0, 188, 212, 0.8)',
+            'rgba(255, 87, 34, 0.8)',
+            'rgba(121, 85, 72, 0.8)',
+            'rgba(63, 81, 181, 0.8)',
+            'rgba(0, 150, 136, 0.8)'
+        ];
+        
+        const result: string[] = [];
+        for (let i = 0; i < count; i++) {
+            result.push(colors[i % colors.length]);
+        }
+        return result;
     }
 }

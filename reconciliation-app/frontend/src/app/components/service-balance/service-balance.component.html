@@ -82,16 +82,24 @@
     <div class="comptes-section" *ngIf="!isLoading && selectedCountry && filteredServiceComptes.length > 0">
         <div class="section-header">
             <h3><i class="fas fa-list"></i> Comptes Service - {{ selectedCountry }}</h3>
-            <button 
-                class="btn btn-primary" 
-                (click)="showMergeDialog()"
-                [disabled]="getTotalSelectedCount() < 2">
-                <i class="fas fa-layer-group"></i>
-                Regrouper les éléments sélectionnés ({{ getTotalSelectedCount() }})
-                <span *ngIf="getSelectedSubComptesCount() > 0" class="sub-selection-count">
-                    - {{ getSelectedComptesCount() }} compte(s), {{ getSelectedSubComptesCount() }} sous-compte(s)
-                </span>
-            </button>
+            <div class="header-actions-group">
+                <button 
+                    class="btn btn-info" 
+                    (click)="openDashboard()">
+                    <i class="fas fa-chart-bar"></i>
+                    Dashboard
+                </button>
+                <button 
+                    class="btn btn-primary" 
+                    (click)="showMergeDialog()"
+                    [disabled]="getTotalSelectedCount() < 2">
+                    <i class="fas fa-layer-group"></i>
+                    Regrouper les éléments sélectionnés ({{ getTotalSelectedCount() }})
+                    <span *ngIf="getSelectedSubComptesCount() > 0" class="sub-selection-count">
+                        - {{ getSelectedComptesCount() }} compte(s), {{ getSelectedSubComptesCount() }} sous-compte(s)
+                    </span>
+                </button>
+            </div>
         </div>
 
         <!-- Barre de filtres et recherche -->
@@ -424,6 +432,218 @@
                     </button>
                 </div>
             </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Dashboard -->
+<div *ngIf="showDashboard" class="modal-overlay-full" (click)="closeDashboard()">
+    <div class="modal-container-full dashboard-modal" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+            <h3><i class="fas fa-chart-bar"></i> Dashboard - Consommation des Services</h3>
+            <button type="button" class="modal-close" (click)="closeDashboard()">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        
+        <div class="modal-body dashboard-body-full">
+            <div class="loading-stats" *ngIf="loadingStats">
+                <i class="fas fa-spinner fa-spin"></i>
+                <span>Chargement des statistiques...</span>
+            </div>
+            
+            <div class="dashboard-content" *ngIf="!loadingStats && consumptionStats">
+                <!-- Sélecteur de service -->
+                <div class="service-selector-section">
+                    <label for="service-select"><i class="fas fa-filter"></i> Sélectionner un service :</label>
+                    <select 
+                        id="service-select"
+                        [(ngModel)]="selectedServiceForDashboard" 
+                        (change)="onServiceSelectedForDashboard()"
+                        class="service-select">
+                        <option value="">-- Tous les services --</option>
+                        <option *ngFor="let service of consumptionStats.services" [value]="service.serviceName">
+                            {{ service.serviceName }} ({{ service.pays }})
+                        </option>
+                    </select>
+                </div>
+
+                <!-- Statistiques globales -->
+                <div class="dashboard-stats">
+                    <div class="stat-card-dashboard">
+                        <div class="stat-icon-dashboard">
+                            <i class="fas fa-building"></i>
+                        </div>
+                        <div class="stat-content-dashboard">
+                            <div class="stat-number-dashboard">{{ consumptionStats.totalServices }}</div>
+                            <div class="stat-label-dashboard">Services</div>
+                        </div>
+                    </div>
+                    <div class="stat-card-dashboard">
+                        <div class="stat-icon-dashboard">
+                            <i class="fas fa-exchange-alt"></i>
+                        </div>
+                        <div class="stat-content-dashboard">
+                            <div class="stat-number-dashboard">{{ consumptionStats.totalOperations | number }}</div>
+                            <div class="stat-label-dashboard">Opérations</div>
+                        </div>
+                    </div>
+                    <div class="stat-card-dashboard">
+                        <div class="stat-icon-dashboard">
+                            <i class="fas fa-coins"></i>
+                        </div>
+                        <div class="stat-content-dashboard">
+                            <div class="stat-number-dashboard">{{ consumptionStats.totalVolume | currency:'XAF':'symbol':'1.0-0' }}</div>
+                            <div class="stat-label-dashboard">Volume Total</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Message si aucun service sélectionné -->
+                <div class="no-service-selected" *ngIf="!selectedServiceForDashboard">
+                    <i class="fas fa-info-circle"></i>
+                    <p>Veuillez sélectionner un service ci-dessus pour afficher ses graphiques de consommation.</p>
+                </div>
+                
+                <!-- Graphiques pour le service sélectionné -->
+                <div class="charts-container" *ngIf="selectedServiceForDashboard && selectedServiceStats">
+                    <div class="loading-service-stats" *ngIf="loadingServiceStats">
+                        <i class="fas fa-spinner fa-spin"></i>
+                        <span>Chargement des données du service...</span>
+                    </div>
+                    
+                    <div *ngIf="!loadingServiceStats">
+                        <!-- Statistiques du service sélectionné -->
+                        <div class="selected-service-info">
+                            <h4><i class="fas fa-info-circle"></i> Service sélectionné : {{ selectedServiceStats.serviceName }}</h4>
+                            <div class="service-info-grid">
+                                <div class="info-item">
+                                    <span class="info-label">Pays :</span>
+                                    <span class="info-value">{{ selectedServiceStats.pays }}</span>
+                                </div>
+                                <div class="info-item">
+                                    <span class="info-label">Solde :</span>
+                                    <span class="info-value" [class.positive]="selectedServiceStats.solde >= 0" [class.negative]="selectedServiceStats.solde < 0">
+                                        {{ selectedServiceStats.solde | currency:'XAF':'symbol':'1.0-0' }}
+                                    </span>
+                                </div>
+                                <div class="info-item">
+                                    <span class="info-label">Volume total :</span>
+                                    <span class="info-value">{{ selectedServiceStats.totalVolume | currency:'XAF':'symbol':'1.0-0' }}</span>
+                                </div>
+                                <div class="info-item">
+                                    <span class="info-label">Nombre d'opérations :</span>
+                                    <span class="info-value">{{ selectedServiceStats.operationCount | number }}</span>
+                                </div>
+                                <div class="info-item">
+                                    <span class="info-label">Clients uniques :</span>
+                                    <span class="info-value">{{ selectedServiceStats.uniqueCodeProprietaires }}</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="chart-card">
+                            <h4><i class="fas fa-chart-bar"></i> Volume par Code Propriétaire (Top 10)</h4>
+                            <canvas baseChart
+                                [data]="barChartData"
+                                [options]="barChartOptions"
+                                [type]="barChartType">
+                            </canvas>
+                        </div>
+                        
+                        <div class="chart-card">
+                            <h4><i class="fas fa-chart-line"></i> Évolution des Opérations par Date</h4>
+                            <canvas baseChart
+                                [data]="lineChartData"
+                                [options]="lineChartOptions"
+                                [type]="lineChartType">
+                            </canvas>
+                        </div>
+                        
+                        <div class="chart-card">
+                            <h4><i class="fas fa-chart-pie"></i> Répartition par Code Propriétaire (Top 10)</h4>
+                            <canvas baseChart
+                                [data]="doughnutChartData"
+                                [options]="doughnutChartOptions"
+                                [type]="doughnutChartType">
+                            </canvas>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Tableau détaillé (masqué par défaut) -->
+                <div class="stats-table-container">
+                    <div class="table-header-toggle" (click)="toggleServiceDetailsTable()">
+                        <h4>
+                            <i class="fas" [class.fa-chevron-down]="showServiceDetailsTable" [class.fa-chevron-right]="!showServiceDetailsTable"></i>
+                            <i class="fas fa-table"></i> Détails par Service
+                            <span class="table-count">({{ consumptionStats.services.length }})</span>
+                        </h4>
+                    </div>
+                    <div class="table-wrapper" *ngIf="showServiceDetailsTable">
+                        <table class="stats-table">
+                            <thead>
+                                <tr>
+                                    <th>Service</th>
+                                    <th>Pays</th>
+                                    <th>Solde</th>
+                                    <th>Volume Total</th>
+                                    <th>Opérations</th>
+                                    <th>Client</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr *ngFor="let service of paginatedServices">
+                                    <td class="service-name">{{ service.serviceName }}</td>
+                                    <td>{{ service.pays }}</td>
+                                    <td [class.positive]="service.solde >= 0" [class.negative]="service.solde < 0">
+                                        {{ service.solde | currency:'XAF':'symbol':'1.0-0' }}
+                                    </td>
+                                    <td>{{ service.totalVolume | currency:'XAF':'symbol':'1.0-0' }}</td>
+                                    <td>{{ service.operationCount | number }}</td>
+                                    <td>{{ service.uniqueCodeProprietaires }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                        
+                        <!-- Pagination pour le tableau -->
+                        <div class="table-pagination" *ngIf="servicesTableTotalPages > 1">
+                            <div class="pagination-info">
+                                Page {{ servicesTablePage }} sur {{ servicesTableTotalPages }} 
+                                ({{ (servicesTablePage - 1) * servicesTablePageSize + 1 }} - {{ Math.min(servicesTablePage * servicesTablePageSize, consumptionStats.services.length) }} sur {{ consumptionStats.services.length }} services)
+                            </div>
+                            
+                            <div class="pagination-controls">
+                                <button 
+                                    (click)="previousServicesPage()"
+                                    [disabled]="servicesTablePage === 1"
+                                    class="btn btn-secondary pagination-btn">
+                                    <i class="fas fa-chevron-left"></i>
+                                    Précédent
+                                </button>
+                                
+                                <div class="page-numbers">
+                                    <button 
+                                        *ngFor="let page of getServicesPageNumbers()"
+                                        (click)="goToServicesPage(page)"
+                                        [class.active]="page === servicesTablePage"
+                                        class="btn page-btn">
+                                        {{ page }}
+                                    </button>
+                                </div>
+                                
+                                <button 
+                                    (click)="nextServicesPage()"
+                                    [disabled]="servicesTablePage === servicesTableTotalPages"
+                                    class="btn btn-secondary pagination-btn">
+                                    Suivant
+                                    <i class="fas fa-chevron-right"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 </div>

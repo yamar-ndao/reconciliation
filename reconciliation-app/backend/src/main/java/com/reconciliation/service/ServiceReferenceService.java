@@ -393,13 +393,17 @@ public class ServiceReferenceService {
             references = repository.findByPaysIn(allowedPays);
         }
 
-        // S'assurer que les statuts sont à jour
-        refreshStatusesFromAgencySummary(references);
+        // Calculer les statuts sans les sauvegarder pour éviter les boucles infinies
+        Map<String, String> computedStatuses = computeStatusesForCodes(references);
 
         Map<String, Boolean> map = new HashMap<>();
         for (ServiceReferenceEntity reference : references) {
+            // Utiliser le statut calculé plutôt que celui en base pour éviter les sauvegardes
+            String normalized = normalizeCode(reference.getCodeService());
+            String computedStatus = computedStatuses.getOrDefault(normalized, reference.getStatus());
+            
             // Vérifier que le service est actif ET réconciliable
-            boolean isActive = "ACTIF".equalsIgnoreCase(reference.getStatus());
+            boolean isActive = "ACTIF".equalsIgnoreCase(computedStatus);
             boolean isReconcilable = Boolean.TRUE.equals(reference.getReconciliable());
             if (isActive && isReconcilable) {
                 addServiceKey(map, reference.getCodeService(), true);

@@ -23,6 +23,24 @@ export interface SubCompteRequest {
   serviceCompteNumero: string;
 }
 
+export interface ServiceConsumptionStats {
+  services: ServiceStat[];
+  totalServices: number;
+  totalVolume: number;
+  totalOperations: number;
+}
+
+export interface ServiceStat {
+  serviceName: string;
+  serviceId: number;
+  pays: string;
+  solde: number;
+  totalVolume: number;
+  operationCount: number;
+  uniqueCodeProprietaires: number;
+  codeProprietaireDetails: { [key: string]: number };
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -93,5 +111,12 @@ export class ServiceBalanceService {
         'Content-Type': 'application/json'
       }
     });
+  }
+
+  /**
+   * Récupère les statistiques de consommation des services
+   */
+  getServiceConsumptionStats(): Observable<ServiceConsumptionStats> {
+    return this.http.get<ServiceConsumptionStats>(`${this.apiUrl}/stats/consumption`);
   }
 }
