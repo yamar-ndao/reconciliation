@@ -383,12 +383,12 @@ export interface ReconciliationReportData {
                                 </span>
                             </td>
                             <td class="text-cell">
-                                <div class="glpi-cell" [class.glpi-disabled]="item.status === 'OK'">
+                                <div class="glpi-cell">
                                     <ng-container *ngIf="item.glpiId && item.glpiId.trim() && editingRow !== item; else glpiInput">
-                                        <a class="glpi-link" [href]="getGlpiTicketUrl(item.glpiId)" target="_blank" rel="noopener noreferrer" title="Ouvrir le ticket GLPI">{{item.glpiId}}</a>
+                                        <span class="glpi-link" (click)="showTicketOptionsPopup(item.glpiId)" title="Choisir une option pour ouvrir le ticket" style="cursor: pointer;">{{item.glpiId}}</span>
                                     </ng-container>
                                     <ng-template #glpiInput>
-                                        <div class="glpi-input-container">
+                                        <div class="glpi-input-container" [class.glpi-disabled]="item.status === 'OK'">
                                             <input [(ngModel)]="item.glpiId" placeholder="ID TICKET" class="edit-input" [disabled]="item.status === 'OK'"/>
                                             <button 
                                                 *ngIf="!item.glpiId || item.glpiId.trim() === ''" 
@@ -940,25 +940,16 @@ export interface ReconciliationReportData {
             position: relative;
         }
         .glpi-cell { display: flex; gap: 8px; align-items: center; }
-        .glpi-cell.glpi-disabled {
-            opacity: 0.5;
-            pointer-events: none;
-            color: #6c757d;
-        }
         .glpi-link { color: #007bff; text-decoration: none; font-weight: 600; }
         .glpi-link:hover { text-decoration: underline; }
-        .glpi-disabled .glpi-link {
-            color: #6c757d;
-            cursor: not-allowed;
+        .glpi-input-container.glpi-disabled {
+            opacity: 0.7;
         }
-        .glpi-disabled .glpi-link:hover {
-            text-decoration: none;
-        }
-        .glpi-disabled .btn-glpi-create {
+        .glpi-input-container.glpi-disabled .btn-glpi-create {
             opacity: 0.5;
             cursor: not-allowed;
         }
-        .glpi-disabled .edit-input {
+        .glpi-input-container.glpi-disabled .edit-input {
             background-color: #e9ecef;
             color: #6c757d;
             cursor: not-allowed;
@@ -2687,6 +2678,238 @@ export class ReconciliationReportComponent implements OnInit, OnDestroy {
     // Obtenir l'URL du ticket GLPI avec l'ID
     getGlpiTicketUrl(idGlpi: string): string {
         return `https://glpi.intouchgroup.net/glpi/front/ticket.form.php?id=${idGlpi}`;
+    }
+
+    getBometierTicketUrl(idGlpi: string): string {
+        return `https://bometier.gutouch.net/details-ticket/${idGlpi}`;
+    }
+
+    // Afficher un popup pour choisir entre GLPI et BOMETIER
+    async showTicketOptionsPopup(ticketId: string): Promise<void> {
+        const message = `Choisissez la plateforme pour ouvrir le ticket ${ticketId}:`;
+        const title = 'Ouvrir le ticket';
+        
+        // Créer un popup personnalisé avec deux boutons
+        const overlay = document.createElement('div');
+        overlay.className = 'modern-popup-overlay';
+        overlay.innerHTML = `
+            <div class="modern-popup popup-type-info">
+                <div class="popup-header">
+                    <div class="popup-title-wrapper">
+                        <span class="popup-icon">🎫</span>
+                        <h3 class="popup-title">${title}</h3>
+                    </div>
+                    <button class="popup-close" aria-label="Fermer">×</button>
+                </div>
+                <div class="popup-content">
+                    <p class="popup-message">${message}</p>
+                </div>
+                <div class="popup-actions popup-actions-two-buttons">
+                    <button class="popup-btn popup-btn-glpi">
+                        🔵 GLPI
+                    </button>
+                    <button class="popup-btn popup-btn-bometier">
+                        🟢 BOMETIER
+                    </button>
+                </div>
+            </div>
+        `;
+
+        // Ajouter les styles si nécessaire
+        const style = document.createElement('style');
+        style.textContent = `
+            .modern-popup-overlay {
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0, 0, 0, 0.6);
+                backdrop-filter: blur(4px);
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                z-index: 9999;
+                animation: fadeIn 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            }
+            .modern-popup {
+                background: white;
+                border-radius: 16px;
+                box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(0, 0, 0, 0.05);
+                max-width: 450px;
+                width: 90%;
+                animation: slideIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+                overflow: hidden;
+                border-top: 4px solid #007bff;
+            }
+            .popup-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                padding: 24px 24px 16px 24px;
+                background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+            }
+            .popup-title-wrapper {
+                display: flex;
+                align-items: center;
+                gap: 12px;
+            }
+            .popup-icon {
+                font-size: 24px;
+                line-height: 1;
+            }
+            .popup-title {
+                margin: 0;
+                font-size: 20px;
+                font-weight: 700;
+                color: #212529;
+            }
+            .popup-close {
+                background: rgba(0, 0, 0, 0.05);
+                border: none;
+                font-size: 22px;
+                cursor: pointer;
+                color: #6c757d;
+                padding: 0;
+                width: 32px;
+                height: 32px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                border-radius: 50%;
+                transition: all 0.2s;
+            }
+            .popup-close:hover {
+                background: rgba(0, 0, 0, 0.1);
+                color: #212529;
+                transform: rotate(90deg);
+            }
+            .popup-content {
+                padding: 20px 24px;
+            }
+            .popup-message {
+                margin: 0;
+                color: #495057;
+                line-height: 1.6;
+                font-size: 15px;
+            }
+            .popup-actions-two-buttons {
+                display: flex;
+                justify-content: center;
+                gap: 12px;
+                padding: 16px 24px 24px 24px;
+                background: #f8f9fa;
+                border-top: 1px solid #e9ecef;
+            }
+            .popup-btn {
+                padding: 12px 24px;
+                border: none;
+                border-radius: 8px;
+                cursor: pointer;
+                font-weight: 600;
+                font-size: 14px;
+                transition: all 0.2s;
+                min-width: 140px;
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            }
+            .popup-btn:hover {
+                transform: translateY(-1px);
+                box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+            }
+            .popup-btn-glpi {
+                background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+                color: white;
+            }
+            .popup-btn-glpi:hover {
+                background: linear-gradient(135deg, #0056b3 0%, #004085 100%);
+            }
+            .popup-btn-bometier {
+                background: linear-gradient(135deg, #28a745 0%, #1e7e34 100%);
+                color: white;
+            }
+            .popup-btn-bometier:hover {
+                background: linear-gradient(135deg, #1e7e34 0%, #155724 100%);
+            }
+            @keyframes fadeIn {
+                from { opacity: 0; }
+                to { opacity: 1; }
+            }
+            @keyframes slideIn {
+                from { 
+                    opacity: 0;
+                    transform: translateY(-30px) scale(0.9);
+                }
+                to { 
+                    opacity: 1;
+                    transform: translateY(0) scale(1);
+                }
+            }
+        `;
+
+        document.head.appendChild(style);
+        document.body.appendChild(overlay);
+        document.body.style.overflow = 'hidden';
+
+        const cleanup = () => {
+            document.body.style.overflow = 'auto';
+            if (style.parentNode) {
+                style.parentNode.removeChild(style);
+            }
+            overlay.remove();
+        };
+
+        // Gérer la fermeture
+        const closeBtn = overlay.querySelector('.popup-close');
+        if (closeBtn) {
+            closeBtn.addEventListener('click', cleanup);
+        }
+
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) {
+                cleanup();
+            }
+        });
+
+        // Gérer Escape
+        const handleEscape = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                cleanup();
+                document.removeEventListener('keydown', handleEscape);
+            }
+        };
+        document.addEventListener('keydown', handleEscape);
+
+        // Gérer les clics sur les boutons
+        const glpiBtn = overlay.querySelector('.popup-btn-glpi');
+        const bometierBtn = overlay.querySelector('.popup-btn-bometier');
+
+        if (glpiBtn) {
+            glpiBtn.addEventListener('click', () => {
+                cleanup();
+                document.removeEventListener('keydown', handleEscape);
+                this.openGlpiTicket(ticketId);
+            });
+        }
+
+        if (bometierBtn) {
+            bometierBtn.addEventListener('click', () => {
+                cleanup();
+                document.removeEventListener('keydown', handleEscape);
+                this.openBometierTicket(ticketId);
+            });
+        }
+    }
+
+    // Ouvrir le ticket dans GLPI
+    openGlpiTicket(ticketId: string): void {
+        const url = this.getGlpiTicketUrl(ticketId);
+        window.open(url, '_blank', 'noopener,noreferrer');
+    }
+
+    // Ouvrir le ticket dans BOMETIER
+    openBometierTicket(ticketId: string): void {
+        const url = this.getBometierTicketUrl(ticketId);
+        window.open(url, '_blank', 'noopener,noreferrer');
     }
 
     private loadSavedReportFromDatabase() {
