@@ -338,7 +338,8 @@ export interface ReconciliationReportData {
                                             *ngIf="item.boOnly > 0"
                                             class="btn-transfer-ecart" 
                                             (click)="transferEcartToMatches(item, 'boOnly')"
-                                            title="Transférer une partie des écarts BO vers les correspondances">
+                                            [disabled]="isRowLocked(item)"
+                                            [title]="isRowLocked(item) ? 'Ligne verrouillée (OK + Terminé)' : 'Transférer une partie des écarts BO vers les correspondances'">
                                             ➕
                                         </button>
                                     </ng-container>
@@ -361,7 +362,8 @@ export interface ReconciliationReportData {
                                             *ngIf="item.partnerOnly > 0"
                                             class="btn-transfer-ecart" 
                                             (click)="transferEcartToMatches(item, 'partnerOnly')"
-                                            title="Transférer une partie des écarts Partenaire vers les correspondances">
+                                            [disabled]="isRowLocked(item)"
+                                            [title]="isRowLocked(item) ? 'Ligne verrouillée (OK + Terminé)' : 'Transférer une partie des écarts Partenaire vers les correspondances'">
                                             ➕
                                         </button>
                                     </ng-container>
@@ -403,11 +405,18 @@ export interface ReconciliationReportData {
                                 </div>
                             </td>
                             <td class="select-cell">
-                                <ng-container *ngIf="editingRow !== item; else editStatus">
-                                    <span [class]="getStatusClass(item.status)">{{item.status}}</span>
+                                <ng-container *ngIf="editingStatusRow !== item; else editStatus">
+                                    <span [class]="getStatusClass(item.status)" 
+                                          class="status-badge" 
+                                          [class.locked]="isRowLocked(item)"
+                                          (click)="!isRowLocked(item) && startEditStatus(item)" 
+                                          [style.cursor]="isRowLocked(item) ? 'not-allowed' : 'pointer'"
+                                          [title]="isRowLocked(item) ? 'Ligne verrouillée (OK + Terminé)' : 'Cliquer pour modifier'">
+                                        {{item.status}}
+                                    </span>
                                 </ng-container>
                                 <ng-template #editStatus>
-                                    <select [(ngModel)]="item.status" class="edit-select">
+                                    <select [(ngModel)]="item.status" class="edit-select" (change)="onStatusChange(item)" (blur)="stopEditStatus()">
                                         <option *ngFor="let s of statusOptions" [ngValue]="s">{{s}}</option>
                                     </select>
                                 </ng-template>
@@ -422,7 +431,12 @@ export interface ReconciliationReportData {
                             </td>
                             <td class="select-cell traitement-cell">
                                 <ng-container *ngIf="editingTraitementRow !== item; else editTraitement">
-                                    <span [class]="getTraitementClass(item.traitement)" class="traitement-badge" (click)="startEditTraitement(item)" style="cursor: pointer;">
+                                    <span [class]="getTraitementClass(item.traitement)" 
+                                          class="traitement-badge" 
+                                          [class.locked]="isRowLocked(item)"
+                                          (click)="!isRowLocked(item) && startEditTraitement(item)" 
+                                          [style.cursor]="isRowLocked(item) ? 'not-allowed' : 'pointer'"
+                                          [title]="isRowLocked(item) ? 'Ligne verrouillée (OK + Terminé)' : 'Cliquer pour modifier'">
                                         {{item.traitement || '-'}}
                                     </span>
                                 </ng-container>
@@ -435,8 +449,20 @@ export interface ReconciliationReportData {
                             </td>
                             <td *ngIf="showActionsColumn" class="actions-cell">
                                 <ng-container *ngIf="editingRow !== item; else editingActions">
-                                    <button class="icon-btn icon-edit" title="Modifier" aria-label="Modifier" (click)="startEdit(item)">✏️</button>
-                                    <button class="icon-btn icon-delete" title="Supprimer" aria-label="Supprimer" (click)="deleteRow(item)" [disabled]="!item.id">🗑️</button>
+                                    <button class="icon-btn icon-edit" 
+                                            title="Modifier" 
+                                            aria-label="Modifier" 
+                                            (click)="startEdit(item)"
+                                            [disabled]="isRowLocked(item)">
+                                        ✏️
+                                    </button>
+                                    <button class="icon-btn icon-delete" 
+                                            title="Supprimer" 
+                                            aria-label="Supprimer" 
+                                            (click)="deleteRow(item)" 
+                                            [disabled]="!item.id || isRowLocked(item)">
+                                        🗑️
+                                    </button>
                                 </ng-container>
                                 <ng-template #editingActions>
                                     <button class="icon-btn icon-save" title="Sauvegarder les modifications" aria-label="Sauvegarder" (click)="saveEdit(item)">💾</button>
@@ -1042,6 +1068,25 @@ export interface ReconciliationReportData {
             transform: translateY(0);
         }
 
+        .btn-transfer-ecart:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            background: #6c757d;
+        }
+
+        .btn-transfer-ecart:disabled:hover {
+            background: #6c757d;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .status-badge.locked,
+        .traitement-badge.locked {
+            opacity: 0.6;
+            cursor: not-allowed !important;
+            pointer-events: none;
+        }
+
         .mismatch-cell {
             text-align: right;
             color: #dc3545;
@@ -1453,6 +1498,9 @@ export class ReconciliationReportComponent implements OnInit, OnDestroy {
     
     // Propriété pour l'édition directe du traitement (comme dans banque)
     editingTraitementRow: ReconciliationReportData | null = null;
+    
+    // Propriété pour l'édition directe du statut
+    editingStatusRow: ReconciliationReportData | null = null;
     
     // Propriété pour contrôler l'affichage de la colonne Actions
     showActionsColumn = false;
@@ -3377,6 +3425,11 @@ export class ReconciliationReportComponent implements OnInit, OnDestroy {
 
     // Méthodes pour l'édition en ligne
     startEdit(item: ReconciliationReportData) {
+        // Vérifier si la ligne est verrouillée
+        if (this.isRowLocked(item)) {
+            this.popupService.showWarning('Ligne verrouillée', 'Cette ligne ne peut pas être modifiée car le statut est OK et le traitement est Terminé.');
+            return;
+        }
         // Sauvegarder une copie des données originales
         this.originalData = { ...item };
         this.editingRow = item;
@@ -3492,6 +3545,12 @@ export class ReconciliationReportComponent implements OnInit, OnDestroy {
 
     // Méthode pour transférer une partie des écarts vers les correspondances
     async transferEcartToMatches(item: ReconciliationReportData, ecartType: 'boOnly' | 'partnerOnly') {
+        // Vérifier si la ligne est verrouillée
+        if (this.isRowLocked(item)) {
+            this.popupService.showWarning('Ligne verrouillée', 'Cette ligne ne peut pas être modifiée car le statut est OK et le traitement est Terminé.');
+            return;
+        }
+
         const currentEcart = this.normalizeNumericValue(item[ecartType]);
         
         if (currentEcart <= 0) {
@@ -3648,6 +3707,11 @@ export class ReconciliationReportComponent implements OnInit, OnDestroy {
         return `traitement-badge traitement-${cleanTraitement}`;
     }
 
+    // Vérifier si une ligne est verrouillée (statut OK + traitement Terminé)
+    isRowLocked(item: ReconciliationReportData): boolean {
+        return item.status === 'OK' && item.traitement === 'Terminé';
+    }
+
     // Méthodes pour l'édition directe du traitement (comme dans banque)
     startEditTraitement(item: ReconciliationReportData) {
         this.editingTraitementRow = item;
@@ -3702,6 +3766,102 @@ export class ReconciliationReportComponent implements OnInit, OnDestroy {
                 this.popupService.showError('Erreur', 'Impossible de mettre à jour le traitement');
             }
         });
+    }
+
+    // Méthodes pour l'édition directe du statut (comme pour le traitement)
+    startEditStatus(item: ReconciliationReportData) {
+        if (this.isRowLocked(item)) {
+            this.popupService.showWarning('Ligne verrouillée', 'Cette ligne ne peut pas être modifiée car le statut est OK et le traitement est Terminé.');
+            return;
+        }
+        this.editingStatusRow = item;
+    }
+
+    stopEditStatus() {
+        this.editingStatusRow = null;
+    }
+
+    onStatusChange(item: ReconciliationReportData) {
+        // Si le statut est "OK", appliquer le même comportement que saveEdit
+        if (item.status === 'OK') {
+            // Valider les données avant sauvegarde
+            if (!this.validateEditData(item)) {
+                this.stopEditStatus();
+                return;
+            }
+
+            // Recalculer le taux de correspondance si nécessaire
+            this.recalculateMatchRate(item);
+
+            // Recalculer les données selon le statut (met les écarts à 0 et les ajoute aux correspondances)
+            const recalculatedData = this.recalculateDataBasedOnStatus(item);
+
+            // Mettre à jour le commentaire avec les nouvelles valeurs
+            recalculatedData.comment = this.buildCommentForCounts(
+                recalculatedData.matches,
+                recalculatedData.boOnly,
+                recalculatedData.partnerOnly,
+                recalculatedData.mismatches
+            );
+
+            // Mettre à jour l'item avec les données recalculées
+            Object.assign(item, recalculatedData);
+
+            // Si c'est une nouvelle ligne (pas d'ID), sauvegarder
+            if (!item.id) {
+                this.confirmAndSave(item).then(() => {
+                    this.stopEditStatus();
+                });
+            } else {
+                // Si c'est une ligne existante, mettre à jour
+                this.updateRow(item).then(() => {
+                    this.stopEditStatus();
+                });
+            }
+        } else {
+            // Pour les autres statuts, comportement normal
+            if (!item.id) {
+                // Si la ligne n'a pas d'ID, elle n'est pas encore sauvegardée
+                // On peut juste mettre à jour localement
+                this.stopEditStatus();
+                return;
+            }
+
+            // Sauvegarder le statut via l'API
+            const payload = {
+                date: item.date,
+                agency: item.agency,
+                service: item.service,
+                country: item.country,
+                totalTransactions: item.totalTransactions,
+                totalVolume: item.totalVolume,
+                matches: item.matches,
+                boOnly: item.boOnly,
+                partnerOnly: item.partnerOnly,
+                mismatches: item.mismatches,
+                matchRate: item.matchRate,
+                status: item.status,
+                comment: item.comment,
+                traitement: item.traitement || undefined,
+                glpiId: item.glpiId || ''
+            };
+
+            this.http.put<any>('/api/result8rec/' + item.id, payload)
+            .subscribe({
+                next: (updated) => {
+                    // Mettre à jour l'item avec les données retournées
+                    if (updated.status !== undefined) {
+                        item.status = updated.status;
+                    }
+                    this.stopEditStatus();
+                    console.log('✅ Statut mis à jour avec succès');
+                },
+                error: (err: HttpErrorResponse) => {
+                    console.error('❌ Erreur lors de la mise à jour du statut', err);
+                    this.popupService.showError('Erreur', 'Impossible de mettre à jour le statut');
+                }
+            });
+        }
     }
 
     // Méthode pour basculer entre les données en cours et les données en base
