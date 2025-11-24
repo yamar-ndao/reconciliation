@@ -525,36 +525,68 @@ interface ApiError {
             </div>
         </div>
 
-        <!-- Popup de sélection des colonnes pour l'export -->
+        <!-- Popup de sélection des colonnes pour l'export (rapport d'écarts) -->
         <div *ngIf="showColumnSelector" class="column-selector-overlay">
-            <div class="column-selector-popup">
+            <div class="column-selector-popup" style="max-width: 900px;">
                 <div class="popup-header">
                     <h3>📋 Sélection des colonnes pour l'export</h3>
                     <button (click)="closeColumnSelector()" class="close-btn">×</button>
                 </div>
                 
                 <div class="popup-content">
-                    <div class="selection-controls">
-                        <button (click)="toggleAllColumns(true)" class="select-all-btn">
-                            ✅ Tout sélectionner
-                        </button>
-                        <button (click)="toggleAllColumns(false)" class="deselect-all-btn">
-                            ❌ Tout désélectionner
-                        </button>
-                        <span class="selection-info">
-                            {{selectedColumnsCount}} / {{availableColumns.length}} colonnes sélectionnées
-                        </span>
+                    <!-- Section Colonnes BO -->
+                    <div *ngIf="availableBoColumns.length > 0" style="margin-bottom: 30px;">
+                        <h4 style="margin-bottom: 10px; color: #1976D2;">🏢 Colonnes BO</h4>
+                        <div class="selection-controls">
+                            <button (click)="toggleAllBoColumns(true)" class="select-all-btn">
+                                ✅ Tout sélectionner BO
+                            </button>
+                            <button (click)="toggleAllBoColumns(false)" class="deselect-all-btn">
+                                ❌ Tout désélectionner BO
+                            </button>
+                            <span class="selection-info">
+                                {{selectedBoColumnsCount}} / {{availableBoColumns.length}} colonnes BO sélectionnées
+                            </span>
+                        </div>
+                        
+                        <div class="columns-grid">
+                            <div *ngFor="let column of availableBoColumns" class="column-item">
+                                <label class="column-checkbox">
+                                    <input 
+                                        type="checkbox" 
+                                        [(ngModel)]="selectedBoColumns[column]"
+                                        [checked]="selectedBoColumns[column]">
+                                    <span class="column-name">{{column}}</span>
+                                </label>
+                            </div>
+                        </div>
                     </div>
                     
-                    <div class="columns-grid">
-                        <div *ngFor="let column of availableColumns" class="column-item">
-                            <label class="column-checkbox">
-                                <input 
-                                    type="checkbox" 
-                                    [(ngModel)]="selectedColumns[column]"
-                                    [checked]="selectedColumns[column]">
-                                <span class="column-name">{{column}}</span>
-                            </label>
+                    <!-- Section Colonnes Partenaire -->
+                    <div *ngIf="availableColumns.length > 0">
+                        <h4 style="margin-bottom: 10px; color: #1976D2;">🤝 Colonnes Partenaire</h4>
+                        <div class="selection-controls">
+                            <button (click)="toggleAllColumns(true)" class="select-all-btn">
+                                ✅ Tout sélectionner Partenaire
+                            </button>
+                            <button (click)="toggleAllColumns(false)" class="deselect-all-btn">
+                                ❌ Tout désélectionner Partenaire
+                            </button>
+                            <span class="selection-info">
+                                {{selectedColumnsCount}} / {{availableColumns.length}} colonnes Partenaire sélectionnées
+                            </span>
+                        </div>
+                        
+                        <div class="columns-grid">
+                            <div *ngFor="let column of availableColumns" class="column-item">
+                                <label class="column-checkbox">
+                                    <input 
+                                        type="checkbox" 
+                                        [(ngModel)]="selectedColumns[column]"
+                                        [checked]="selectedColumns[column]">
+                                    <span class="column-name">{{column}}</span>
+                                </label>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -564,6 +596,51 @@ interface ApiError {
                         Annuler
                     </button>
                     <button (click)="confirmExportWithSelectedColumns()" class="export-btn">
+                        📥 Exporter avec les colonnes sélectionnées
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Popup de sélection des colonnes pour l'export standard -->
+        <div *ngIf="showExportColumnSelector" class="column-selector-overlay">
+            <div class="column-selector-popup">
+                <div class="popup-header">
+                    <h3>📋 Sélection des colonnes pour l'export</h3>
+                    <button (click)="closeExportColumnSelector()" class="close-btn">×</button>
+                </div>
+                
+                <div class="popup-content">
+                    <div class="selection-controls">
+                        <button (click)="toggleAllExportColumns(true)" class="select-all-btn">
+                            ✅ Tout sélectionner
+                        </button>
+                        <button (click)="toggleAllExportColumns(false)" class="deselect-all-btn">
+                            ❌ Tout désélectionner
+                        </button>
+                        <span class="selection-info">
+                            {{exportSelectedColumnsCount}} / {{exportAvailableColumns.length}} colonnes sélectionnées
+                        </span>
+                    </div>
+                    
+                    <div class="columns-grid">
+                        <div *ngFor="let column of exportAvailableColumns" class="column-item">
+                            <label class="column-checkbox">
+                                <input 
+                                    type="checkbox" 
+                                    [(ngModel)]="exportSelectedColumns[column]"
+                                    [checked]="exportSelectedColumns[column]">
+                                <span class="column-name">{{column}}</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="popup-actions">
+                    <button (click)="closeExportColumnSelector()" class="cancel-btn">
+                        Annuler
+                    </button>
+                    <button (click)="confirmExportStandardWithSelectedColumns()" class="export-btn">
                         📥 Exporter avec les colonnes sélectionnées
                     </button>
                 </div>
@@ -1702,11 +1779,19 @@ export class ReconciliationResultsComponent implements OnInit, OnDestroy {
     executionTime = 0;
     startTime = 0;
     
-    // Propriétés pour la sélection des colonnes
+    // Propriétés pour la sélection des colonnes (rapport d'écarts)
     showColumnSelector = false;
-    availableColumns: string[] = [];
+    availableColumns: string[] = []; // Colonnes Partenaire
     selectedColumns: { [key: string]: boolean } = {};
+    availableBoColumns: string[] = []; // Colonnes BO
+    selectedBoColumns: { [key: string]: boolean } = {};
     defaultColumns = ['Service', 'téléphone client', 'montant', 'Agence', 'Date', 'HEURE', 'SOURCE'];
+    
+    // Propriétés pour la sélection des colonnes d'export standard
+    showExportColumnSelector = false;
+    exportAvailableColumns: string[] = [];
+    exportSelectedColumns: { [key: string]: boolean } = {};
+    exportColumnContext: 'matches' | 'boOnly' | 'partnerOnly' | null = null;
 
     // Ajout pour sélection Résumé par Agence
     selectedAgencySummaries: string[] = [];
@@ -3080,37 +3165,238 @@ export class ReconciliationResultsComponent implements OnInit, OnDestroy {
     }
 
     getBoKeys(match: Match): string[] {
-        // Détecter le type de données BO et appliquer le bon filtrage
-        return this.getFilteredKeys(match.boData, 'bo');
+        // Colonnes TRXBO attendues (dans l'ordre selon l'image fournie)
+        const trxboColumns = [
+            'IDTransaction',
+            'téléphone client',
+            'montant',
+            'Service',
+            'Moyen de Paiement',
+            'Agence',
+            'Agent',
+            'Type agent',
+            'PIXI',
+            'Date',
+            'Numéro Trans',
+            'GU',
+            'GRX',
+            'Statut'
+        ];
+        
+        // Détecter si c'est un fichier TRXBO
+        const availableKeys = Object.keys(match.boData).map(key => fixGarbledCharacters(key));
+        const isTRXBO = availableKeys.some(key => 
+            ['IDTransaction', 'téléphone client', 'GRX', 'Service', 'Numéro Trans GU', 'Numero Trans GU'].includes(key)
+        );
+        
+        if (isTRXBO) {
+            // Pour TRXBO, retourner toutes les colonnes attendues dans l'ordre
+            return trxboColumns;
+        }
+        
+        // Sinon, retourner toutes les colonnes disponibles
+        return availableKeys;
     }
 
     getPartnerKeys(match: Match): string[] {
-        // Détecter le type de données Partenaire et appliquer le bon filtrage
-        return this.getFilteredKeys(match.partnerData, 'partner');
+        // Colonnes OPPART attendues (dans l'ordre selon la configuration)
+        const oppartColumns = [
+            'ID Opération',
+            'Type Opération',
+            'Montant',
+            'Solde avant',
+            'Solde aprés',
+            'Code proprietaire',
+            'Téléphone',
+            'Statut',
+            'ID Transaction',
+            'Num bordereau',
+            'Date opération',
+            'Date de versement',
+            'Banque appro',
+            'Login demandeur Appro',
+            'Login valideur Appro',
+            'Motif rejet',
+            'Frais connexion',
+            'Numéro Trans GU',
+            'Agent',
+            'Motif régularisation',
+            'groupe de réseau'
+        ];
+        
+        // Détecter si c'est un fichier OPPART
+        const availableKeys = Object.keys(match.partnerData).map(key => fixGarbledCharacters(key));
+        const isOPPART = availableKeys.some(key => 
+            ['ID Opération', 'Type Opération', 'Solde avant', 'Solde aprés', 'Numéro Trans GU', 'Numero Trans GU'].includes(key)
+        );
+        
+        if (isOPPART) {
+            // Pour OPPART, retourner toutes les colonnes attendues dans l'ordre
+            return oppartColumns;
+        }
+        
+        // Sinon, retourner toutes les colonnes disponibles
+        return availableKeys;
     }
 
     /**
      * Obtient la valeur BO à partir d'une clé corrigée
+     * Force la récupération en essayant toutes les variations possibles
      */
     getBoValue(match: Match, correctedKey: string): string {
+        // Gérer le cas spécial où "Numéro Trans" et "GU" sont affichés séparément
+        if (correctedKey === 'Numéro Trans') {
+            // Chercher d'abord une colonne "Numéro Trans" séparée
+            const numeroTransKey = this.getOriginalKey(match.boData, 'Numéro Trans');
+            if (numeroTransKey && match.boData[numeroTransKey]) {
+                return match.boData[numeroTransKey].toString();
+            }
+            // Sinon, chercher "Numéro Trans GU" et extraire la partie avant "GU"
+            const numeroTransGUKey = this.getOriginalKey(match.boData, 'Numéro Trans GU') || 
+                                     this.getOriginalKey(match.boData, 'Numero Trans GU');
+            if (numeroTransGUKey && match.boData[numeroTransGUKey]) {
+                const value = match.boData[numeroTransGUKey].toString();
+                // Si la valeur contient "GU", extraire la partie avant
+                const matchResult = value.match(/^(.+?)\s*GU\s*$/i);
+                return matchResult ? matchResult[1].trim() : value;
+            }
+        }
+        if (correctedKey === 'GU') {
+            // Chercher d'abord une colonne "GU" séparée
+            const guKey = this.getOriginalKey(match.boData, 'GU');
+            if (guKey && match.boData[guKey]) {
+                return match.boData[guKey].toString();
+            }
+            // Sinon, chercher "Numéro Trans GU" et extraire "GU"
+            const numeroTransGUKey = this.getOriginalKey(match.boData, 'Numéro Trans GU') || 
+                                     this.getOriginalKey(match.boData, 'Numero Trans GU');
+            if (numeroTransGUKey && match.boData[numeroTransGUKey]) {
+                const value = match.boData[numeroTransGUKey].toString();
+                // Si la valeur contient "GU", retourner "GU"
+                if (value.match(/\s*GU\s*$/i)) {
+                    return 'GU';
+                }
+            }
+        }
+        
+        // Chercher avec la clé originale
         const originalKey = this.getOriginalKey(match.boData, correctedKey);
-        return match.boData[originalKey] || '';
+        if (originalKey && match.boData[originalKey]) {
+            return match.boData[originalKey].toString();
+        }
+        
+        // Si pas trouvé, essayer toutes les variations
+        const variations = this.getColumnVariations(correctedKey);
+        for (const variation of variations) {
+            const key = Object.keys(match.boData).find(k => {
+                const normalizedK = fixGarbledCharacters(k).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+                const normalizedV = variation.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+                return normalizedK === normalizedV;
+            });
+            if (key && match.boData[key]) {
+                return match.boData[key].toString();
+            }
+        }
+        
+        return '';
     }
 
     /**
      * Obtient la valeur Partenaire à partir d'une clé corrigée
+     * Force la récupération en essayant toutes les variations possibles
      */
     getPartnerValue(match: Match, correctedKey: string): string {
+        // Chercher avec la clé originale
         const originalKey = this.getOriginalKey(match.partnerData, correctedKey);
-        return match.partnerData[originalKey] || '';
+        if (originalKey && match.partnerData[originalKey]) {
+            return match.partnerData[originalKey].toString();
+        }
+        
+        // Si pas trouvé, essayer toutes les variations
+        const variations = this.getPartnerColumnVariations(correctedKey);
+        for (const variation of variations) {
+            const key = Object.keys(match.partnerData).find(k => {
+                const normalizedK = fixGarbledCharacters(k).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+                const normalizedV = variation.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+                return normalizedK === normalizedV;
+            });
+            if (key && match.partnerData[key]) {
+                return match.partnerData[key].toString();
+            }
+        }
+        
+        return '';
     }
 
     /**
      * Obtient la valeur d'un enregistrement à partir d'une clé corrigée
+     * Force la récupération en essayant toutes les variations possibles
      */
     getRecordValue(record: Record<string, string>, correctedKey: string): string {
+        // Gérer le cas spécial où "Numéro Trans" et "GU" sont affichés séparément
+        if (correctedKey === 'Numéro Trans') {
+            // Chercher d'abord une colonne "Numéro Trans" séparée
+            const numeroTransKey = this.getOriginalKey(record, 'Numéro Trans');
+            if (numeroTransKey && record[numeroTransKey]) {
+                return record[numeroTransKey].toString();
+            }
+            // Sinon, chercher "Numéro Trans GU" et extraire la partie avant "GU"
+            const numeroTransGUKey = this.getOriginalKey(record, 'Numéro Trans GU') || 
+                                     this.getOriginalKey(record, 'Numero Trans GU');
+            if (numeroTransGUKey && record[numeroTransGUKey]) {
+                const value = record[numeroTransGUKey].toString();
+                // Si la valeur contient "GU", extraire la partie avant
+                const matchResult = value.match(/^(.+?)\s*GU\s*$/i);
+                return matchResult ? matchResult[1].trim() : value;
+            }
+        }
+        if (correctedKey === 'GU') {
+            // Chercher d'abord une colonne "GU" séparée
+            const guKey = this.getOriginalKey(record, 'GU');
+            if (guKey && record[guKey]) {
+                return record[guKey].toString();
+            }
+            // Sinon, chercher "Numéro Trans GU" et extraire "GU"
+            const numeroTransGUKey = this.getOriginalKey(record, 'Numéro Trans GU') || 
+                                     this.getOriginalKey(record, 'Numero Trans GU');
+            if (numeroTransGUKey && record[numeroTransGUKey]) {
+                const value = record[numeroTransGUKey].toString();
+                // Si la valeur contient "GU", retourner "GU"
+                if (value.match(/\s*GU\s*$/i)) {
+                    return 'GU';
+                }
+            }
+        }
+        
+        // Chercher avec la clé originale
         const originalKey = this.getOriginalKey(record, correctedKey);
-        return record[originalKey] || '';
+        if (originalKey && record[originalKey]) {
+            return record[originalKey].toString();
+        }
+        
+        // Si pas trouvé, essayer toutes les variations
+        // Détecter si c'est OPPART ou TRXBO pour utiliser les bonnes variations
+        const availableKeys = Object.keys(record).map(key => fixGarbledCharacters(key));
+        const isOPPART = availableKeys.some(key => 
+            ['ID Opération', 'Type Opération', 'Solde avant', 'Solde aprés'].includes(key)
+        );
+        
+        const variations = isOPPART 
+            ? this.getPartnerColumnVariations(correctedKey)
+            : this.getColumnVariations(correctedKey);
+            
+        for (const variation of variations) {
+            const key = Object.keys(record).find(k => {
+                const normalizedK = fixGarbledCharacters(k).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+                const normalizedV = variation.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+                return normalizedK === normalizedV;
+            });
+            if (key && record[key]) {
+                return record[key].toString();
+            }
+        }
+        
+        return '';
     }
 
     getRecordKeys(record: Record<string, string>): string[] {
@@ -3244,21 +3530,210 @@ export class ReconciliationResultsComponent implements OnInit, OnDestroy {
     
     /**
      * Obtient la clé originale à partir d'une clé corrigée pour accéder aux données
+     * Cherche de manière flexible avec plusieurs variations
      */
     private getOriginalKey(record: Record<string, string>, correctedKey: string): string {
-        // Chercher la clé originale qui correspond à la clé corrigée
-        const originalKey = Object.keys(record).find(key => fixGarbledCharacters(key) === correctedKey);
-        return originalKey || correctedKey;
+        // Chercher la clé originale qui correspond exactement à la clé corrigée
+        let originalKey = Object.keys(record).find(key => fixGarbledCharacters(key) === correctedKey);
+        if (originalKey) return originalKey;
+        
+        // Chercher avec normalisation (insensible à la casse et aux accents)
+        const normalizedCorrected = correctedKey.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+        originalKey = Object.keys(record).find(key => {
+            const normalizedKey = fixGarbledCharacters(key).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+            return normalizedKey === normalizedCorrected;
+        });
+        if (originalKey) return originalKey;
+        
+        // Chercher avec correspondance partielle (contient)
+        originalKey = Object.keys(record).find(key => {
+            const normalizedKey = fixGarbledCharacters(key).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+            return normalizedKey.includes(normalizedCorrected) || normalizedCorrected.includes(normalizedKey);
+        });
+        if (originalKey) return originalKey;
+        
+        // Chercher avec variations communes
+        const variations = this.getColumnVariations(correctedKey);
+        for (const variation of variations) {
+            originalKey = Object.keys(record).find(key => {
+                const normalizedKey = fixGarbledCharacters(key).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+                const normalizedVariation = variation.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+                return normalizedKey === normalizedVariation;
+            });
+            if (originalKey) return originalKey;
+        }
+        
+        return correctedKey;
+    }
+    
+    /**
+     * Génère des variations possibles d'un nom de colonne (pour TRXBO)
+     */
+    private getColumnVariations(columnName: string): string[] {
+        const variations: string[] = [columnName];
+        
+        // Variations communes pour les colonnes TRXBO
+        const commonVariations: { [key: string]: string[] } = {
+            'IDTransaction': ['ID Transaction', 'idTransaction', 'id_transaction', 'ID_TRANSACTION', 'transaction_id', 'TransactionId'],
+            'téléphone client': ['telephone client', 't l phone client', 'telephone_client', 'TELEPHONE_CLIENT', 'phone', 'Phone'],
+            'montant': ['Montant', 'MONTANT', 'amount', 'Amount', 'volume', 'Volume'],
+            'Service': ['service', 'SERVICE'],
+            'Moyen de Paiement': ['moyen de paiement', 'Moyen de paiement', 'moyenPaiement', 'moyen_paiement'],
+            'Agence': ['agence', 'AGENCE', 'agency', 'Agency'],
+            'Agent': ['agent', 'AGENT'],
+            'Type agent': ['type agent', 'Type Agent', 'typeAgent', 'type_agent'],
+            'PIXI': ['pixi', 'PIXI'],
+            'Date': ['date', 'DATE', 'Date opération', 'Date Opération', 'dateOperation', 'date_operation'],
+            'Numéro Trans': ['Numero Trans', 'numero trans', 'Numero Trans GU', 'Numéro Trans GU', 'numeroTransGU', 'numero_trans_gu'],
+            'GU': ['gu', 'GU', 'Numero Trans GU', 'Numéro Trans GU'],
+            'GRX': ['grx', 'GRX'],
+            'Statut': ['statut', 'STATUT', 'status', 'Status']
+        };
+        
+        if (commonVariations[columnName]) {
+            variations.push(...commonVariations[columnName]);
+        }
+        
+        return variations;
+    }
+    
+    /**
+     * Génère des variations possibles d'un nom de colonne partenaire (pour OPPART)
+     */
+    private getPartnerColumnVariations(columnName: string): string[] {
+        const variations: string[] = [columnName];
+        
+        // Variations communes pour les colonnes OPPART
+        const commonVariations: { [key: string]: string[] } = {
+            'ID Opération': ['ID Operation', 'id opération', 'id operation', 'idOperation', 'id_operation', 'ID_OPERATION'],
+            'Type Opération': ['Type Operation', 'type opération', 'type operation', 'typeOperation', 'type_operation', 'TYPE_OPERATION'],
+            'Montant': ['montant', 'MONTANT', 'amount', 'Amount'],
+            'Solde avant': ['solde avant', 'Solde Avant', 'soldeAvant', 'solde_avant', 'SOLDE_AVANT'],
+            'Solde aprés': ['Solde après', 'Solde apres', 'solde aprés', 'solde apres', 'soldeApres', 'solde_apres', 'SOLDE_APRES'],
+            'Code proprietaire': ['code proprietaire', 'Code Proprietaire', 'codeProprietaire', 'code_proprietaire', 'CODE_PROPRIETAIRE'],
+            'Téléphone': ['telephone', 'TELEPHONE', 'phone', 'Phone', 'téléphone client', 'telephone client'],
+            'Statut': ['statut', 'STATUT', 'status', 'Status'],
+            'ID Transaction': ['id transaction', 'Id Transaction', 'idTransaction', 'id_transaction', 'ID_TRANSACTION'],
+            'Num bordereau': ['num bordereau', 'Num Bordereau', 'numBordereau', 'num_bordereau', 'NUM_BORDEREAU'],
+            'Date opération': ['Date Opération', 'date opération', 'date operation', 'dateOperation', 'date_operation', 'DATE_OPERATION'],
+            'Date de versement': ['date de versement', 'Date De Versement', 'dateVersement', 'date_versement', 'DATE_VERSEMENT'],
+            'Banque appro': ['banque appro', 'Banque Appro', 'banqueAppro', 'banque_appro', 'BANQUE_APPRO'],
+            'Login demandeur Appro': ['login demandeur appro', 'Login Demandeur Appro', 'loginDemandeurAppro', 'login_demandeur_appro'],
+            'Login valideur Appro': ['login valideur appro', 'Login Valideur Appro', 'loginValideurAppro', 'login_valideur_appro'],
+            'Motif rejet': ['motif rejet', 'Motif Rejet', 'motifRejet', 'motif_rejet', 'MOTIF_REJET'],
+            'Frais connexion': ['frais connexion', 'Frais Connexion', 'fraisConnexion', 'frais_connexion', 'FRAIS_CONNEXION'],
+            'Numéro Trans GU': ['Numero Trans GU', 'numero trans gu', 'numeroTransGU', 'numero_trans_gu', 'NUMERO_TRANS_GU'],
+            'Agent': ['agent', 'AGENT'],
+            'Motif régularisation': ['motif regularisation', 'Motif Regularisation', 'motifRegularisation', 'motif_regularisation'],
+            'groupe de réseau': ['groupe de reseau', 'Groupe de réseau', 'Groupe de reseau', 'groupeReseau', 'groupe_reseau', 'GROUPE_RESEAU']
+        };
+        
+        if (commonVariations[columnName]) {
+            variations.push(...commonVariations[columnName]);
+        }
+        
+        return variations;
     }
 
     getBoOnlyKeys(record: Record<string, string>): string[] {
-        // Détecter le type de données BO et appliquer le bon filtrage
-        return this.getFilteredKeys(record, 'bo');
+        // Colonnes TRXBO attendues (dans l'ordre selon l'image fournie)
+        const trxboColumns = [
+            'IDTransaction',
+            'téléphone client',
+            'montant',
+            'Service',
+            'Moyen de Paiement',
+            'Agence',
+            'Agent',
+            'Type agent',
+            'PIXI',
+            'Date',
+            'Numéro Trans',
+            'GU',
+            'GRX',
+            'Statut'
+        ];
+        
+        // Détecter si c'est un fichier TRXBO
+        const availableKeys = Object.keys(record).map(key => fixGarbledCharacters(key));
+        const isTRXBO = availableKeys.some(key => 
+            ['IDTransaction', 'téléphone client', 'GRX', 'Service', 'Numéro Trans GU', 'Numero Trans GU'].includes(key)
+        );
+        
+        if (isTRXBO) {
+            // Pour TRXBO, retourner toutes les colonnes attendues dans l'ordre
+            return trxboColumns;
+        }
+        
+        // Sinon, retourner toutes les colonnes disponibles
+        return availableKeys;
     }
 
     getPartnerOnlyKeys(record: Record<string, string>): string[] {
-        // Détecter le type de données Partenaire et appliquer le bon filtrage
-        return this.getFilteredKeys(record, 'partner');
+        // Colonnes OPPART attendues (dans l'ordre selon la configuration)
+        const oppartColumns = [
+            'ID Opération',
+            'Type Opération',
+            'Montant',
+            'Solde avant',
+            'Solde aprés',
+            'Code proprietaire',
+            'Téléphone',
+            'Statut',
+            'ID Transaction',
+            'Num bordereau',
+            'Date opération',
+            'Date de versement',
+            'Banque appro',
+            'Login demandeur Appro',
+            'Login valideur Appro',
+            'Motif rejet',
+            'Frais connexion',
+            'Numéro Trans GU',
+            'Agent',
+            'Motif régularisation',
+            'groupe de réseau'
+        ];
+        
+        // Colonnes TRXBO attendues (pour les écarts partenaire qui proviennent de TRXBO)
+        const trxboColumns = [
+            'IDTransaction',
+            'téléphone client',
+            'montant',
+            'Service',
+            'Moyen de Paiement',
+            'Agence',
+            'Agent',
+            'Type agent',
+            'PIXI',
+            'Date',
+            'Numéro Trans',
+            'GU',
+            'GRX',
+            'Statut'
+        ];
+        
+        // Détecter le type de fichier partenaire
+        const availableKeys = Object.keys(record).map(key => fixGarbledCharacters(key));
+        const isOPPART = availableKeys.some(key => 
+            ['ID Opération', 'Type Opération', 'Solde avant', 'Solde aprés', 'Numéro Trans GU', 'Numero Trans GU'].includes(key)
+        );
+        const isTRXBO = availableKeys.some(key => 
+            ['IDTransaction', 'téléphone client', 'GRX', 'Service', 'Numéro Trans GU', 'Numero Trans GU'].includes(key)
+        );
+        
+        if (isOPPART) {
+            // Pour OPPART, retourner toutes les colonnes attendues dans l'ordre
+            return oppartColumns;
+        }
+        
+        if (isTRXBO) {
+            // Pour TRXBO, retourner toutes les colonnes attendues dans l'ordre
+            return trxboColumns;
+        }
+        
+        // Sinon, retourner toutes les colonnes disponibles
+        return availableKeys;
     }
 
     /**
@@ -3544,6 +4019,12 @@ export class ReconciliationResultsComponent implements OnInit, OnDestroy {
     }
 
    async exportResults() {
+    // Si le sélecteur de colonnes n'est pas ouvert, l'ouvrir d'abord
+    if (!this.showExportColumnSelector) {
+        this.openExportColumnSelector();
+        return;
+    }
+    
     console.log('Début de l\'export...');
     console.log('Onglet actif:', this.activeTab);
     
@@ -3556,6 +4037,7 @@ export class ReconciliationResultsComponent implements OnInit, OnDestroy {
         const fileName = await this.promptFileName();
         if (!fileName) {
             console.log('Export annulé par l\'utilisateur');
+            this.closeExportColumnSelector();
             return;
         }
 
@@ -3568,6 +4050,9 @@ export class ReconciliationResultsComponent implements OnInit, OnDestroy {
         console.log('Début du téléchargement...');
         await this.downloadExcelFile(workbooks, fileName);
         console.log('Téléchargement terminé avec succès');
+        
+        // Fermer le sélecteur après l'export
+        this.closeExportColumnSelector();
 
     } catch (error) {
         console.error('Erreur lors de l\'export:', error);
@@ -3615,31 +4100,45 @@ private async generateExcelFile(): Promise<ExcelJS.Workbook[]> {
     // SUPPRESSION DE LA LIMITE : on ne découpe plus en plusieurs fichiers
     // const MAX_ROWS_PER_FILE = 50000;
 
-    if (this.activeTab === 'matches') {
-        console.log('Export des correspondances...');
-        const filteredMatches = this.getFilteredMatches();
-        console.log('Nombre de correspondances à exporter:', filteredMatches.length);
-        
-        if (filteredMatches.length > 0) {
-            // Récupérer toutes les clés des données BO et Partenaire
-            const allBoKeys = new Set<string>();
-            const allPartnerKeys = new Set<string>();
+        if (this.activeTab === 'matches') {
+            console.log('Export des correspondances...');
+            const filteredMatches = this.getFilteredMatches();
+            console.log('Nombre de correspondances à exporter:', filteredMatches.length);
             
-            filteredMatches.forEach(match => {
-                Object.keys(match.boData).forEach(key => {
-                    // Corriger le nom de colonne mal encodé
-                    const correctedKey = fixGarbledCharacters(key);
-                    allBoKeys.add(correctedKey);
+            if (filteredMatches.length > 0) {
+                // Récupérer les colonnes sélectionnées pour l'export
+                const selectedColumns = this.exportAvailableColumns.filter(col => this.exportSelectedColumns[col]);
+                const boKeysArray: string[] = [];
+                const partnerKeysArray: string[] = [];
+                
+                // Séparer les colonnes BO et Partenaire à partir des colonnes sélectionnées
+                selectedColumns.forEach(col => {
+                    if (col.startsWith('BO_')) {
+                        boKeysArray.push(col.substring(3)); // Enlever le préfixe "BO_"
+                    } else if (col.startsWith('PARTENAIRE_')) {
+                        partnerKeysArray.push(col.substring(11)); // Enlever le préfixe "PARTENAIRE_"
+                    }
                 });
-                Object.keys(match.partnerData).forEach(key => {
-                    // Corriger le nom de colonne mal encodé
-                    const correctedKey = fixGarbledCharacters(key);
-                    allPartnerKeys.add(correctedKey);
-                });
-            });
-            
-            const boKeysArray = Array.from(allBoKeys);
-            const partnerKeysArray = Array.from(allPartnerKeys);
+                
+                // Si aucune colonne n'est sélectionnée, utiliser toutes les colonnes
+                if (selectedColumns.length === 0) {
+                    const allBoKeys = new Set<string>();
+                    const allPartnerKeys = new Set<string>();
+                    
+                    filteredMatches.forEach(match => {
+                        Object.keys(match.boData).forEach(key => {
+                            const correctedKey = fixGarbledCharacters(key);
+                            allBoKeys.add(correctedKey);
+                        });
+                        Object.keys(match.partnerData).forEach(key => {
+                            const correctedKey = fixGarbledCharacters(key);
+                            allPartnerKeys.add(correctedKey);
+                        });
+                    });
+                    
+                    boKeysArray.push(...Array.from(allBoKeys));
+                    partnerKeysArray.push(...Array.from(allPartnerKeys));
+                }
             
             console.log('Colonnes BO:', boKeysArray);
             console.log('Colonnes Partenaire:', partnerKeysArray);
@@ -3671,13 +4170,13 @@ private async generateExcelFile(): Promise<ExcelJS.Workbook[]> {
             const worksheet = workbook.addWorksheet('Correspondances');
 
             // Définir les colonnes avec des largeurs appropriées
-            const columns = [
+            const matchesColumns = [
                 { header: 'Clé', key: 'key', width: 20 },
                 ...boKeysArray.map(k => ({ header: `BO_${k}`, key: `bo_${k}`, width: 15 })),
                 ...partnerKeysArray.map(k => ({ header: `PARTENAIRE_${k}`, key: `partner_${k}`, width: 15 }))
             ];
 
-            worksheet.columns = columns;
+            worksheet.columns = matchesColumns;
 
             // Ajouter la ligne d'en-tête manuellement
             const headerRow = worksheet.getRow(1);
@@ -3696,7 +4195,7 @@ private async generateExcelFile(): Promise<ExcelJS.Workbook[]> {
 
             // Appliquer le style d'en-tête
             headerRow.eachCell((cell, cellNumber) => {
-                if (cellNumber <= columns.length) {
+                if (cellNumber <= matchesColumns.length) {
                     cell.style = headerStyle;
                 }
             });
@@ -3711,17 +4210,21 @@ private async generateExcelFile(): Promise<ExcelJS.Workbook[]> {
                     row.getCell(1).value = match.key;
                     let cellIndex = 2;
                     boKeysArray.forEach(key => {
-                        const value = match.boData[key];
+                        // Chercher la clé originale qui correspond à la clé corrigée
+                        const originalKey = Object.keys(match.boData).find(k => fixGarbledCharacters(k) === key);
+                        const value = originalKey ? match.boData[originalKey] : match.boData[key];
                         row.getCell(cellIndex).value = value !== undefined && value !== null ? value : '';
                         cellIndex++;
                     });
                     partnerKeysArray.forEach(key => {
-                        const value = match.partnerData[key];
+                        // Chercher la clé originale qui correspond à la clé corrigée
+                        const originalKey = Object.keys(match.partnerData).find(k => fixGarbledCharacters(k) === key);
+                        const value = originalKey ? match.partnerData[originalKey] : match.partnerData[key];
                         row.getCell(cellIndex).value = value !== undefined && value !== null ? value : '';
                         cellIndex++;
                     });
                     row.eachCell((cell, cellNumber) => {
-                        if (cellNumber <= columns.length) {
+                        if (cellNumber <= matchesColumns.length) {
                             cell.style = dataStyle;
                         }
                     });
@@ -3747,12 +4250,31 @@ private async generateExcelFile(): Promise<ExcelJS.Workbook[]> {
             const duplicatesMap = this.detectTSOPDuplicates(filteredBoOnly);
             console.log('🔍 Doublons TSOP détectés pour ECART BO:', duplicatesMap.size);
             
-            // Récupérer toutes les clés
-            const allKeys = new Set<string>();
-            filteredBoOnly.forEach(record => {
-                Object.keys(record).forEach(key => allKeys.add(key));
-            });
-            const keysArray = Array.from(allKeys);
+            // Utiliser les colonnes sélectionnées pour l'export
+            let keysArray: string[] = [];
+            const selectedColumns = this.exportAvailableColumns.filter(col => this.exportSelectedColumns[col]);
+            
+            if (selectedColumns.length > 0) {
+                // Convertir les colonnes sélectionnées en clés originales
+                keysArray = selectedColumns.map(col => {
+                    // Chercher la clé originale correspondante
+                    const firstRecord = filteredBoOnly[0];
+                    if (firstRecord) {
+                        const originalKey = Object.keys(firstRecord).find(key => 
+                            fixGarbledCharacters(key) === col
+                        );
+                        return originalKey || col;
+                    }
+                    return col;
+                });
+            } else {
+                // Si aucune colonne n'est sélectionnée, utiliser toutes les colonnes
+                const allKeys = new Set<string>();
+                filteredBoOnly.forEach(record => {
+                    Object.keys(record).forEach(key => allKeys.add(key));
+                });
+                keysArray = Array.from(allKeys);
+            }
             
             // Ajouter la colonne commentaire si elle n'existe pas
             if (!keysArray.includes('Commentaire')) {
@@ -3760,8 +4282,8 @@ private async generateExcelFile(): Promise<ExcelJS.Workbook[]> {
             }
             
             // Définir les colonnes
-            const columns = keysArray.map(key => ({ header: key, key: key, width: 15 }));
-            worksheet.columns = columns;
+            const boOnlyColumnsDef = keysArray.map(key => ({ header: key, key: key, width: 15 }));
+            worksheet.columns = boOnlyColumnsDef;
             
             // Styles Excel
             const headerStyle = {
@@ -3829,18 +4351,45 @@ private async generateExcelFile(): Promise<ExcelJS.Workbook[]> {
                 }
             };
             
+            // Définir les colonnes avec des largeurs appropriées (en utilisant les clés corrigées pour les en-têtes)
+            const correctedKeysArray = keysArray.map(key => {
+                // Chercher la clé corrigée correspondante
+                const firstRecord = filteredBoOnly[0];
+                if (firstRecord) {
+                    const correctedKey = Object.keys(firstRecord).find(k => fixGarbledCharacters(k) === fixGarbledCharacters(key));
+                    return correctedKey ? fixGarbledCharacters(correctedKey) : fixGarbledCharacters(key);
+                }
+                return fixGarbledCharacters(key);
+            });
+            
+            const boOnlyCorrectedColumns = correctedKeysArray.map(key => ({ header: key, key: key, width: 15 }));
+            worksheet.columns = boOnlyCorrectedColumns;
+            
+            // Ajouter la colonne commentaire si elle n'existe pas
+            if (!keysArray.includes('Commentaire') && !correctedKeysArray.includes('Commentaire')) {
+                keysArray.push('Commentaire');
+                correctedKeysArray.push('Commentaire');
+                worksheet.columns = correctedKeysArray.map(key => ({ header: key, key: key, width: 15 }));
+            }
+            
             // Ajouter les données
             filteredBoOnly.forEach((record, index) => {
                 const rowData: any = {};
                 const boOnlyType = this.getBoOnlyType(record);
                 const boOnlyComment = this.getBoOnlyComment(record);
                 
-                keysArray.forEach(key => {
-                    if (key === 'Commentaire') {
+                // Remplir les données en utilisant les clés originales
+                keysArray.forEach(originalKey => {
+                    if (originalKey === 'Commentaire') {
                         // Ajouter le commentaire approprié
-                        rowData[key] = boOnlyComment;
+                        rowData['Commentaire'] = boOnlyComment;
                     } else {
-                        rowData[key] = record[key] || '';
+                        // Chercher la valeur dans les données en utilisant la clé originale
+                        const value = record[originalKey] !== undefined ? record[originalKey] : '';
+                        
+                        // Utiliser la clé corrigée pour le rowData (pour correspondre aux colonnes définies)
+                        const correctedKey = fixGarbledCharacters(originalKey);
+                        rowData[correctedKey] = value;
                     }
                 });
                 const row = worksheet.addRow(rowData);
@@ -3886,16 +4435,35 @@ private async generateExcelFile(): Promise<ExcelJS.Workbook[]> {
             const duplicatesMap = this.detectTSOPDuplicates(filteredPartnerOnly);
             console.log('🔍 Doublons TSOP détectés:', duplicatesMap.size);
             
-            // Récupérer toutes les clés
-            const allKeys = new Set<string>();
-            filteredPartnerOnly.forEach(record => {
-                Object.keys(record).forEach(key => allKeys.add(key));
-            });
-            const keysArray = Array.from(allKeys);
+            // Utiliser les colonnes sélectionnées pour l'export
+            let keysArray: string[] = [];
+            const selectedColumns = this.exportAvailableColumns.filter(col => this.exportSelectedColumns[col]);
+            
+            if (selectedColumns.length > 0) {
+                // Convertir les colonnes sélectionnées en clés originales
+                keysArray = selectedColumns.map(col => {
+                    // Chercher la clé originale correspondante
+                    const firstRecord = filteredPartnerOnly[0];
+                    if (firstRecord) {
+                        const originalKey = Object.keys(firstRecord).find(key => 
+                            fixGarbledCharacters(key) === col
+                        );
+                        return originalKey || col;
+                    }
+                    return col;
+                });
+            } else {
+                // Si aucune colonne n'est sélectionnée, utiliser toutes les colonnes
+                const allKeys = new Set<string>();
+                filteredPartnerOnly.forEach(record => {
+                    Object.keys(record).forEach(key => allKeys.add(key));
+                });
+                keysArray = Array.from(allKeys);
+            }
             
             // Définir les colonnes
-            const columns = keysArray.map(key => ({ header: key, key: key, width: 15 }));
-            worksheet.columns = columns;
+            const partnerOnlyColumnsDef = keysArray.map(key => ({ header: key, key: key, width: 15 }));
+            worksheet.columns = partnerOnlyColumnsDef;
             
             // Styles Excel
             const headerStyle = {
@@ -4852,7 +5420,8 @@ private async downloadExcelFile(workbooks: ExcelJS.Workbook[], fileName: string)
     }
 
     handleExport() {
-        this.exportResults();
+        // Ouvrir le sélecteur de colonnes avant l'export
+        this.openExportColumnSelector();
     }
 
     formatTime(ms: number): string {
@@ -5137,7 +5706,104 @@ private async downloadExcelFile(workbooks: ExcelJS.Workbook[], fileName: string)
     }
 
     /**
-     * Ouvre la popup de sélection des colonnes pour l'export
+     * Ouvre la popup de sélection des colonnes pour l'export standard (matches, boOnly, partnerOnly)
+     */
+    openExportColumnSelector(): void {
+        if (this.activeTab !== 'matches' && this.activeTab !== 'boOnly' && this.activeTab !== 'partnerOnly') {
+            // Pour agencySummary, pas de sélection de colonnes, exporter directement
+            this.exportResults();
+            return;
+        }
+        
+        this.exportColumnContext = this.activeTab;
+        this.exportAvailableColumns = [];
+        const allColumns = new Set<string>();
+        
+        if (this.activeTab === 'matches') {
+            // Collecter toutes les colonnes BO et Partenaire
+            const matches = this.getFilteredMatches();
+            matches.forEach(match => {
+                Object.keys(match.boData).forEach(key => {
+                    const correctedKey = fixGarbledCharacters(key);
+                    allColumns.add(`BO_${correctedKey}`);
+                });
+                Object.keys(match.partnerData).forEach(key => {
+                    const correctedKey = fixGarbledCharacters(key);
+                    allColumns.add(`PARTENAIRE_${correctedKey}`);
+                });
+            });
+        } else if (this.activeTab === 'boOnly') {
+            // Collecter toutes les colonnes BO
+            const boOnly = this.getFilteredBoOnly();
+            boOnly.forEach(record => {
+                Object.keys(record).forEach(key => {
+                    const correctedKey = fixGarbledCharacters(key);
+                    allColumns.add(correctedKey);
+                });
+            });
+        } else if (this.activeTab === 'partnerOnly') {
+            // Collecter toutes les colonnes Partenaire
+            const partnerOnly = this.getFilteredPartnerOnly();
+            partnerOnly.forEach(record => {
+                Object.keys(record).forEach(key => {
+                    const correctedKey = fixGarbledCharacters(key);
+                    allColumns.add(correctedKey);
+                });
+            });
+        }
+        
+        this.exportAvailableColumns = Array.from(allColumns).sort();
+        
+        // Initialiser toutes les colonnes comme sélectionnées par défaut
+        this.exportSelectedColumns = {};
+        this.exportAvailableColumns.forEach(col => {
+            this.exportSelectedColumns[col] = true;
+        });
+        
+        this.showExportColumnSelector = true;
+    }
+    
+    /**
+     * Ferme la popup de sélection des colonnes d'export
+     */
+    closeExportColumnSelector(): void {
+        this.showExportColumnSelector = false;
+        this.exportColumnContext = null;
+    }
+    
+    /**
+     * Sélectionne/désélectionne toutes les colonnes d'export
+     */
+    toggleAllExportColumns(selected: boolean): void {
+        this.exportAvailableColumns.forEach(col => {
+            this.exportSelectedColumns[col] = selected;
+        });
+    }
+    
+    /**
+     * Compte les colonnes sélectionnées pour l'export
+     */
+    get exportSelectedColumnsCount(): number {
+        return this.exportAvailableColumns.filter(col => this.exportSelectedColumns[col]).length;
+    }
+    
+    /**
+     * Confirme l'export standard avec les colonnes sélectionnées
+     */
+    confirmExportStandardWithSelectedColumns(): void {
+        const selectedCount = this.exportSelectedColumnsCount;
+        if (selectedCount === 0) {
+            this.popupService.showWarning('⚠️ Veuillez sélectionner au moins une colonne pour l\'export.');
+            return;
+        }
+        
+        // Fermer le sélecteur et procéder à l'export
+        this.closeExportColumnSelector();
+        this.exportResults();
+    }
+    
+    /**
+     * Ouvre la popup de sélection des colonnes pour l'export (rapport d'écarts)
      */
     openColumnSelector(): void {
         // Vérifier s'il y a au moins des écarts BO ou Partenaire
@@ -5149,37 +5815,137 @@ private async downloadExcelFile(workbooks: ExcelJS.Workbook[], fileName: string)
             return;
         }
 
-        // Extraire uniquement les colonnes disponibles du fichier partenaire en cours
-        this.availableColumns = [];
-        const allColumns = new Set<string>();
+        // Extraire TOUTES les colonnes disponibles du fichier BO
+        // Collecter depuis TOUTES les sources possibles : matches, écarts, mismatches, ET données originales
+        this.availableBoColumns = [];
+        const allBoColumns = new Set<string>();
         
-        if (hasPartnerEcart) {
-            this.response.partnerOnly.forEach(record => {
-                Object.keys(record).forEach(key => {
-                    if (record[key] !== undefined && record[key] !== null && record[key] !== '') {
-                        // Corriger le nom de colonne mal encodé
+        // PRIORITÉ 1: Collecter depuis les données originales si disponibles (contient TOUTES les colonnes)
+        try {
+            const originalBoData = this.appStateService.getBoData();
+            if (originalBoData && originalBoData.length > 0) {
+                originalBoData.forEach(record => {
+                    Object.keys(record).forEach(key => {
                         const correctedKey = fixGarbledCharacters(key);
-                        allColumns.add(correctedKey);
-                    }
+                        allBoColumns.add(correctedKey);
+                    });
+                });
+                console.log('📋 Colonnes BO collectées depuis données originales:', allBoColumns.size);
+            }
+        } catch (error) {
+            console.warn('⚠️ Impossible de récupérer les données BO originales:', error);
+        }
+        
+        // PRIORITÉ 2: Collecter depuis les matches (correspondances) - peut contenir des colonnes supplémentaires
+        if (this.response.matches && this.response.matches.length > 0) {
+            this.response.matches.forEach(match => {
+                if (match.boData) {
+                    Object.keys(match.boData).forEach(key => {
+                        const correctedKey = fixGarbledCharacters(key);
+                        allBoColumns.add(correctedKey);
+                    });
+                }
+            });
+        }
+        
+        // PRIORITÉ 3: Collecter depuis les écarts BO (contient toutes les colonnes des enregistrements non correspondants)
+        if (hasBoEcart && this.response.boOnly && this.response.boOnly.length > 0) {
+            this.response.boOnly.forEach(record => {
+                Object.keys(record).forEach(key => {
+                    const correctedKey = fixGarbledCharacters(key);
+                    allBoColumns.add(correctedKey);
                 });
             });
         }
-
-        // Forcer l'inclusion de la colonne SOURCE pour identification d'origine
-        allColumns.add('SOURCE');
-        this.availableColumns = Array.from(allColumns).sort();
         
-        // Initialiser toutes les colonnes comme non sélectionnées par défaut
+        // PRIORITÉ 4: Collecter aussi depuis les mismatches si disponibles
+        if (this.response.mismatches && this.response.mismatches.length > 0) {
+            this.response.mismatches.forEach(mismatch => {
+                if (mismatch.boData) {
+                    Object.keys(mismatch.boData).forEach(key => {
+                        const correctedKey = fixGarbledCharacters(key);
+                        allBoColumns.add(correctedKey);
+                    });
+                }
+            });
+        }
+        
+        this.availableBoColumns = Array.from(allBoColumns).sort();
+        console.log('📋 Total colonnes BO disponibles:', this.availableBoColumns.length, this.availableBoColumns);
+        
+        // Initialiser toutes les colonnes BO comme sélectionnées par défaut (colonnes importantes)
+        this.selectedBoColumns = {};
+        const defaultBoColumns = ['Service', 'téléphone client', 'montant', 'Agence', 'Date', 'Numéro Trans GU', 'IDTransaction', 'SOURCE'];
+        this.availableBoColumns.forEach(col => {
+            this.selectedBoColumns[col] = defaultBoColumns.includes(col);
+        });
+
+        // Extraire TOUTES les colonnes disponibles du fichier partenaire
+        // Collecter depuis TOUTES les sources possibles : matches, écarts, mismatches, ET données originales
+        this.availableColumns = [];
+        const allPartnerColumns = new Set<string>();
+        
+        // PRIORITÉ 1: Collecter depuis les données originales si disponibles (contient TOUTES les colonnes)
+        try {
+            const originalPartnerData = this.appStateService.getPartnerData();
+            if (originalPartnerData && originalPartnerData.length > 0) {
+                originalPartnerData.forEach(record => {
+                    Object.keys(record).forEach(key => {
+                        const correctedKey = fixGarbledCharacters(key);
+                        allPartnerColumns.add(correctedKey);
+                    });
+                });
+                console.log('📋 Colonnes Partenaire collectées depuis données originales:', allPartnerColumns.size);
+            }
+        } catch (error) {
+            console.warn('⚠️ Impossible de récupérer les données Partenaire originales:', error);
+        }
+        
+        // PRIORITÉ 2: Collecter depuis les matches (correspondances) - peut contenir des colonnes supplémentaires
+        if (this.response.matches && this.response.matches.length > 0) {
+            this.response.matches.forEach(match => {
+                if (match.partnerData) {
+                    Object.keys(match.partnerData).forEach(key => {
+                        const correctedKey = fixGarbledCharacters(key);
+                        allPartnerColumns.add(correctedKey);
+                    });
+                }
+            });
+        }
+        
+        // PRIORITÉ 3: Collecter depuis les écarts Partenaire (contient toutes les colonnes des enregistrements non correspondants)
+        if (hasPartnerEcart && this.response.partnerOnly && this.response.partnerOnly.length > 0) {
+            this.response.partnerOnly.forEach(record => {
+                Object.keys(record).forEach(key => {
+                    const correctedKey = fixGarbledCharacters(key);
+                    allPartnerColumns.add(correctedKey);
+                });
+            });
+        }
+        
+        // PRIORITÉ 4: Collecter aussi depuis les mismatches si disponibles
+        if (this.response.mismatches && this.response.mismatches.length > 0) {
+            this.response.mismatches.forEach(mismatch => {
+                if (mismatch.partnerData) {
+                    Object.keys(mismatch.partnerData).forEach(key => {
+                        const correctedKey = fixGarbledCharacters(key);
+                        allPartnerColumns.add(correctedKey);
+                    });
+                }
+            });
+        }
+
+        // Forcer l'inclusion de la colonne SOURCE pour identification d'origine si elle n'existe pas déjà
+        allPartnerColumns.add('SOURCE');
+        this.availableColumns = Array.from(allPartnerColumns).sort();
+        console.log('📋 Total colonnes Partenaire disponibles:', this.availableColumns.length, this.availableColumns);
+        
+        // Initialiser toutes les colonnes Partenaire comme non sélectionnées par défaut
         this.selectedColumns = {};
         this.availableColumns.forEach(col => {
             // Cocher par défaut les colonnes définies dans defaultColumns
             this.selectedColumns[col] = this.defaultColumns.includes(col);
         });
-
-        // Si pas de colonnes partenaire disponibles, afficher un message informatif
-        if (!hasPartnerEcart && hasBoEcart) {
-            this.popupService.showInfo('ℹ️ Aucun écart partenaire détecté. Seuls les écarts BO seront exportés.');
-        }
 
         this.showColumnSelector = true;
     }
@@ -5192,12 +5958,28 @@ private async downloadExcelFile(workbooks: ExcelJS.Workbook[], fileName: string)
     }
 
     /**
-     * Sélectionne/désélectionne toutes les colonnes
+     * Sélectionne/désélectionne toutes les colonnes Partenaire
      */
     toggleAllColumns(selected: boolean): void {
         this.availableColumns.forEach(col => {
             this.selectedColumns[col] = selected;
         });
+    }
+    
+    /**
+     * Sélectionne/désélectionne toutes les colonnes BO
+     */
+    toggleAllBoColumns(selected: boolean): void {
+        this.availableBoColumns.forEach(col => {
+            this.selectedBoColumns[col] = selected;
+        });
+    }
+    
+    /**
+     * Compte les colonnes BO sélectionnées
+     */
+    get selectedBoColumnsCount(): number {
+        return this.availableBoColumns.filter(col => this.selectedBoColumns[col]).length;
     }
 
     /**
@@ -5238,6 +6020,14 @@ private async downloadExcelFile(workbooks: ExcelJS.Workbook[], fileName: string)
             // Créer le contenu CSV avec les deux sections côte à côte
             let csvContent = '';
             
+            // Obtenir les colonnes sélectionnées pour les écarts BO
+            let selectedBoColumns = this.availableBoColumns.filter(col => this.selectedBoColumns[col]);
+            // Forcer SOURCE en dernière position s'il est sélectionné
+            if (selectedBoColumns.includes('SOURCE')) {
+                selectedBoColumns = selectedBoColumns.filter(c => c !== 'SOURCE');
+                selectedBoColumns.push('SOURCE');
+            }
+            
             // Obtenir les colonnes sélectionnées pour les écarts Partenaire
             let selectedPartnerColumns = this.availableColumns.filter(col => this.selectedColumns[col]);
             // Forcer SOURCE en dernière position s'il est sélectionné
@@ -5250,19 +6040,20 @@ private async downloadExcelFile(workbooks: ExcelJS.Workbook[], fileName: string)
             console.log('🔍 Debug Export Rapport:');
             console.log('- Écarts BO disponibles:', report.ecartBo.length);
             console.log('- Écarts Partenaire disponibles:', report.ecartPartenaire.length);
-            console.log('- Colonnes disponibles:', this.availableColumns);
-            console.log('- Colonnes sélectionnées:', selectedPartnerColumns);
-            console.log('- Sélection actuelle:', this.selectedColumns);
+            console.log('- Colonnes BO disponibles:', this.availableBoColumns);
+            console.log('- Colonnes BO sélectionnées:', selectedBoColumns);
+            console.log('- Colonnes Partenaire disponibles:', this.availableColumns);
+            console.log('- Colonnes Partenaire sélectionnées:', selectedPartnerColumns);
             
             // En-têtes côte à côte
-            const boHeader = 'Service;téléphone client;montant;Agence;Date;Numéro Trans GU;IDTransaction;SOURCE';
+            const boHeader = selectedBoColumns.length > 0 ? selectedBoColumns.join(';') : '';
             const partnerHeader = selectedPartnerColumns.length > 0 ? selectedPartnerColumns.join(';') : '';
             
             // Calculer l'espacement entre les colonnes (2 colonnes vides pour séparer)
             const spacing = ';;';
             
             // Ligne 1: Titre ECART BO centré au-dessus de son tableau
-            const boColumnsCount = boHeader.split(';').length;
+            const boColumnsCount = selectedBoColumns.length > 0 ? selectedBoColumns.length : 0;
             const partnerColumnsCount = selectedPartnerColumns.length;
             
             // Centrer le titre ECART BO
@@ -5288,10 +6079,34 @@ private async downloadExcelFile(workbooks: ExcelJS.Workbook[], fileName: string)
                 let partnerRow = '';
                 
                 // Ligne ECART BO
-                if (i < report.ecartBo.length) {
+                if (i < report.ecartBo.length && selectedBoColumns.length > 0) {
                     const boItem = report.ecartBo[i];
-                    boRow = `${boItem.Service || boItem.CLE};${boItem.telephoneClient};${boItem.montant};${boItem.Agence};${boItem.Date};${boItem.numeroTransGU};${boItem.IDTransaction};${boItem.SOURCE}`;
-                } else {
+                    // Récupérer les valeurs selon les colonnes sélectionnées
+                    const boValues = selectedBoColumns.map(col => {
+                        // Chercher la valeur dans les données originales
+                        const originalRecord = this.response?.boOnly?.[i];
+                        if (originalRecord) {
+                            // Chercher la clé originale correspondante
+                            const originalKey = Object.keys(originalRecord).find(k => fixGarbledCharacters(k) === col);
+                            if (originalKey && originalRecord[originalKey] !== undefined && originalRecord[originalKey] !== null) {
+                                return String(originalRecord[originalKey]);
+                            }
+                        }
+                        // Fallback sur les propriétés transformées
+                        switch (col) {
+                            case 'Service': return boItem.Service || '';
+                            case 'téléphone client': return boItem.telephoneClient || '';
+                            case 'montant': return boItem.montant || '';
+                            case 'Agence': return boItem.Agence || '';
+                            case 'Date': return boItem.Date || '';
+                            case 'Numéro Trans GU': return boItem.numeroTransGU || '';
+                            case 'IDTransaction': return boItem.IDTransaction || '';
+                            case 'SOURCE': return boItem.SOURCE || 'BO';
+                            default: return '';
+                        }
+                    });
+                    boRow = boValues.join(';');
+                } else if (selectedBoColumns.length > 0) {
                     // Remplir avec des valeurs vides si pas de données
                     boRow = ';'.repeat(boColumnsCount - 1);
                 }
@@ -5334,16 +6149,18 @@ private async downloadExcelFile(workbooks: ExcelJS.Workbook[], fileName: string)
                     console.log(`🔍 Ligne ${i} - Pas de données Partenaire, ligne vide: "${partnerRow}"`);
                 }
                 
-                // Ajouter la ligne au CSV (avec ou sans colonnes partenaire)
-                if (partnerColumnsCount > 0) {
+                // Ajouter la ligne au CSV
+                if (boColumnsCount > 0 && partnerColumnsCount > 0) {
                     csvContent += `${boRow}${spacing}${partnerRow}\n`;
-                } else {
+                } else if (boColumnsCount > 0) {
                     csvContent += `${boRow}\n`;
+                } else if (partnerColumnsCount > 0) {
+                    csvContent += `${partnerRow}\n`;
                 }
             }
 
             // Créer et télécharger le fichier Excel avec couleurs
-            await this.createExcelReport(report, selectedPartnerColumns, boHeader, partnerHeader);
+            await this.createExcelReport(report, selectedBoColumns, selectedPartnerColumns, boHeader, partnerHeader);
 
             const selectedCount = this.availableColumns.filter(col => this.selectedColumns[col]).length;
             const hasPartnerColumns = selectedCount > 0;
@@ -5373,20 +6190,25 @@ private async downloadExcelFile(workbooks: ExcelJS.Workbook[], fileName: string)
      * Confirme l'export avec les colonnes sélectionnées
      */
     confirmExportWithSelectedColumns(): void {
-        const selectedCount = this.availableColumns.filter(col => this.selectedColumns[col]).length;
+        const selectedBoCount = this.availableBoColumns.filter(col => this.selectedBoColumns[col]).length;
+        const selectedPartnerCount = this.availableColumns.filter(col => this.selectedColumns[col]).length;
         const report = this.generateEcartReport();
         
-        // Vérifier s'il y a des écarts BO (permettre l'export même sans colonnes partenaire)
+        // Vérifier s'il y a des écarts BO ou Partenaire
         const hasBoEcart = report && report.ecartBo && report.ecartBo.length > 0;
         const hasPartnerEcart = report && report.ecartPartenaire && report.ecartPartenaire.length > 0;
         
-        if (selectedCount === 0 && !hasBoEcart) {
-            this.popupService.showWarning('⚠️ Veuillez sélectionner au moins une colonne pour l\'export ou vérifiez qu\'il y a des écarts BO.');
+        if (selectedBoCount === 0 && selectedPartnerCount === 0) {
+            this.popupService.showWarning('⚠️ Veuillez sélectionner au moins une colonne BO ou Partenaire pour l\'export.');
             return;
         }
         
-        if (hasBoEcart && selectedCount === 0) {
-            this.popupService.showInfo('ℹ️ Export des écarts BO uniquement (aucune colonne partenaire sélectionnée).');
+        if (hasBoEcart && selectedBoCount === 0) {
+            this.popupService.showInfo('ℹ️ Aucune colonne BO sélectionnée. Seules les colonnes Partenaire seront exportées.');
+        }
+        
+        if (hasPartnerEcart && selectedPartnerCount === 0) {
+            this.popupService.showInfo('ℹ️ Aucune colonne Partenaire sélectionnée. Seules les colonnes BO seront exportées.');
         }
         
         this.exportEcartReport();
@@ -5395,7 +6217,7 @@ private async downloadExcelFile(workbooks: ExcelJS.Workbook[], fileName: string)
     /**
      * Crée un rapport Excel avec des couleurs
      */
-    async createExcelReport(report: any, selectedPartnerColumns: string[], boHeader: string, partnerHeader: string): Promise<void> {
+    async createExcelReport(report: any, selectedBoColumns: string[], selectedPartnerColumns: string[], boHeader: string, partnerHeader: string): Promise<void> {
         try {
             const workbook = new ExcelJS.Workbook();
             const worksheet = workbook.addWorksheet('Rapport Écarts');
@@ -5763,7 +6585,34 @@ private async downloadExcelFile(workbooks: ExcelJS.Workbook[], fileName: string)
             this.selectedPartnerImportOpDate = normalizedDate;
             const nomBordereau = this.getFromRecord(record, ['Numéro Trans GU','Numero Trans GU','numeroTransGU','numero_trans_gu']);
 
-            const banqueInput = await this.popupService.showTextInput('Banque (code propriétaire) :', 'Créer OP', codeProprietaire, 'Ex: CIELCM0001');
+            // Charger les codes propriétaires des banques
+            let banqueCodes: string[] = [];
+            try {
+                const comptesBanque = await this.compteService.filterComptes({ categorie: ['Banque'] }).toPromise();
+                if (comptesBanque && comptesBanque.length > 0) {
+                    banqueCodes = [...new Set(comptesBanque.map(c => c.codeProprietaire).filter((cp): cp is string => cp !== undefined && cp !== null))].sort();
+                }
+            } catch (e) {
+                console.error('Erreur lors du chargement des codes propriétaires des banques:', e);
+            }
+            
+            // Si aucune banque trouvée, utiliser une liste vide avec "ECOBANK CM" par défaut
+            if (banqueCodes.length === 0) {
+                banqueCodes = ['ECOBANK CM'];
+            } else {
+                // Ajouter "ECOBANK CM" en première position si elle n'existe pas déjà
+                if (!banqueCodes.includes('ECOBANK CM')) {
+                    banqueCodes.unshift('ECOBANK CM');
+                }
+            }
+            
+            // Demander la banque via autocomplétion (avec "ECOBANK CM" par défaut)
+            const banqueInput = await this.popupService.showAutocompleteInput(
+                'Banque (code propriétaire) :', 
+                'Créer OP', 
+                banqueCodes, 
+                'ECOBANK CM'
+            );
             const banque = (banqueInput || '').trim();
             if (!banque) {
                 await this.popupService.showWarning('Banque obligatoire');

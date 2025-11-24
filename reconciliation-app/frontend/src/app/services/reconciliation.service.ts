@@ -834,6 +834,19 @@ export class ReconciliationService implements OnInit, OnDestroy {
         // Vérifier si les données sont trop volumineuses pour la sérialisation
         const boDataLength = request.boFileContent?.length || 0;
         const partnerDataLength = request.partnerFileContent?.length || 0;
+        const totalRecords = boDataLength + partnerDataLength;
+        
+        // Activer automatiquement le mode optimisé pour les gros fichiers (> 50k enregistrements)
+        // Cela réduira considérablement la taille de la réponse
+        if (totalRecords > 50000) {
+            request.lightweightResponse = true;
+            console.log('⚡ Mode optimisé activé automatiquement pour réduire la taille de la réponse');
+            console.log('📊 Fichier volumineux détecté:', {
+                boDataLength: boDataLength,
+                partnerDataLength: partnerDataLength,
+                totalRecords: totalRecords
+            });
+        }
         
         if (boDataLength > 100000 || partnerDataLength > 100000) {
             console.log('📊 Gros fichier détecté - Utilisation du traitement par chunks backend');
@@ -855,15 +868,72 @@ export class ReconciliationService implements OnInit, OnDestroy {
         // Timeout de 30 minutes (1800000ms) pour les gros fichiers
         const RECONCILIATION_TIMEOUT = 1800000; // 30 minutes
         
+        // Optimiser la requête pour les gros fichiers
+        // Note: Accept-Encoding est géré automatiquement par le navigateur, ne pas le définir manuellement
+        const headers = new HttpHeaders({
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            // Indiquer que c'est une requête longue
+            'X-Request-Type': 'long-running'
+        });
+        
+        // Log de la taille des données pour diagnostic
+        const requestSize = JSON.stringify(request).length;
+        const requestSizeMB = (requestSize / (1024 * 1024)).toFixed(2);
+        const requestStartTime = performance.now();
+        
+        console.log(`📊 Taille de la requête: ${requestSizeMB} MB (${requestSize} bytes)`);
+        console.log(`📊 Enregistrements BO: ${request.boFileContent?.length || 0}`);
+        console.log(`📊 Enregistrements Partenaire: ${request.partnerFileContent?.length || 0}`);
+        console.log(`⏱️  [TIMING] Début de l'envoi de la requête...`);
+        
         return this.http.post<ReconciliationResponse>(`${this.apiUrl}/reconcile`, request, {
-            headers: new HttpHeaders({
-                'Content-Type': 'application/json'
-            })
+            headers: headers,
+            // Désactiver la compression côté client pour les requêtes POST (le serveur gère)
+            // Mais activer la compression des réponses
+            reportProgress: false // Désactivé pour éviter la surcharge
         }).pipe(
             timeout(RECONCILIATION_TIMEOUT),
             tap(response => {
-                console.log('✅ Réconciliation terminée:', response);
+                const requestEndTime = performance.now();
+                const totalRequestTime = requestEndTime - requestStartTime;
+                const totalRequestTimeSeconds = (totalRequestTime / 1000).toFixed(2);
                 
+                console.log('✅ Réconciliation terminée - Réponse reçue du backend');
+                console.log('📊 Détails de la réponse:', {
+                    matches: response.matches?.length || 0,
+                    boOnly: response.boOnly?.length || 0,
+                    partnerOnly: response.partnerOnly?.length || 0,
+                    mismatches: response.mismatches?.length || 0,
+                    totalBoRecords: response.totalBoRecords || 0,
+                    totalPartnerRecords: response.totalPartnerRecords || 0,
+                    executionTimeMs: response.executionTimeMs || 0
+                });
+                
+                // Vérifier si la réponse est optimisée
+                if (response.matches && response.matches.length > 0) {
+                    const firstMatch = response.matches[0];
+                    const isOptimized = !firstMatch.partnerData || 
+                                       Object.keys(firstMatch.partnerData || {}).length <= 5;
+                    if (isOptimized) {
+                        console.log('⚡ Mode optimisé détecté dans la réponse - Données allégées');
+                        console.log('📋 Exemple de match optimisé:', {
+                            key: firstMatch.key,
+                            boDataKeys: Object.keys(firstMatch.boData || {}),
+                            partnerDataKeys: Object.keys(firstMatch.partnerData || {}),
+                            hasDifferences: !!firstMatch.differences
+                        });
+                    }
+                }
+                
+                console.log(`⏱️  [TIMING] Temps total de la requête (réseau + traitement): ${totalRequestTime.toFixed(0)} ms (${totalRequestTimeSeconds} secondes)`);
+                console.log(`⏱️  [TIMING] Temps de traitement backend: ${response.executionTimeMs || 0} ms`);
+                if (response.executionTimeMs) {
+                    const networkTime = totalRequestTime - response.executionTimeMs;
+                    console.log(`⏱️  [TIMING] Temps estimé réseau (upload + download): ${networkTime.toFixed(0)} ms`);
+                }
+                
+                console.log('🔄 Mise à jour de la progression à 100%...');
                 this.updateProgress({
                     percentage: 100,
                     processed: response.totalBoRecords + response.totalPartnerRecords,
@@ -871,6 +941,7 @@ export class ReconciliationService implements OnInit, OnDestroy {
                     step: 'Terminé',
                     estimatedTimeRemaining: 0
                 });
+                console.log('✅ Progression mise à jour avec succès');
             }),
             catchError(this.handleError)
         );
@@ -883,13 +954,19 @@ export class ReconciliationService implements OnInit, OnDestroy {
         console.log('🔄 Démarrage de la réconciliation par chunks backend optimisée');
         
         return new Observable(observer => {
-            const chunkSize = 100000; // 100k lignes par chunk pour un traitement plus rapide
+            // Réduire la taille des chunks pour améliorer le transfert réseau
+            // Chunks plus petits = transfert plus rapide et moins de timeout
+            const chunkSize = 50000; // 50k lignes par chunk (réduit de 100k pour améliorer le transfert)
+            
+            // Activer automatiquement le mode optimisé pour les chunks
+            request.lightweightResponse = true;
+            console.log('⚡ Mode optimisé activé pour les chunks - Réponse allégée');
             
             // Diviser seulement les données BO en chunks
             const boChunks = this.createChunks(request.boFileContent || [], chunkSize);
             const allPartnerData = request.partnerFileContent || [];
             
-            console.log(`📊 Données divisées: ${boChunks.length} chunks BO, ${allPartnerData.length} lignes Partner complètes`);
+            console.log(`📊 Données divisées: ${boChunks.length} chunks BO (${chunkSize} lignes/chunk), ${allPartnerData.length} lignes Partner complètes`);
             
             // Traiter chaque chunk BO avec TOUTES les lignes Partner
             this.processOptimizedChunks(request, boChunks, allPartnerData, [], observer);
@@ -915,6 +992,12 @@ export class ReconciliationService implements OnInit, OnDestroy {
         const processNextBoChunk = () => {
             if (currentBoIndex >= boChunks.length) {
                 console.log('✅ Tous les chunks BO traités, finalisation des résultats...');
+                console.log(`📊 Résumé final avant finalisation:`, {
+                    totalMatches: allMatches.length,
+                    totalBoOnly: allBoOnly.length,
+                    totalPartnerOnly: remainingPartnerData.length,
+                    chunksProcessed: currentBoIndex
+                });
                 this.finalizeOptimizedResults(allMatches, allBoOnly, remainingPartnerData, observer);
                 return;
             }
@@ -955,24 +1038,50 @@ export class ReconciliationService implements OnInit, OnDestroy {
             ).subscribe({
                 next: (response: ReconciliationResponse) => {
                     try {
-                        console.log(`✅ Chunk BO ${currentBoIndex} traité: ${response.matches?.length || 0} matches`);
+                        const matchesCount = response.matches?.length || 0;
+                        console.log(`✅ Chunk BO ${currentBoIndex} traité: ${matchesCount} matches`);
+                        console.log(`📊 Réponse reçue - Matches: ${matchesCount}, BoOnly: ${response.boOnly?.length || 0}, PartnerOnly: ${response.partnerOnly?.length || 0}`);
                         
                         // Ajouter les matches trouvés avec gestion d'erreur
                         if (response.matches && response.matches.length > 0) {
                             console.log(`📊 Ajout de ${response.matches.length} matches...`);
+                            
+                            // Vérifier si on est en mode optimisé (premier match pour tester)
+                            const isOptimized = response.matches.length > 0 && 
+                                (!response.matches[0].partnerData || 
+                                 Object.keys(response.matches[0].partnerData || {}).length <= 5);
+                            
+                            if (isOptimized) {
+                                console.log('⚡ Mode optimisé détecté - Utilisation de match.key pour les clés');
+                            }
+                            
                             allMatches.push(...response.matches);
                             
                             // Retirer les lignes Partner qui ont matché (optimisé)
-                            const matchedPartnerKeys = new Set(response.matches.map(match => 
-                                match.partnerData[originalRequest.partnerKeyColumn]
-                            ));
+                            // Utiliser match.key si disponible (mode optimisé), sinon extraire de partnerData
+                            const matchedPartnerKeys = new Set(response.matches.map(match => {
+                                // En mode optimisé, utiliser directement la clé du match
+                                if (match.key) {
+                                    return match.key;
+                                }
+                                // Sinon, extraire de partnerData (mode normal)
+                                if (match.partnerData && match.partnerData[originalRequest.partnerKeyColumn]) {
+                                    return match.partnerData[originalRequest.partnerKeyColumn];
+                                }
+                                // Fallback : essayer de trouver la clé dans les données
+                                return match.partnerData?.[originalRequest.partnerKeyColumn] || 
+                                       match.boData?.[originalRequest.boKeyColumn] || 
+                                       '';
+                            }).filter(key => key !== '' && key !== null && key !== undefined));
                             
                             const beforeCount = remainingPartnerData.length;
-                            remainingPartnerData = remainingPartnerData.filter(partnerRow => 
-                                !matchedPartnerKeys.has(partnerRow[originalRequest.partnerKeyColumn])
-                            );
+                            remainingPartnerData = remainingPartnerData.filter(partnerRow => {
+                                const partnerKey = partnerRow[originalRequest.partnerKeyColumn];
+                                return !matchedPartnerKeys.has(partnerKey);
+                            });
                             
                             console.log(`📊 ${beforeCount - remainingPartnerData.length} lignes Partner retirées, ${remainingPartnerData.length} restantes`);
+                            console.log(`🔑 Clés matchées extraites: ${matchedPartnerKeys.size} clés uniques`);
                         }
                         
                         // Ajouter les lignes BO sans correspondance
@@ -985,8 +1094,9 @@ export class ReconciliationService implements OnInit, OnDestroy {
                         console.log(`💾 État mémoire: ${allMatches.length} matches, ${allBoOnly.length} bo-only, ${remainingPartnerData.length} partner restantes`);
                         
                         // Mettre à jour la progression avec les informations détaillées
+                        const progressPercentage = Math.min(95, (currentBoIndex / boChunks.length) * 90);
                         this.progressSubject.next({
-                            percentage: Math.min(95, (currentBoIndex / boChunks.length) * 90),
+                            percentage: progressPercentage,
                             processed: currentBoIndex,
                             total: boChunks.length,
                             step: `Chunk BO ${currentBoIndex}/${boChunks.length} traité`,
@@ -997,6 +1107,7 @@ export class ReconciliationService implements OnInit, OnDestroy {
                             partnerRemaining: remainingPartnerData.length
                         });
                         
+                        console.log(`🔄 Passage au chunk suivant (${currentBoIndex + 1}/${boChunks.length})...`);
                         processNextBoChunk();
                     } catch (error) {
                         console.error(`❌ Erreur lors du traitement des résultats du chunk BO ${currentBoIndex}:`, error);

@@ -31,6 +31,12 @@ export class AuthInterceptor implements HttpInterceptor {
       headers['X-Username'] = username;
     }
 
+    // Désactiver le cache du navigateur pour éviter les problèmes après upload
+    // Cela empêche le navigateur de mettre en cache les réponses et de planter le système
+    headers['Cache-Control'] = 'no-cache, no-store, must-revalidate';
+    headers['Pragma'] = 'no-cache';
+    headers['Expires'] = '0';
+
     // Cloner la requête et ajouter les headers
     const clonedRequest = req.clone({
       setHeaders: headers

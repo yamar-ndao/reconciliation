@@ -316,9 +316,66 @@ export interface ReconciliationReportData {
                                     <input [(ngModel)]="item.totalVolume" type="number" class="edit-input"/>
                                 </ng-template>
                             </td>
-                            <td class="match-cell">{{item.matches | number}}</td>
-                            <td class="bo-only-cell">{{item.boOnly | number}}</td>
-                            <td class="partner-only-cell">{{item.partnerOnly | number}}</td>
+                            <td class="match-cell">
+                                <ng-container *ngIf="editingRow !== item; else editMatches">
+                                    {{item.matches | number}}
+                                </ng-container>
+                                <ng-template #editMatches>
+                                    <input 
+                                        [(ngModel)]="item.matches" 
+                                        type="number" 
+                                        min="0" 
+                                        class="edit-input" 
+                                        inputmode="decimal" 
+                                        placeholder="Correspondances"/>
+                                </ng-template>
+                            </td>
+                            <td class="bo-only-cell">
+                                <div class="ecart-cell-container">
+                                    <ng-container *ngIf="editingRow !== item; else editBoOnly">
+                                        <span class="ecart-value">{{item.boOnly | number}}</span>
+                                        <button 
+                                            *ngIf="item.boOnly > 0"
+                                            class="btn-transfer-ecart" 
+                                            (click)="transferEcartToMatches(item, 'boOnly')"
+                                            title="Transférer une partie des écarts BO vers les correspondances">
+                                            ➕
+                                        </button>
+                                    </ng-container>
+                                    <ng-template #editBoOnly>
+                                        <input 
+                                            [(ngModel)]="item.boOnly" 
+                                            type="number" 
+                                            min="0" 
+                                            class="edit-input" 
+                                            inputmode="decimal" 
+                                            placeholder="Écarts BO"/>
+                                    </ng-template>
+                                </div>
+                            </td>
+                            <td class="partner-only-cell">
+                                <div class="ecart-cell-container">
+                                    <ng-container *ngIf="editingRow !== item; else editPartnerOnly">
+                                        <span class="ecart-value">{{item.partnerOnly | number}}</span>
+                                        <button 
+                                            *ngIf="item.partnerOnly > 0"
+                                            class="btn-transfer-ecart" 
+                                            (click)="transferEcartToMatches(item, 'partnerOnly')"
+                                            title="Transférer une partie des écarts Partenaire vers les correspondances">
+                                            ➕
+                                        </button>
+                                    </ng-container>
+                                    <ng-template #editPartnerOnly>
+                                        <input 
+                                            [(ngModel)]="item.partnerOnly" 
+                                            type="number" 
+                                            min="0" 
+                                            class="edit-input" 
+                                            inputmode="decimal" 
+                                            placeholder="Écarts partenaire"/>
+                                    </ng-template>
+                                </div>
+                            </td>
                             <td class="mismatch-cell">{{item.mismatches | number}}</td>
                             <td class="rate-cell number-cell">
                                 <span [class]="getRateClass(item.matchRate)">
@@ -954,6 +1011,44 @@ export interface ReconciliationReportData {
             text-align: right;
             color: #fd7e14;
             font-weight: 600;
+        }
+
+        .ecart-cell-container {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 8px;
+        }
+
+        .ecart-value {
+            flex: 0 0 auto;
+        }
+
+        .btn-transfer-ecart {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+            min-width: 28px;
+            height: 24px;
+            flex: 0 0 auto;
+        }
+
+        .btn-transfer-ecart:hover {
+            background: #218838;
+            transform: translateY(-1px);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+
+        .btn-transfer-ecart:active {
+            transform: translateY(0);
         }
 
         .mismatch-cell {
@@ -2236,7 +2331,18 @@ export class ReconciliationReportComponent implements OnInit, OnDestroy {
      * Si le statut passe à "OK", les écarts sont réinitialisés à 0 et ajoutés aux correspondances
      */
     private recalculateDataBasedOnStatus(item: ReconciliationReportData): ReconciliationReportData {
-        const recalculated = { ...item };
+        const matches = this.normalizeNumericValue(item.matches);
+        const boOnly = this.normalizeNumericValue(item.boOnly);
+        const partnerOnly = this.normalizeNumericValue(item.partnerOnly);
+        const mismatches = this.normalizeNumericValue(item.mismatches);
+
+        const recalculated = { 
+            ...item,
+            matches,
+            boOnly,
+            partnerOnly,
+            mismatches
+        };
         const manualComment = item.comment ?? '';
         const hasManualComment = manualComment.trim().length > 0;
 
@@ -2253,8 +2359,8 @@ export class ReconciliationReportComponent implements OnInit, OnDestroy {
             });
 
             // Ajouter tous les écarts aux correspondances
-            const totalEcart = item.boOnly + item.partnerOnly + item.mismatches;
-            recalculated.matches = item.matches + totalEcart;
+            const totalEcart = boOnly + partnerOnly + mismatches;
+            recalculated.matches = matches + totalEcart;
             
             // Réinitialiser les écarts à 0
             recalculated.boOnly = 0;
@@ -2665,9 +2771,9 @@ export class ReconciliationReportComponent implements OnInit, OnDestroy {
      */
     private determineDefaultTraitement(item: ReconciliationReportData): string {
         // Convertir en nombres et s'assurer que les valeurs null/undefined sont traitées comme 0
-        const boOnly = Number(item.boOnly) || 0;
-        const partnerOnly = Number(item.partnerOnly) || 0;
-        const mismatches = Number(item.mismatches) || 0;
+        const boOnly = this.normalizeNumericValue(item.boOnly);
+        const partnerOnly = this.normalizeNumericValue(item.partnerOnly);
+        const mismatches = this.normalizeNumericValue(item.mismatches);
         
         const totalEcarts = boOnly + partnerOnly + mismatches;
         
@@ -3071,6 +3177,14 @@ export class ReconciliationReportComponent implements OnInit, OnDestroy {
         // Recalculer le taux de correspondance si nécessaire
         this.recalculateMatchRate(item);
 
+        // Mettre à jour le commentaire avec les nouvelles valeurs
+        item.comment = this.buildCommentForCounts(
+            item.matches,
+            item.boOnly,
+            item.partnerOnly,
+            item.mismatches
+        );
+
         // Si c'est une nouvelle ligne (pas d'ID), sauvegarder
         if (!item.id) {
             await this.confirmAndSave(item);
@@ -3084,30 +3198,187 @@ export class ReconciliationReportComponent implements OnInit, OnDestroy {
         this.originalData = null;
     }
 
+    private normalizeNumericValue(value: number | string | null | undefined): number {
+        if (value === null || value === undefined) {
+            return 0;
+        }
+
+        if (typeof value === 'string') {
+            const trimmed = value.trim();
+            if (trimmed === '') {
+                return 0;
+            }
+            const parsed = Number(trimmed);
+            return isNaN(parsed) ? 0 : parsed;
+        }
+
+        const parsed = Number(value);
+        return isNaN(parsed) ? 0 : parsed;
+    }
+
     private validateEditData(item: ReconciliationReportData): boolean {
         if (!item.date || !item.agency || !item.service || !item.country) {
             this.popupService.showError('Données invalides', 'Veuillez remplir tous les champs obligatoires (Date, Agence, Service, Pays)');
             return false;
         }
 
-        if (item.totalTransactions < 0 || item.totalVolume < 0) {
-            this.popupService.showError('Données invalides', 'Les valeurs numériques ne peuvent pas être négatives');
-            return false;
+        const numericFields: Array<{ key: keyof ReconciliationReportData; label: string }> = [
+            { key: 'totalTransactions', label: 'Nombre de transactions' },
+            { key: 'totalVolume', label: 'Volume total' },
+            { key: 'matches', label: 'Correspondances' },
+            { key: 'boOnly', label: 'Écarts BO' },
+            { key: 'partnerOnly', label: 'Écarts partenaire' },
+            { key: 'mismatches', label: 'Incohérences' }
+        ];
+
+        for (const field of numericFields) {
+            const rawValue = item[field.key];
+            const numericValue = Number(rawValue);
+            if (isNaN(numericValue) || numericValue < 0) {
+                this.popupService.showError('Données invalides', `${field.label} doit être un nombre positif ou nul`);
+                return false;
+            }
+            (item as any)[field.key] = numericValue;
         }
 
         return true;
     }
 
     private recalculateMatchRate(item: ReconciliationReportData) {
-        const total = item.matches + item.boOnly + item.partnerOnly + item.mismatches;
+        const matches = this.normalizeNumericValue(item.matches);
+        const boOnly = this.normalizeNumericValue(item.boOnly);
+        const partnerOnly = this.normalizeNumericValue(item.partnerOnly);
+        const mismatches = this.normalizeNumericValue(item.mismatches);
+
+        item.matches = matches;
+        item.boOnly = boOnly;
+        item.partnerOnly = partnerOnly;
+        item.mismatches = mismatches;
+
+        const total = matches + boOnly + partnerOnly + mismatches;
+        item.totalTransactions = total;
         if (total > 0) {
-            item.matchRate = (item.matches / total) * 100;
+            item.matchRate = (matches / total) * 100;
         } else {
             item.matchRate = 0;
         }
         
-        // Ne pas écraser le statut et commentaire s'ils ont été modifiés manuellement
-        // On les garde tels quels pour respecter les modifications de l'utilisateur
+        // Mettre à jour automatiquement le commentaire avec les nouvelles valeurs
+        item.comment = this.buildCommentForCounts(matches, boOnly, partnerOnly, mismatches);
+    }
+
+    // Méthode pour transférer une partie des écarts vers les correspondances
+    async transferEcartToMatches(item: ReconciliationReportData, ecartType: 'boOnly' | 'partnerOnly') {
+        const currentEcart = this.normalizeNumericValue(item[ecartType]);
+        
+        if (currentEcart <= 0) {
+            this.popupService.showWarning('Aucun écart disponible', `Il n'y a pas d'écart ${ecartType === 'boOnly' ? 'BO' : 'Partenaire'} à transférer.`);
+            return;
+        }
+
+        const ecartLabel = ecartType === 'boOnly' ? 'BO' : 'Partenaire';
+        const message = `Entrez le nombre d'écarts ${ecartLabel} à transférer vers les correspondances (maximum: ${currentEcart}):`;
+        
+        const userInput = await this.popupService.showTextInput(
+            message,
+            `Transfert d'écarts ${ecartLabel}`,
+            '',
+            `Nombre entre 1 et ${currentEcart}`
+        );
+        
+        if (userInput === null || userInput.trim() === '') {
+            // L'utilisateur a annulé ou n'a rien saisi
+            return;
+        }
+
+        const transferAmount = Number(userInput.trim());
+        
+        // Validation
+        if (isNaN(transferAmount) || transferAmount <= 0) {
+            this.popupService.showError('Valeur invalide', 'Veuillez entrer un nombre positif.');
+            return;
+        }
+
+        if (transferAmount > currentEcart) {
+            this.popupService.showError('Valeur trop élevée', `Le nombre à transférer (${transferAmount}) ne peut pas être supérieur à l'écart actuel (${currentEcart}).`);
+            return;
+        }
+
+        // Effectuer le transfert
+        const newEcart = currentEcart - transferAmount;
+        const newMatches = this.normalizeNumericValue(item.matches) + transferAmount;
+
+        item[ecartType] = newEcart;
+        item.matches = newMatches;
+
+        // Recalculer le taux de correspondance
+        this.recalculateMatchRate(item);
+
+        // Mettre à jour le commentaire avec les nouvelles valeurs
+        item.comment = this.buildCommentForCounts(
+            item.matches,
+            item.boOnly,
+            item.partnerOnly,
+            item.mismatches
+        );
+
+        // Sauvegarder si la ligne existe déjà en base
+        if (item.id) {
+            // Recalculer les valeurs selon le statut
+            const recalculatedData = this.recalculateDataBasedOnStatus(item);
+            
+            // S'assurer que le commentaire est à jour
+            recalculatedData.comment = this.buildCommentForCounts(
+                recalculatedData.matches,
+                recalculatedData.boOnly,
+                recalculatedData.partnerOnly,
+                recalculatedData.mismatches
+            );
+            
+            // Définir le traitement par défaut si non spécifié
+            const traitement = recalculatedData.traitement && recalculatedData.traitement.trim() !== ''
+                ? recalculatedData.traitement
+                : this.determineDefaultTraitement(recalculatedData);
+
+            const payload = {
+                date: recalculatedData.date,
+                agency: recalculatedData.agency,
+                service: recalculatedData.service,
+                country: recalculatedData.country,
+                totalTransactions: recalculatedData.totalTransactions,
+                totalVolume: recalculatedData.totalVolume,
+                matches: recalculatedData.matches,
+                boOnly: recalculatedData.boOnly,
+                partnerOnly: recalculatedData.partnerOnly,
+                mismatches: recalculatedData.mismatches,
+                matchRate: recalculatedData.matchRate,
+                status: recalculatedData.status,
+                comment: recalculatedData.comment,
+                traitement: traitement,
+                glpiId: recalculatedData.glpiId || ''
+            };
+
+            this.http.put<any>('/api/result8rec/' + item.id, payload)
+            .subscribe({
+                next: () => {
+                    this.popupService.showSuccess(
+                        'Transfert effectué',
+                        `${transferAmount} écart(s) ${ecartLabel} transféré(s) vers les correspondances.`
+                    );
+                    // Rafraîchir les données après la mise à jour
+                    this.loadSavedReportFromDatabase();
+                },
+                error: (err: HttpErrorResponse) => {
+                    console.error('Erreur lors de la sauvegarde:', err);
+                    this.popupService.showError('Erreur de sauvegarde', 'Le transfert a été effectué localement mais la sauvegarde a échoué.');
+                }
+            });
+        } else {
+            this.popupService.showSuccess(
+                'Transfert effectué',
+                `${transferAmount} écart(s) ${ecartLabel} transféré(s) vers les correspondances. N'oubliez pas de sauvegarder la ligne.`
+            );
+        }
     }
 
     // Méthode pour créer une nouvelle ligne

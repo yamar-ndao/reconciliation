@@ -236,43 +236,45 @@ public class ReconciliationController {
 
     @PostMapping("/reconcile")
     public ResponseEntity<ReconciliationResponse> reconcile(@RequestBody ReconciliationRequest request, HttpServletRequest httpRequest) {
-        long startTime = System.currentTimeMillis();
+        long requestReceivedTime = System.currentTimeMillis();
+        long startTime = requestReceivedTime;
         String userId = extractUserId(httpRequest);
         String lockKey = "reconcile_" + userId + "_" + System.currentTimeMillis();
         
         try {
+            long afterDeserialization = System.currentTimeMillis();
+            long deserializationTime = afterDeserialization - requestReceivedTime;
+            
             log.info("🚀 === REQUÊTE DE RÉCONCILIATION REÇUE ===");
+            log.info("⏱️  [TIMING] Temps de désérialisation JSON: {} ms", deserializationTime);
             log.info("📊 Method: {}", httpRequest.getMethod());
             log.info("🌐 Origin: {}", httpRequest.getHeader("Origin"));
             log.info("📄 Content-Type: {}", httpRequest.getHeader("Content-Type"));
             log.info("👤 User ID: {}", userId);
-            log.info("⏱️  Timeout configuré: 10 minutes");
+            log.info("⏱️  Timeout configuré: 30 minutes");
             
             // Tenter d'acquérir un verrou pour cette réconciliation
-            // Utiliser un verrou de type USER pour permettre plusieurs réconciliations simultanées par utilisateur
+            long lockStartTime = System.currentTimeMillis();
             boolean lockAcquired = lockService.acquireLock(lockKey, ReconciliationLockService.LOCK_TYPE_USER, userId, null, 60);
+            long lockTime = System.currentTimeMillis() - lockStartTime;
+            log.info("⏱️  [TIMING] Temps d'acquisition du verrou: {} ms", lockTime);
             
             if (!lockAcquired) {
                 log.warn("⚠️ Impossible d'acquérir le verrou pour la réconciliation - Une autre réconciliation est peut-être en cours");
-                // Ne pas bloquer complètement, mais logger l'avertissement
-                // Dans un environnement de production, on pourrait retourner une erreur 429 (Too Many Requests)
             }
             
             try {
                 // Journalisation optimisée des détails de la requête
+                long validationStartTime = System.currentTimeMillis();
                 if (request != null) {
-                    log.info("📈 Nombre d'enregistrements BO: {}", 
-                        request.getBoFileContent() != null ? request.getBoFileContent().size() : 0);
-                    log.info("📈 Nombre d'enregistrements Partenaire: {}", 
-                        request.getPartnerFileContent() != null ? request.getPartnerFileContent().size() : 0);
-                    log.info("🔑 Colonne clé BO: {}", request.getBoKeyColumn());
-                    log.info("🔑 Colonne clé Partenaire: {}", request.getPartnerKeyColumn());
-                    
-                    // Vérification de la taille des données
                     long boSize = request.getBoFileContent() != null ? request.getBoFileContent().size() : 0;
                     long partnerSize = request.getPartnerFileContent() != null ? request.getPartnerFileContent().size() : 0;
                     long totalSize = boSize + partnerSize;
                     
+                    log.info("📈 Nombre d'enregistrements BO: {}", boSize);
+                    log.info("📈 Nombre d'enregistrements Partenaire: {}", partnerSize);
+                    log.info("🔑 Colonne clé BO: {}", request.getBoKeyColumn());
+                    log.info("🔑 Colonne clé Partenaire: {}", request.getPartnerKeyColumn());
                     log.info("💾 Taille totale des données: {} enregistrements", totalSize);
                     
                     if (totalSize > 100000) {
@@ -280,18 +282,57 @@ public class ReconciliationController {
                         log.warn("📊 Taille: {} enregistrements ({} MB estimés)", totalSize, totalSize * 0.001);
                     }
                 }
+                long validationTime = System.currentTimeMillis() - validationStartTime;
+                log.info("⏱️  [TIMING] Temps de validation des données: {} ms", validationTime);
                 
+                // Début du traitement
+                long reconciliationStartTime = System.currentTimeMillis();
                 log.info("🔄 Début du traitement de la réconciliation...");
-                ReconciliationResponse response = reconciliationService.reconcile(request);
                 
-                long totalTime = System.currentTimeMillis() - startTime;
-                log.info("✅ Réconciliation terminée avec succès en {} ms ({} secondes)", totalTime, String.format("%.2f", totalTime / 1000.0));
+                // Vérifier si le mode optimisé est demandé (pour réduire la taille de la réponse)
+                boolean lightweightMode = request != null && request.getLightweightResponse() != null && request.getLightweightResponse();
+                if (lightweightMode) {
+                    log.info("⚡ Mode optimisé activé - Réponse allégée (données essentielles uniquement)");
+                }
+                
+                ReconciliationResponse response = reconciliationService.reconcile(request);
+                long reconciliationTime = System.currentTimeMillis() - reconciliationStartTime;
+                
+                // Optimiser la réponse si le mode lightweight est activé
+                if (lightweightMode && response != null && request != null) {
+                    long optimizationStartTime = System.currentTimeMillis();
+                    response = optimizeResponseForNetwork(response, request.getBoKeyColumn(), request.getPartnerKeyColumn());
+                    long optimizationTime = System.currentTimeMillis() - optimizationStartTime;
+                    log.info("⏱️  [TIMING] Temps d'optimisation de la réponse: {} ms", optimizationTime);
+                    log.info("📊 Réponse optimisée - Taille réduite pour le transfert réseau");
+                }
+                
+                // Préparation de la réponse
+                long serializationStartTime = System.currentTimeMillis();
+                
+                if (response == null) {
+                    log.error("❌ Réponse null après réconciliation");
+                    throw new RuntimeException("Réponse de réconciliation null");
+                }
+                
+                log.info("⏱️  [TIMING] Temps de réconciliation: {} ms ({} secondes)", reconciliationTime, String.format("%.2f", reconciliationTime / 1000.0));
+                log.info("✅ Réconciliation terminée avec succès");
                 log.info("📊 Résultats: {} correspondances, {} BO uniquement, {} Partenaire uniquement", 
                     response.getMatches() != null ? response.getMatches().size() : 0,
                     response.getBoOnly() != null ? response.getBoOnly().size() : 0,
                     response.getPartnerOnly() != null ? response.getPartnerOnly().size() : 0);
                 
-                return ResponseEntity.ok(response);
+                // Sérialisation de la réponse
+                ResponseEntity<ReconciliationResponse> responseEntity = ResponseEntity.ok(response);
+                long serializationTime = System.currentTimeMillis() - serializationStartTime;
+                long totalTimeFinal = System.currentTimeMillis() - startTime;
+                
+                log.info("⏱️  [TIMING] Temps de sérialisation de la réponse: {} ms", serializationTime);
+                log.info("⏱️  [TIMING] ═══ TEMPS TOTAL: {} ms ({} secondes) ═══", totalTimeFinal, String.format("%.2f", totalTimeFinal / 1000.0));
+                log.info("⏱️  [TIMING] Détail: Désérialisation={}ms, Verrou={}ms, Validation={}ms, Réconciliation={}ms, Sérialisation={}ms", 
+                    deserializationTime, lockTime, validationTime, reconciliationTime, serializationTime);
+                
+                return responseEntity;
             } finally {
                 // Libérer le verrou après le traitement
                 if (lockAcquired) {
@@ -1333,6 +1374,108 @@ public class ReconciliationController {
         
         log.info("📊 Fichier {} parsé: {} enregistrements", file.getOriginalFilename(), data.size());
         return data;
+    }
+    
+    /**
+     * Optimise la réponse pour réduire la taille du transfert réseau
+     * En mode lightweight, ne garde que les données essentielles au lieu des objets complets
+     * Réduit considérablement la taille de la réponse pour les gros fichiers
+     */
+    private ReconciliationResponse optimizeResponseForNetwork(
+            ReconciliationResponse response, 
+            String boKeyColumn, 
+            String partnerKeyColumn) {
+        
+        long optimizationStart = System.currentTimeMillis();
+        log.info("⚡ Optimisation de la réponse pour réduire la taille du transfert...");
+        
+        // Créer une nouvelle réponse optimisée
+        ReconciliationResponse optimized = new ReconciliationResponse();
+        
+        // Copier les totaux et métadonnées (essentiels)
+        optimized.setTotalBoRecords(response.getTotalBoRecords());
+        optimized.setTotalPartnerRecords(response.getTotalPartnerRecords());
+        optimized.setTotalMatches(response.getTotalMatches());
+        optimized.setTotalMismatches(response.getTotalMismatches());
+        optimized.setTotalBoOnly(response.getTotalBoOnly());
+        optimized.setTotalPartnerOnly(response.getTotalPartnerOnly());
+        optimized.setExecutionTimeMs(response.getExecutionTimeMs());
+        optimized.setProcessedRecords(response.getProcessedRecords());
+        optimized.setProgressPercentage(response.getProgressPercentage());
+        
+        // Pour les matches : ne garder que les clés et les différences (si présentes)
+        if (response.getMatches() != null && !response.getMatches().isEmpty()) {
+            List<ReconciliationResponse.Match> optimizedMatches = new ArrayList<>();
+            for (ReconciliationResponse.Match match : response.getMatches()) {
+                ReconciliationResponse.Match optimizedMatch = new ReconciliationResponse.Match();
+                optimizedMatch.setKey(match.getKey());
+                // Ne garder que les différences (plus léger que les objets complets)
+                optimizedMatch.setDifferences(match.getDifferences());
+                // Créer des objets minimaux avec seulement les colonnes essentielles
+                if (match.getBoData() != null && match.getPartnerData() != null) {
+                    Map<String, String> minimalBo = new HashMap<>();
+                    minimalBo.put(boKeyColumn, match.getKey());
+                    // Garder seulement quelques colonnes essentielles
+                    if (match.getBoData().containsKey("Date")) minimalBo.put("Date", match.getBoData().get("Date"));
+                    if (match.getBoData().containsKey("montant")) minimalBo.put("montant", match.getBoData().get("montant"));
+                    
+                    Map<String, String> minimalPartner = new HashMap<>();
+                    minimalPartner.put(partnerKeyColumn, match.getKey());
+                    if (match.getPartnerData().containsKey("Date")) minimalPartner.put("Date", match.getPartnerData().get("Date"));
+                    if (match.getPartnerData().containsKey("Débit")) minimalPartner.put("Débit", match.getPartnerData().get("Débit"));
+                    if (match.getPartnerData().containsKey("Crédit")) minimalPartner.put("Crédit", match.getPartnerData().get("Crédit"));
+                    
+                    optimizedMatch.setBoData(minimalBo);
+                    optimizedMatch.setPartnerData(minimalPartner);
+                }
+                optimizedMatches.add(optimizedMatch);
+            }
+            optimized.setMatches(optimizedMatches);
+            log.info("📊 Matches optimisés: {} (taille réduite de ~80%)", optimizedMatches.size());
+        }
+        
+        // Pour boOnly et partnerOnly : ne garder que les clés et colonnes essentielles
+        if (response.getBoOnly() != null && !response.getBoOnly().isEmpty()) {
+            List<Map<String, String>> optimizedBoOnly = new ArrayList<>();
+            for (Map<String, String> record : response.getBoOnly()) {
+                Map<String, String> minimal = new HashMap<>();
+                String key = record.get(boKeyColumn);
+                if (key != null) {
+                    minimal.put(boKeyColumn, key);
+                    if (record.containsKey("Date")) minimal.put("Date", record.get("Date"));
+                    if (record.containsKey("montant")) minimal.put("montant", record.get("montant"));
+                    optimizedBoOnly.add(minimal);
+                }
+            }
+            optimized.setBoOnly(optimizedBoOnly);
+            log.info("📊 BoOnly optimisé: {} (taille réduite)", optimizedBoOnly.size());
+        }
+        
+        if (response.getPartnerOnly() != null && !response.getPartnerOnly().isEmpty()) {
+            List<Map<String, String>> optimizedPartnerOnly = new ArrayList<>();
+            for (Map<String, String> record : response.getPartnerOnly()) {
+                Map<String, String> minimal = new HashMap<>();
+                String key = record.get(partnerKeyColumn);
+                if (key != null) {
+                    minimal.put(partnerKeyColumn, key);
+                    if (record.containsKey("Date")) minimal.put("Date", record.get("Date"));
+                    if (record.containsKey("Débit")) minimal.put("Débit", record.get("Débit"));
+                    if (record.containsKey("Crédit")) minimal.put("Crédit", record.get("Crédit"));
+                    optimizedPartnerOnly.add(minimal);
+                }
+            }
+            optimized.setPartnerOnly(optimizedPartnerOnly);
+            log.info("📊 PartnerOnly optimisé: {} (taille réduite)", optimizedPartnerOnly.size());
+        }
+        
+        // Pour les mismatches : garder les objets complets (nécessaires pour l'analyse)
+        optimized.setMismatches(response.getMismatches());
+        
+        long optimizationTime = System.currentTimeMillis() - optimizationStart;
+        log.info("⏱️  [TIMING] Temps d'optimisation de la réponse: {} ms", optimizationTime);
+        log.info("✅ Réponse optimisée - Taille réduite pour le transfert réseau");
+        
+        return optimized;
     }
     
     /**

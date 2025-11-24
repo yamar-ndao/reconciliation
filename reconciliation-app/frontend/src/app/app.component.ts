@@ -1,18 +1,24 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, OnDestroy } from '@angular/core';
 import { Router, NavigationEnd } from '@angular/router';
 import { filter } from 'rxjs/operators';
+import { SessionTimeoutService } from './services/session-timeout.service';
+import { AppStateService } from './services/app-state.service';
 
 @Component({
     selector: 'app-root',
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.scss']
 })
-export class AppComponent implements OnInit {
+export class AppComponent implements OnInit, OnDestroy {
   showSidebar = true;
   isLoginPage = false;
   title = 'reconciliation-app';
 
-  constructor(private router: Router) {}
+  constructor(
+    private router: Router,
+    private sessionTimeout: SessionTimeoutService,
+    private appState: AppStateService
+  ) {}
 
     ngOnInit() {
     // Vérifier l'URL initiale pour masquer le sidebar si on est sur la page de login
@@ -22,6 +28,8 @@ export class AppComponent implements OnInit {
       filter((event): event is NavigationEnd => event instanceof NavigationEnd)
     ).subscribe((event) => {
       this.updateSidebarVisibility(event.urlAfterRedirects);
+      // Gérer le timeout de session selon la page
+      this.manageSessionTimeout();
       // Forcer le recalcul du layout après navigation (corrige le bug d'affichage trop large)
       setTimeout(() => {
         window.dispatchEvent(new Event('resize'));
@@ -29,11 +37,34 @@ export class AppComponent implements OnInit {
     });
     // S'assurer que le scroll fonctionne
     this.enableMouseScroll();
+    // Gérer le timeout de session au démarrage
+    this.manageSessionTimeout();
+  }
+
+  ngOnDestroy(): void {
+    // Arrêter le timeout lors de la destruction du composant
+    this.sessionTimeout.stop();
   }
 
   private updateSidebarVisibility(url: string): void {
     this.isLoginPage = url === '/login' || url.startsWith('/login');
     this.showSidebar = !this.isLoginPage;
+  }
+
+  /**
+   * Gère le démarrage/arrêt du timeout de session
+   */
+  private manageSessionTimeout(): void {
+    if (this.isLoginPage) {
+      // Arrêter le timeout sur la page de login
+      this.sessionTimeout.stop();
+    } else if (this.appState.isAuthenticated()) {
+      // Démarrer le timeout si l'utilisateur est authentifié
+      this.sessionTimeout.start();
+    } else {
+      // Arrêter le timeout si l'utilisateur n'est pas authentifié
+      this.sessionTimeout.stop();
+    }
   }
 
   private enableMouseScroll() {

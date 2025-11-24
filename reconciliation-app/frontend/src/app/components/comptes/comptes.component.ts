@@ -3320,45 +3320,81 @@ export class ComptesComponent implements OnInit, OnDestroy {
     private async transformStatisticsToControlRevenu(statistics: Statistics[], service: string): Promise<any[]> {
         const data: any[] = [];
         
-        // Traiter chaque enregistrement de statistiques
-        for (const stat of statistics) {
-            // Utiliser les données réelles des statistiques
-            const volume = stat.totalVolume || 0;
-            const nombreTrx = stat.recordCount || 0;
+        // Filtrer les dates futures (plus de 1 jour dans le futur)
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const validStatistics = statistics.filter(stat => {
+            const statDate = new Date(stat.date);
+            statDate.setHours(0, 0, 0, 0);
+            const daysDiff = Math.floor((statDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+            return daysDiff <= 1; // Accepter seulement les dates passées ou aujourd'hui/demain
+        });
+        
+        console.log(`📊 Traitement de ${validStatistics.length} statistiques valides sur ${statistics.length} totales`);
+        
+        // Traiter les statistiques par batch pour éviter de surcharger le serveur
+        const batchSize = 10; // Traiter 10 statistiques à la fois
+        for (let i = 0; i < validStatistics.length; i += batchSize) {
+            const batch = validStatistics.slice(i, i + batchSize);
             
-            // Calculer le revenu attendu basé sur les frais paramétrés
-            const revenuAttendu = this.calculateRevenuAttendu(stat.service, stat.agency, volume, nombreTrx);
-            
-            // Récupérer les frais TRX SF pour cette agence, date et service (uniquement EN_ATTENTE)
-            let totalFraisTrxSf = 0;
-            try {
-                const fraisResponse = await this.trxSfService.getFraisByAgenceAndDateAndServiceEnAttente(stat.agency, stat.date, stat.service).toPromise();
-                totalFraisTrxSf = fraisResponse?.frais || 0;
-                console.log(`Frais TRX SF (EN_ATTENTE) pour ${stat.agency} le ${stat.date} service ${stat.service}: ${totalFraisTrxSf}`);
-            } catch (error) {
-                console.warn(`Erreur lors de la récupération des frais TRX SF (EN_ATTENTE) pour ${stat.agency} le ${stat.date} service ${stat.service}:`, error);
-                totalFraisTrxSf = 0;
-            }
-            
-            // Calculer le revenu réel selon la formule : Revenu attendu - Total frais TRX SF
-            const revenuReel = revenuAttendu - totalFraisTrxSf;
-            const ecart = revenuReel - revenuAttendu;
-            
-            // Le statut sera déterminé après avoir analysé tous les services
-            let statut = 'normal';
-            
-            data.push({
-                date: stat.date,
-                service: stat.service,
-                typeControle: 'Contrôle journalier',
-                revenuAttendu: revenuAttendu,
-                revenuReel: revenuReel,
-                ecart: ecart,
-                statut: statut,
-                volume: volume,
-                nombreTrx: nombreTrx,
-                totalFraisTrxSf: totalFraisTrxSf // Ajouter les frais TRX SF pour debug
+            // Traiter chaque enregistrement de statistiques dans le batch
+            const batchPromises = batch.map(async (stat) => {
+                // Utiliser les données réelles des statistiques
+                const volume = stat.totalVolume || 0;
+                const nombreTrx = stat.recordCount || 0;
+                
+                // Calculer le revenu attendu basé sur les frais paramétrés
+                const revenuAttendu = this.calculateRevenuAttendu(stat.service, stat.agency, volume, nombreTrx);
+                
+                // Récupérer les frais TRX SF pour cette agence, date et service (uniquement EN_ATTENTE)
+                // Le service gère maintenant les erreurs et timeouts automatiquement
+                let totalFraisTrxSf = 0;
+                try {
+                    const fraisResponse = await this.trxSfService.getFraisByAgenceAndDateAndServiceEnAttente(
+                        stat.agency, 
+                        stat.date, 
+                        stat.service
+                    ).toPromise();
+                    totalFraisTrxSf = fraisResponse?.frais || 0;
+                    // Log seulement si frais > 0 pour réduire le bruit dans les logs
+                    if (totalFraisTrxSf > 0) {
+                        console.log(`Frais TRX SF (EN_ATTENTE) pour ${stat.agency} le ${stat.date} service ${stat.service}: ${totalFraisTrxSf}`);
+                    }
+                } catch (error) {
+                    // Les erreurs sont déjà gérées dans le service, mais on log quand même pour debug
+                    console.warn(`Erreur lors de la récupération des frais TRX SF (EN_ATTENTE) pour ${stat.agency} le ${stat.date} service ${stat.service}:`, error);
+                    totalFraisTrxSf = 0;
+                }
+                
+                // Calculer le revenu réel selon la formule : Revenu attendu - Total frais TRX SF
+                const revenuReel = revenuAttendu - totalFraisTrxSf;
+                const ecart = revenuReel - revenuAttendu;
+                
+                // Le statut sera déterminé après avoir analysé tous les services
+                let statut = 'normal';
+                
+                return {
+                    date: stat.date,
+                    service: stat.service,
+                    typeControle: 'Contrôle journalier',
+                    revenuAttendu: revenuAttendu,
+                    revenuReel: revenuReel,
+                    ecart: ecart,
+                    statut: statut,
+                    volume: volume,
+                    nombreTrx: nombreTrx,
+                    totalFraisTrxSf: totalFraisTrxSf // Ajouter les frais TRX SF pour debug
+                };
             });
+            
+            // Attendre que tous les appels du batch soient terminés
+            const batchResults = await Promise.all(batchPromises);
+            data.push(...batchResults);
+            
+            // Petite pause entre les batches pour éviter de surcharger le serveur
+            if (i + batchSize < validStatistics.length) {
+                await new Promise(resolve => setTimeout(resolve, 100)); // 100ms de pause
+            }
         }
         
         // Analyser les anomalies par service selon les nouveaux critères

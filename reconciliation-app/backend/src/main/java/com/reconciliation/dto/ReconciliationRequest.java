@@ -18,6 +18,10 @@ public class ReconciliationRequest {
     // Type de réconciliation (1-1, 1-2, 1-3, 1-4, 1-5)
     private String reconciliationType = "1-1";
     
+    // Mode optimisé : si true, la réponse ne contiendra que les clés au lieu des objets complets
+    // Réduit considérablement la taille de la réponse pour les gros fichiers
+    private Boolean lightweightResponse = false;
+    
     @Data
     public static class BOColumnFilter {
         private String modelId;

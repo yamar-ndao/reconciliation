@@ -63,12 +63,24 @@ public class CsvReconciliationService implements DisposableBean {
         long startTime = System.currentTimeMillis();
         
         // Début de la réconciliation
-        logger.info("Début de la réconciliation - BO: {} lignes, Partenaire: {} lignes", 
-            request.getBoFileContent().size(), request.getPartnerFileContent().size());
+        logger.info("═══════════════════════════════════════════════════════════");
+        logger.info("🚀 DÉBUT DE LA RÉCONCILIATION");
+        logger.info("═══════════════════════════════════════════════════════════");
+        logger.info("📊 Données BO: {} lignes", request.getBoFileContent().size());
+        logger.info("📊 Données Partenaire: {} lignes", request.getPartnerFileContent().size());
         
         // Application des règles de traitement des colonnes
+        long processingStartTime = System.currentTimeMillis();
+        logger.info("⏱️  [TIMING] Début du traitement des colonnes...");
         List<Map<String, String>> processedBoData = applyColumnProcessingRules(request.getBoFileContent(), "bo");
+        long boProcessingTime = System.currentTimeMillis() - processingStartTime;
+        logger.info("⏱️  [TIMING] Traitement BO terminé: {} ms", boProcessingTime);
+        
+        long partnerProcessingStartTime = System.currentTimeMillis();
         List<Map<String, String>> processedPartnerData = applyColumnProcessingRules(request.getPartnerFileContent(), "partner");
+        long partnerProcessingTime = System.currentTimeMillis() - partnerProcessingStartTime;
+        logger.info("⏱️  [TIMING] Traitement Partenaire terminé: {} ms", partnerProcessingTime);
+        logger.info("⏱️  [TIMING] Temps total de traitement des colonnes: {} ms", boProcessingTime + partnerProcessingTime);
         
                     // DEBUG: Afficher quelques exemples de valeurs (après traitement)
             if (!processedBoData.isEmpty()) {
@@ -196,14 +208,18 @@ public class CsvReconciliationService implements DisposableBean {
             }
             
             // Normalisation des noms de colonnes pour gérer les accents
-                    String normalizedBoKeyColumn = request.getBoKeyColumn();
-        String normalizedPartnerKeyColumn = request.getPartnerKeyColumn();
+            long normalizationStartTime = System.currentTimeMillis();
+            String normalizedBoKeyColumn = request.getBoKeyColumn();
+            String normalizedPartnerKeyColumn = request.getPartnerKeyColumn();
             
             logger.info("🔧 Normalisation des noms de colonnes:");
             logger.info("  BO Key: '{}' -> '{}'", request.getBoKeyColumn(), normalizedBoKeyColumn);
             logger.info("  Partner Key: '{}' -> '{}'", request.getPartnerKeyColumn(), normalizedPartnerKeyColumn);
+            long normalizationTime = System.currentTimeMillis() - normalizationStartTime;
+            logger.info("⏱️  [TIMING] Temps de normalisation: {} ms", normalizationTime);
             
             // Traitement parallèle de l'indexation partenaire
+            long partnerIndexStartTime = System.currentTimeMillis();
             int partnerChunkSize = processedPartnerData.size() / PARALLEL_THREADS;
             List<CompletableFuture<Void>> partnerIndexFutures = new ArrayList<>();
             
@@ -229,9 +245,12 @@ public class CsvReconciliationService implements DisposableBean {
             
             // Attendre la fin de l'indexation
             CompletableFuture.allOf(partnerIndexFutures.toArray(new CompletableFuture[0])).join();
+            long partnerIndexTime = System.currentTimeMillis() - partnerIndexStartTime;
             logger.info("✅ Index partenaire optimisé créé avec {} clés", partnerIndex.size());
+            logger.info("⏱️  [TIMING] Temps de création de l'index partenaire: {} ms", partnerIndexTime);
 
             // Traitement parallèle des enregistrements BO
+            long boReconciliationStartTime = System.currentTimeMillis();
             logger.info("🔄 Début du traitement parallèle par lots (taille: {})", BATCH_SIZE);
             
             Set<String> processedBoKeys = Collections.newSetFromMap(new ConcurrentHashMap<>());
@@ -272,7 +291,11 @@ public class CsvReconciliationService implements DisposableBean {
                     String.format("%.2f", progress), processedRecords, totalRecords, String.format("%.0f", recordsPerSecond), elapsedTime);
             }
 
+            long boReconciliationTime = System.currentTimeMillis() - boReconciliationStartTime;
+            logger.info("⏱️  [TIMING] Temps de traitement des enregistrements BO: {} ms", boProcessingTime);
+            
             // Recherche optimisée des enregistrements uniquement dans le fichier partenaire
+            long partnerOnlyStartTime = System.currentTimeMillis();
             logger.info("🔍 Recherche optimisée des enregistrements uniquement partenaire...");
             int partnerOnlyCount = 0;
             
@@ -291,9 +314,12 @@ public class CsvReconciliationService implements DisposableBean {
                 }
             }
             
+            long partnerOnlyTime = System.currentTimeMillis() - partnerOnlyStartTime;
             logger.info("✅ Nombre total d'enregistrements uniquement partenaire: {}", partnerOnlyCount);
+            logger.info("⏱️  [TIMING] Temps de recherche des enregistrements uniquement partenaire: {} ms", partnerOnlyTime);
 
             // Calcule les totaux
+            long finalizationStartTime = System.currentTimeMillis();
             response.setTotalBoRecords(filteredBoRecords.size());
             response.setTotalPartnerRecords(request.getPartnerFileContent().size());
             response.setTotalMatches(response.getMatches().size());
@@ -309,8 +335,11 @@ public class CsvReconciliationService implements DisposableBean {
             response.setExecutionTimeMs(totalTime);
             response.setProcessedRecords(totalRecords);
             response.setProgressPercentage(100.0);
+            long finalizationTime = System.currentTimeMillis() - finalizationStartTime;
             
-            logger.info("🎯 RÉSULTATS FINAUX:");
+            logger.info("═══════════════════════════════════════════════════════════");
+            logger.info("🎯 RÉSULTATS FINAUX DE LA RÉCONCILIATION");
+            logger.info("═══════════════════════════════════════════════════════════");
             logger.info("📊 Total BO: {}", response.getTotalBoRecords());
             logger.info("📊 Total Partenaire: {}", response.getTotalPartnerRecords());
             logger.info("✅ Correspondances: {}", response.getTotalMatches());
@@ -318,7 +347,18 @@ public class CsvReconciliationService implements DisposableBean {
             logger.info("📈 Uniquement BO: {}", response.getTotalBoOnly());
             logger.info("📈 Uniquement Partenaire: {}", response.getTotalPartnerOnly());
             logger.info("⚡ Performance: {} enregistrements/seconde", String.format("%.0f", recordsPerSecond));
-            logger.info("⏱️  Temps total d'exécution: {} ms ({} secondes)", totalTime, String.format("%.2f", totalTime / 1000.0));
+            logger.info("═══════════════════════════════════════════════════════════");
+            logger.info("⏱️  [TIMING] RÉSUMÉ DES TEMPS D'EXÉCUTION");
+            logger.info("═══════════════════════════════════════════════════════════");
+            logger.info("⏱️  [TIMING] Traitement des colonnes BO: {} ms", boProcessingTime);
+            logger.info("⏱️  [TIMING] Traitement des colonnes Partenaire: {} ms", partnerProcessingTime);
+            logger.info("⏱️  [TIMING] Normalisation des colonnes: {} ms", normalizationTime);
+            logger.info("⏱️  [TIMING] Création de l'index partenaire: {} ms", partnerIndexTime);
+            logger.info("⏱️  [TIMING] Traitement des enregistrements BO: {} ms", boReconciliationTime);
+            logger.info("⏱️  [TIMING] Recherche des enregistrements uniquement partenaire: {} ms", partnerOnlyTime);
+            logger.info("⏱️  [TIMING] Finalisation: {} ms", finalizationTime);
+            logger.info("⏱️  [TIMING] ═══ TEMPS TOTAL: {} ms ({} secondes) ═══", totalTime, String.format("%.2f", totalTime / 1000.0));
+            logger.info("═══════════════════════════════════════════════════════════");
 
             // Ne pas fermer l'ExecutorService pour permettre la réutilisation
             // executorService.shutdown();

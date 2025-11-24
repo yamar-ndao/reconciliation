@@ -2442,7 +2442,8 @@ export class FileUploadComponent {
             const arrayBuffer = await this.readFileAsArrayBuffer(file);
             const data = new Uint8Array(arrayBuffer);
             
-            // Options pour forcer le chargement des feuilles
+            // Options optimisées pour les fichiers volumineux
+            // Ne pas utiliser bookSheets: true car cela peut causer des problèmes avec les gros fichiers
             const options: XLSX.ParsingOptions = {
                 type: 'array',
                 cellDates: false,
@@ -2450,8 +2451,7 @@ export class FileUploadComponent {
                 cellText: false,
                 sheetStubs: false,
                 sheetRows: undefined,
-                // Forcer le chargement des feuilles
-                bookSheets: true,
+                // Ne pas forcer bookSheets pour les gros fichiers
                 bookProps: false,
                 bookVBA: false,
                 // Options supplémentaires pour les gros fichiers
@@ -2463,10 +2463,37 @@ export class FileUploadComponent {
             const workbook = XLSX.read(data, options);
             console.log('📋 Toutes les feuilles disponibles:', workbook.SheetNames);
             console.log('🔍 Workbook.Sheets existe:', !!workbook.Sheets);
+            console.log('🔍 Workbook.Sheets type:', typeof workbook.Sheets);
+            console.log('🔍 Workbook.Sheets keys:', workbook.Sheets ? Object.keys(workbook.Sheets) : 'N/A');
             
             // Vérifier si les feuilles sont chargées
+            // Pour les fichiers volumineux, SheetNames peut exister même si Sheets n'est pas encore chargé
+            if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
+                throw new Error('Aucune feuille trouvée dans le workbook');
+            }
+            
+            // Si Sheets n'existe pas mais SheetNames existe, essayer de charger explicitement
+            if (!workbook.Sheets && workbook.SheetNames.length > 0) {
+                console.log('⚠️ Sheets non chargé, tentative de chargement explicite...');
+                // Réessayer avec une lecture plus simple
+                const simpleOptions: XLSX.ParsingOptions = {
+                    type: 'array',
+                    cellDates: false,
+                    cellNF: false,
+                    cellText: false,
+                    sheetStubs: false
+                };
+                const retryWorkbook = XLSX.read(data, simpleOptions);
+                if (retryWorkbook.Sheets && retryWorkbook.Sheets[retryWorkbook.SheetNames[0]]) {
+                    console.log('✅ Sheets chargé avec options simples');
+                    // Utiliser le workbook retry
+                    Object.assign(workbook, { Sheets: retryWorkbook.Sheets });
+                }
+            }
+            
+            // Vérification finale
             if (!workbook.Sheets || workbook.SheetNames.length === 0) {
-                throw new Error('Aucune feuille chargée dans le workbook');
+                throw new Error('Aucune feuille chargée dans le workbook après tentatives');
             }
             
             let firstSheetName = workbook.SheetNames[0];
@@ -2601,6 +2628,7 @@ export class FileUploadComponent {
                 const data = new Uint8Array(arrayBuffer);
                 
                 // Options ultra-minimales pour forcer le chargement
+                // Ne pas utiliser bookSheets car cela peut causer des problèmes
                 const minimalOptions: XLSX.ParsingOptions = {
                     type: 'array',
                     cellDates: false,
@@ -2608,16 +2636,28 @@ export class FileUploadComponent {
                     cellText: false,
                     sheetStubs: false,
                     // Essayer sans limitation de lignes
-                    sheetRows: undefined,
-                    // Forcer le chargement des feuilles
-                    bookSheets: true
+                    sheetRows: undefined
                 };
 
                 const workbook = XLSX.read(data, minimalOptions);
                 console.log('📋 Feuilles disponibles (fallback):', workbook.SheetNames);
                 console.log('🔍 Workbook.Sheets existe (fallback):', !!workbook.Sheets);
                 
-                if (!workbook.Sheets || workbook.SheetNames.length === 0) {
+                // Si Sheets n'est pas chargé mais SheetNames existe, essayer de forcer le chargement
+                if (!workbook.Sheets && workbook.SheetNames && workbook.SheetNames.length > 0) {
+                    console.log('⚠️ Sheets non chargé en fallback, tentative de chargement explicite...');
+                    // Essayer avec une approche encore plus simple
+                    const ultraSimpleOptions: XLSX.ParsingOptions = {
+                        type: 'array'
+                    };
+                    const retryWorkbook = XLSX.read(data, ultraSimpleOptions);
+                    if (retryWorkbook.Sheets && retryWorkbook.Sheets[retryWorkbook.SheetNames[0]]) {
+                        console.log('✅ Sheets chargé avec options ultra-simples');
+                        Object.assign(workbook, { Sheets: retryWorkbook.Sheets });
+                    }
+                }
+                
+                if (!workbook.Sheets || !workbook.SheetNames || workbook.SheetNames.length === 0) {
                     throw new Error('Aucune feuille chargée en fallback');
                 }
                 
@@ -2720,7 +2760,14 @@ export class FileUploadComponent {
             
             // Essayer différentes approches de lecture
             const approaches = [
-                // Approche 1: Lecture complète sans limitations
+                // Approche 1: Lecture ultra-minimale (la plus simple possible)
+                {
+                    name: 'Lecture ultra-minimale',
+                    options: {
+                        type: 'array' as const
+                    }
+                },
+                // Approche 2: Lecture complète sans limitations
                 {
                     name: 'Lecture complète',
                     options: {
@@ -2731,7 +2778,7 @@ export class FileUploadComponent {
                         sheetStubs: false
                     }
                 },
-                // Approche 2: Lecture avec cellDates activé
+                // Approche 3: Lecture avec cellDates activé
                 {
                     name: 'Avec cellDates',
                     options: {
@@ -2742,7 +2789,7 @@ export class FileUploadComponent {
                         sheetStubs: false
                     }
                 },
-                // Approche 3: Lecture avec cellText activé
+                // Approche 4: Lecture avec cellText activé
                 {
                     name: 'Avec cellText',
                     options: {
@@ -2758,12 +2805,26 @@ export class FileUploadComponent {
             for (const approach of approaches) {
                 try {
                     console.log(`🔍 Tentative: ${approach.name}`);
-                    const workbook = XLSX.read(data, approach.options);
+                    let workbook = XLSX.read(data, approach.options);
                     
                     console.log(`📋 ${approach.name} - Feuilles:`, workbook.SheetNames);
                     console.log(`📋 ${approach.name} - Sheets existe:`, !!workbook.Sheets);
                     
-                    if (workbook.Sheets && workbook.SheetNames.length > 0) {
+                    // Si Sheets n'est pas chargé mais SheetNames existe, essayer de forcer le chargement
+                    if (!workbook.Sheets && workbook.SheetNames && workbook.SheetNames.length > 0) {
+                        console.log(`⚠️ Sheets non chargé avec ${approach.name}, tentative de chargement explicite...`);
+                        // Essayer avec une approche encore plus simple
+                        const ultraSimpleOptions: XLSX.ParsingOptions = {
+                            type: 'array'
+                        };
+                        const retryWorkbook = XLSX.read(data, ultraSimpleOptions);
+                        if (retryWorkbook.Sheets && retryWorkbook.Sheets[retryWorkbook.SheetNames[0]]) {
+                            console.log(`✅ Sheets chargé avec approche ultra-simple après ${approach.name}`);
+                            workbook = retryWorkbook;
+                        }
+                    }
+                    
+                    if (workbook.Sheets && workbook.SheetNames && workbook.SheetNames.length > 0) {
                         const sheetName = workbook.SheetNames[0];
                         const worksheet = workbook.Sheets[sheetName];
                         
@@ -3588,31 +3649,63 @@ export class FileUploadComponent {
                     boKeyColumn: keyDetectionResult.boKeyColumn,
                     partnerKeyColumn: keyDetectionResult.partnerKeyColumn,
                         comparisonColumns: comparisonColumns,
-                boColumnFilters: []
+                boColumnFilters: [],
+                        // Activer le mode optimisé automatiquement pour les fichiers volumineux
+                        lightweightResponse: (processedBoData.length + processedPartnerData.length) > 50000
             };
+            
+            if (reconciliationRequest.lightweightResponse) {
+                console.log('⚡ Mode optimisé activé - Réponse allégée pour améliorer le transfert réseau');
+            }
 
             console.log('🔄 Lancement de la réconciliation...');
 
                     // Lancer la réconciliation
+                    console.log('🔄 Appel de reconciliationService.reconcile()...');
                     this.reconciliationService.reconcile(reconciliationRequest).subscribe({
                         next: (result) => {
+                            console.log('✅ Callback next() appelé - Réconciliation réussie');
+                            console.log('📊 Résultat reçu:', {
+                                matches: result?.matches?.length || 0,
+                                boOnly: result?.boOnly?.length || 0,
+                                partnerOnly: result?.partnerOnly?.length || 0,
+                                totalBoRecords: result?.totalBoRecords || 0,
+                                totalPartnerRecords: result?.totalPartnerRecords || 0
+                            });
+                            
                             this.loading = false;
                             console.log('✅ Réconciliation automatique réussie:', result);
                             
                             // Sauvegarder les données traitées dans le service d'état
+                            console.log('💾 Sauvegarde des données dans le service d\'état...');
                             this.appStateService.setReconciliationData(processedBoData, processedPartnerData);
                             
                             // Sauvegarder le résultat de la réconciliation
+                            console.log('💾 Sauvegarde des résultats de réconciliation...');
                             this.appStateService.setReconciliationResults(result);
                             this.appStateService.setCurrentStep(4);
                             
                             // Naviguer directement vers les résultats
-                            this.router.navigate(['/results']);
+                            console.log('🧭 Navigation vers /results...');
+                            this.router.navigate(['/results']).then(() => {
+                                console.log('✅ Navigation réussie vers /results');
+                            }).catch((navError) => {
+                                console.error('❌ Erreur lors de la navigation:', navError);
+                            });
                         },
                         error: (error) => {
                             this.loading = false;
                             console.error('❌ Erreur lors de la réconciliation automatique:', error);
+                            console.error('📋 Détails de l\'erreur:', {
+                                message: error.message,
+                                status: error.status,
+                                statusText: error.statusText,
+                                error: error.error
+                            });
                             this.errorMessage = `Erreur lors de la réconciliation automatique: ${error.message}`;
+                        },
+                        complete: () => {
+                            console.log('✅ Observable de réconciliation complété');
                         }
                     });
 

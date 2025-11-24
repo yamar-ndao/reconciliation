@@ -161,8 +161,34 @@ export class ImpactOPComponent implements OnInit, OnDestroy {
       this.popupService.showWarning("Type d'opération non éligible");
       return;
     }
-    // Demander la banque (pré-remplie avec code propriétaire)
-    const banqueInput = await this.popupService.showTextInput('Banque (code propriétaire) :', 'Créer OP', (impact.codeProprietaire || '').trim(), 'Ex: CIELCM0001');
+    // Charger les codes propriétaires des banques
+    let banqueCodes: string[] = [];
+    try {
+      const comptesBanque = await this.compteService.filterComptes({ categorie: ['Banque'] }).toPromise();
+      if (comptesBanque && comptesBanque.length > 0) {
+        banqueCodes = [...new Set(comptesBanque.map(c => c.codeProprietaire).filter((cp): cp is string => cp !== undefined && cp !== null))].sort();
+      }
+    } catch (e) {
+      console.error('Erreur lors du chargement des codes propriétaires des banques:', e);
+    }
+    
+    // Si aucune banque trouvée, utiliser une liste vide avec "ECOBANK CM" par défaut
+    if (banqueCodes.length === 0) {
+      banqueCodes = ['ECOBANK CM'];
+    } else {
+      // Ajouter "ECOBANK CM" en première position si elle n'existe pas déjà
+      if (!banqueCodes.includes('ECOBANK CM')) {
+        banqueCodes.unshift('ECOBANK CM');
+      }
+    }
+    
+    // Demander la banque via autocomplétion (avec "ECOBANK CM" par défaut)
+    const banqueInput = await this.popupService.showAutocompleteInput(
+      'Banque (code propriétaire) :', 
+      'Créer OP', 
+      banqueCodes, 
+      'ECOBANK CM'
+    );
     const banque = (banqueInput || '').trim();
     if (!banque) {
       await this.popupService.showWarning('Banque obligatoire');

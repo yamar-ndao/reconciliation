@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
-import { HttpClient, HttpParams } from '@angular/common/http';
-import { Observable } from 'rxjs';
+import { HttpClient, HttpParams, HttpErrorResponse } from '@angular/common/http';
+import { Observable, throwError, timer } from 'rxjs';
+import { retry, catchError, timeout, retryWhen, delay, take, concatMap } from 'rxjs/operators';
 import { environment } from '../../environments/environment';
 
 export interface TrxSfData {
@@ -193,7 +194,48 @@ export class TrxSfService {
 
   // Récupérer les frais par agence et par date, uniquement pour les transactions EN_ATTENTE
   getFraisByAgenceAndDateEnAttente(agence: string, date: string): Observable<any> {
-    return this.http.get<any>(`${this.baseUrl}/frais-en-attente/${agence}/${date}`);
+    // Vérifier si la date est dans le futur (plus de 1 jour)
+    const today = new Date();
+    const requestDate = new Date(date);
+    const daysDiff = Math.floor((requestDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    
+    // Si la date est dans le futur (plus de 1 jour), retourner directement 0 sans appel API
+    if (daysDiff > 1) {
+      return new Observable(observer => {
+        observer.next({ agence, date, frais: 0 });
+        observer.complete();
+      });
+    }
+    
+    return this.http.get<any>(`${this.baseUrl}/frais-en-attente/${agence}/${date}`).pipe(
+      timeout(10000), // 10 secondes de timeout
+      retryWhen(errors =>
+        errors.pipe(
+          concatMap((error: HttpErrorResponse, index: number) => {
+            // Ne pas réessayer si c'est une erreur 404 ou 400
+            if (error.status === 404 || error.status === 400) {
+              return throwError(() => error);
+            }
+            // Ne pas réessayer plus de 2 fois
+            if (index >= 2) {
+              return throwError(() => error);
+            }
+            // Attendre 1 seconde avant de réessayer
+            return timer(1000);
+          })
+        )
+      ),
+      catchError((error: HttpErrorResponse) => {
+        // En cas d'erreur, retourner 0 au lieu de faire échouer la requête
+        if (error.status !== 404) {
+          console.warn(`Erreur lors de la récupération des frais TRX SF (EN_ATTENTE) pour ${agence} le ${date}:`, error.status, error.statusText);
+        }
+        return new Observable(observer => {
+          observer.next({ agence, date, frais: 0 });
+          observer.complete();
+        });
+      })
+    );
   }
 
   // Récupérer les frais par agence, date et service
@@ -203,7 +245,49 @@ export class TrxSfService {
 
   // Récupérer les frais par agence, date et service, uniquement pour les transactions EN_ATTENTE
   getFraisByAgenceAndDateAndServiceEnAttente(agence: string, date: string, service: string): Observable<any> {
-    return this.http.get<any>(`${this.baseUrl}/frais-en-attente/${agence}/${date}/${service}`);
+    // Vérifier si la date est dans le futur (plus de 1 jour)
+    const today = new Date();
+    const requestDate = new Date(date);
+    const daysDiff = Math.floor((requestDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    
+    // Si la date est dans le futur (plus de 1 jour), retourner directement 0 sans appel API
+    if (daysDiff > 1) {
+      return new Observable(observer => {
+        observer.next({ agence, date, service, frais: 0 });
+        observer.complete();
+      });
+    }
+    
+    return this.http.get<any>(`${this.baseUrl}/frais-en-attente/${agence}/${date}/${service}`).pipe(
+      timeout(10000), // 10 secondes de timeout
+      retryWhen(errors =>
+        errors.pipe(
+          concatMap((error: HttpErrorResponse, index: number) => {
+            // Ne pas réessayer si c'est une erreur 404 ou 400
+            if (error.status === 404 || error.status === 400) {
+              return throwError(() => error);
+            }
+            // Ne pas réessayer plus de 2 fois
+            if (index >= 2) {
+              return throwError(() => error);
+            }
+            // Attendre 1 seconde avant de réessayer
+            return timer(1000);
+          })
+        )
+      ),
+      catchError((error: HttpErrorResponse) => {
+        // En cas d'erreur, retourner 0 au lieu de faire échouer la requête
+        // Ne logger que les erreurs non-404 pour éviter le bruit dans les logs
+        if (error.status !== 404) {
+          console.warn(`Erreur lors de la récupération des frais TRX SF (EN_ATTENTE) pour ${agence} le ${date} service ${service}:`, error.status, error.statusText);
+        }
+        return new Observable(observer => {
+          observer.next({ agence, date, service, frais: 0 });
+          observer.complete();
+        });
+      })
+    );
   }
 
   // Récupérer la configuration des frais par service

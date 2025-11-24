@@ -19,6 +19,10 @@ export interface ReconciliationRequest {
     
     // Type de réconciliation (1-1, 1-2, 1-3, 1-4, 1-5)
     reconciliationType?: string;
+    
+    // Mode optimisé : si true, la réponse ne contiendra que les données essentielles
+    // Réduit considérablement la taille de la réponse pour les gros fichiers
+    lightweightResponse?: boolean;
 }
 
 export interface BOColumnFilter {
