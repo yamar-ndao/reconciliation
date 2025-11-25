@@ -29,6 +29,8 @@ interface ApiError {
     message?: string;
 }
 
+type ResultsTab = 'matches' | 'boOnly' | 'partnerOnly' | 'agencySummary';
+
 @Component({
     selector: 'app-reconciliation-results',
     template: `
@@ -120,19 +122,19 @@ interface ApiError {
                 </div>
                 <div class="stats-grid">
                     <div class="stat-card">
-                        <div class="stat-value">{{filteredMatches.length || 0}}</div>
+                        <div class="stat-value">{{getMatchesCount() | number:'1.0-0'}}</div>
                         <div class="stat-label">Nombres de Transactions</div>
                     </div>
                     <div class="stat-card">
-                        <div class="stat-value">{{filteredMatches.length || 0}}</div>
+                        <div class="stat-value">{{getMatchesCount() | number:'1.0-0'}}</div>
                         <div class="stat-label">Transactions correspondantes</div>
                     </div>
                     <div class="stat-card">
-                        <div class="stat-value">{{(response?.mismatches?.length || 0) + (response?.boOnly?.length || 0)}}</div>
+                        <div class="stat-value">{{getBoEcartCount() | number:'1.0-0'}}</div>
                         <div class="stat-label">Transactions non correspondantes BO</div>
                     </div>
                     <div class="stat-card">
-                        <div class="stat-value">{{filteredPartnerOnly.length || 0}}</div>
+                        <div class="stat-value">{{getPartnerOnlyCount() | number:'1.0-0'}}</div>
                         <div class="stat-label">Transactions non correspondantes Partenaire</div>
                     </div>
                 </div>
@@ -143,17 +145,17 @@ interface ApiError {
                     <button 
                         [class.active]="activeTab === 'matches'"
                         (click)="setActiveTab('matches')">
-                        ✅ Correspondances ({{filteredMatches.length || 0}})
+                        ✅ Correspondances ({{getMatchesCount() | number:'1.0-0'}})
                     </button>
                     <button 
                         [class.active]="activeTab === 'boOnly'"
                         (click)="setActiveTab('boOnly')">
-                        ⚠️ ECART BO ({{(response?.mismatches?.length || 0) + (response?.boOnly?.length || 0)}})
+                        ⚠️ ECART BO ({{getBoEcartCount() | number:'1.0-0'}})
                     </button>
                     <button 
                         [class.active]="activeTab === 'partnerOnly'"
                         (click)="setActiveTab('partnerOnly')">
-                        ⚠️ ECART Partenaire ({{filteredPartnerOnly.length || 0}})
+                        ⚠️ ECART Partenaire ({{getPartnerOnlyCount() | number:'1.0-0'}})
                     </button>
                     <button 
                         [class.active]="activeTab === 'agencySummary'"
@@ -167,9 +169,14 @@ interface ApiError {
                     </button>
                 </div>
 
+                <div class="tab-placeholder" *ngIf="!activeTab">
+                    <p>Sélectionnez un onglet pour charger les résultats.</p>
+                </div>
+
                 <div class="tab-content">
                     <!-- Résumé par Agence -->
-                    <div *ngIf="activeTab === 'agencySummary'" class="agency-summary-section">
+                    <ng-container *ngIf="activeTab === 'agencySummary'">
+                        <div *ngIf="isTabLoaded('agencySummary'); else agencyLoading" class="agency-summary-section">
                         <div class="summary-header">
                             <h3>Résumé des volumes par Agence et Service</h3>
                             <div class="summary-actions">
@@ -244,258 +251,337 @@ interface ApiError {
                             <span>Page {{agencyPage}} / {{getTotalAgencyPages()}}</span>
                             <button (click)="nextAgencyPage()" [disabled]="agencyPage === getTotalAgencyPages()">Suivant</button>
                         </div>
-                    </div>
+                        </div>
+                    </ng-container>
+                    <ng-template #agencyLoading>
+                        <div class="tab-loading" *ngIf="isTabLoading('agencySummary')">
+                            <div class="spinner"></div>
+                            <p>Préparation du résumé par agence...</p>
+                            <div class="progress-bar" *ngIf="getTabProgress('agencySummary') > 0">
+                                <div class="progress" [style.width.%]="getTabProgress('agencySummary')"></div>
+                            </div>
+                            <span class="progress-text" *ngIf="getTabProgress('agencySummary') > 0">
+                                {{getTabProgress('agencySummary')}}%
+                            </span>
+                        </div>
+                        <div class="tab-error" *ngIf="getTabError('agencySummary')">
+                            {{getTabError('agencySummary')}}
+                        </div>
+                        <div class="tab-placeholder" *ngIf="!isTabLoading('agencySummary') && !getTabError('agencySummary')">
+                            <p>Cliquez sur l'onglet pour charger le résumé par agence.</p>
+                        </div>
+                    </ng-template>
 
                     <!-- Correspondances avec pagination -->
-                    <div *ngIf="activeTab === 'matches'" class="matches-section">
-                        <div class="search-section">
-                            <input 
-                                type="text" 
-                                [(ngModel)]="searchKey" 
-                                (input)="onSearch()"
-                                placeholder="Rechercher par clé..."
-                                class="search-input"
-                            >
-                            <button (click)="handleExport()" class="export-button">
-                                📥 Exporter les correspondances
-                            </button>
-                        </div>
-                        <div class="volume-summary">
-                            <h4>📊 Résumé des volumes</h4>
-                            <div class="volume-grid">
-                                <div class="volume-card">
-                                    <div class="volume-label">Volume total BO</div>
-                                    <div class="volume-value">{{calculateTotalVolume('bo') | number:'1.0-0'}}</div>
-                                </div>
-                                <div class="volume-card">
-                                    <div class="volume-label">Volume total Partenaire</div>
-                                    <div class="volume-value">{{calculateTotalVolume('partner') | number:'1.0-0'}}</div>
-                                </div>
-                                <div class="volume-card">
-                                    <div class="volume-label">Différence totale</div>
-                                    <div class="volume-value" [class.positive]="calculateVolumeDifference() > 0" [class.negative]="calculateVolumeDifference() < 0">
-                                        {{calculateVolumeDifference() | number:'1.0-0'}}
-                                    </div>
-                                </div>
+                    <ng-container *ngIf="activeTab === 'matches'">
+                        <div *ngIf="isTabLoaded('matches'); else matchesLoading" class="matches-section">
+                            <div class="search-section">
+                                <input 
+                                    type="text" 
+                                    [(ngModel)]="searchKey" 
+                                    (input)="onSearch()"
+                                    placeholder="Rechercher par clé..."
+                                    class="search-input"
+                                >
+                                <button (click)="handleExport()" class="export-button">
+                                    📥 Exporter les correspondances
+                                </button>
                             </div>
-                        </div>
-                        <div class="pagination-controls">
-                            <button (click)="prevPage('matches')" [disabled]="matchesPage === 1">Précédent</button>
-                            <span>Page {{matchesPage}} / {{getTotalPages('matches')}}</span>
-                            <button (click)="nextPage('matches')" [disabled]="matchesPage === getTotalPages('matches')">Suivant</button>
-                        </div>
-                        <div class="match-card" *ngFor="let match of getPagedMatches(); let i = index">
-                            <!-- Fiche des champs clés -->
-                            <div class="match-header fiche-header">
-                                <div class="fiche-row">
-                                    <span class="fiche-label">Clé :</span>
-                                    <span class="fiche-value">{{match.key}}</span>
-                                </div>
-                                <div class="fiche-row">
-                                    <span class="fiche-label">Statut :</span>
-                                    <span class="fiche-value" [class.has-differences]="hasDifferences(match)">
-                                    {{hasDifferences(match) ? '⚠️ Différences détectées' : '✅ Correspondance parfaite'}}
-                                </span>
-                            </div>
-                                <div class="fiche-row">
-                                    <span class="fiche-label">Montant :</span>
-                                    <span class="fiche-value">{{match.boData['montant'] || match.partnerData['Crédit'] || match.partnerData['montant']}}</span>
-                                        </div>
-                                <div class="fiche-row">
-                                    <span class="fiche-label">Date BO :</span>
-                                    <span class="fiche-value">{{match.boData['Date']}}</span>
-                                    <span class="fiche-label">Date Partenaire :</span>
-                                    <span class="fiche-value">{{match.partnerData['Date']}}</span>
-                                        </div>
-                                <div class="fiche-row">
-                                    <span class="fiche-label">Agence :</span>
-                                    <span class="fiche-value">{{getBoAgencyAndService(match).agency}}</span>
-                                    <span class="fiche-label">Service :</span>
-                                    <span class="fiche-value">{{getBoAgencyAndService(match).service}}</span>
-                                        </div>
+                            <div class="volume-summary">
+                                <h4>📊 Résumé des volumes</h4>
+                                <div class="volume-grid">
+                                    <div class="volume-card">
+                                        <div class="volume-label">Volume total BO</div>
+                                        <div class="volume-value">{{calculateTotalVolume('bo') | number:'1.0-0'}}</div>
                                     </div>
-                            <!-- Deux colonnes alignées -->
-                            <div class="match-content two-columns">
-                                <div class="data-column">
-                                    <h4>🏢 BO</h4>
-                                    <div class="data-grid refined-grid">
-                                        <div class="data-row" *ngFor="let key of getBoKeys(match)">
-                                            <span class="label">{{key}} :</span>
-                                            <span class="value">{{getBoValue(match, key)}}</span>
-                                        </div>
+                                    <div class="volume-card">
+                                        <div class="volume-label">Volume total Partenaire</div>
+                                        <div class="volume-value">{{calculateTotalVolume('partner') | number:'1.0-0'}}</div>
                                     </div>
-                                </div>
-                                <div class="data-column">
-                                    <h4>🤝 Partenaire</h4>
-                                    <div class="data-grid refined-grid">
-                                        <div class="data-row" *ngFor="let key of getPartnerKeys(match)">
-                                            <span class="label">{{key}} :</span>
-                                            <span class="value">{{getPartnerValue(match, key)}}</span>
+                                    <div class="volume-card">
+                                        <div class="volume-label">Différence totale</div>
+                                        <div class="volume-value" [class.positive]="calculateVolumeDifference() > 0" [class.negative]="calculateVolumeDifference() < 0">
+                                            {{calculateVolumeDifference() | number:'1.0-0'}}
                                         </div>
                                     </div>
                                 </div>
                             </div>
-                            <div class="differences-section" *ngIf="hasDifferences(match)">
-                                <h4>📝 Différences détectées</h4>
-                                <div class="difference-card" *ngFor="let diff of match.differences">
-                                    <div class="diff-header">
-                                        <span class="column">{{diff.boColumn}} ↔ {{diff.partnerColumn}}</span>
+                            <div class="pagination-controls">
+                                <button (click)="prevPage('matches')" [disabled]="matchesPage === 1">Précédent</button>
+                                <span>Page {{matchesPage}} / {{getTotalPages('matches')}}</span>
+                                <button (click)="nextPage('matches')" [disabled]="matchesPage === getTotalPages('matches')">Suivant</button>
+                            </div>
+                            <div class="match-card" *ngFor="let match of getPagedMatches(); let i = index">
+                                <!-- Fiche des champs clés -->
+                                <div class="match-header fiche-header">
+                                    <div class="fiche-row">
+                                        <span class="fiche-label">Clé :</span>
+                                        <span class="fiche-value">{{match.key}}</span>
                                     </div>
-                                    <div class="diff-values">
-                                        <div class="value bo">
-                                            <span class="label">BO :</span>
-                                            <span class="content">{{diff.boValue}}</span>
+                                    <div class="fiche-row">
+                                        <span class="fiche-label">Statut :</span>
+                                        <span class="fiche-value" [class.has-differences]="hasDifferences(match)">
+                                            {{hasDifferences(match) ? '⚠️ Différences détectées' : '✅ Correspondance parfaite'}}
+                                        </span>
+                                    </div>
+                                    <div class="fiche-row">
+                                        <span class="fiche-label">Montant :</span>
+                                        <span class="fiche-value">{{match.boData['montant'] || match.partnerData['Crédit'] || match.partnerData['montant']}}</span>
+                                    </div>
+                                    <div class="fiche-row">
+                                        <span class="fiche-label">Date BO :</span>
+                                        <span class="fiche-value">{{match.boData['Date']}}</span>
+                                        <span class="fiche-label">Date Partenaire :</span>
+                                        <span class="fiche-value">{{match.partnerData['Date']}}</span>
+                                    </div>
+                                    <div class="fiche-row">
+                                        <span class="fiche-label">Agence :</span>
+                                        <span class="fiche-value">{{getBoAgencyAndService(match).agency}}</span>
+                                        <span class="fiche-label">Service :</span>
+                                        <span class="fiche-value">{{getBoAgencyAndService(match).service}}</span>
+                                    </div>
+                                </div>
+                                <!-- Deux colonnes alignées -->
+                                <div class="match-content two-columns">
+                                    <div class="data-column">
+                                        <h4>🏢 BO</h4>
+                                        <div class="data-grid refined-grid">
+                                            <div class="data-row" *ngFor="let key of getBoKeys(match)">
+                                                <span class="label">{{key}} :</span>
+                                                <span class="value">{{getBoValue(match, key)}}</span>
+                                            </div>
                                         </div>
-                                        <div class="value partner">
-                                            <span class="label">Partenaire :</span>
-                                            <span class="content">{{diff.partnerValue}}</span>
+                                    </div>
+                                    <div class="data-column">
+                                        <h4>🤝 Partenaire</h4>
+                                        <div class="data-grid refined-grid">
+                                            <div class="data-row" *ngFor="let key of getPartnerKeys(match)">
+                                                <span class="label">{{key}} :</span>
+                                                <span class="value">{{getPartnerValue(match, key)}}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="differences-section" *ngIf="hasDifferences(match)">
+                                    <h4>📝 Différences détectées</h4>
+                                    <div class="difference-card" *ngFor="let diff of match.differences">
+                                        <div class="diff-header">
+                                            <span class="column">{{diff.boColumn}} ↔ {{diff.partnerColumn}}</span>
+                                        </div>
+                                        <div class="diff-values">
+                                            <div class="value bo">
+                                                <span class="label">BO :</span>
+                                                <span class="content">{{diff.boValue}}</span>
+                                            </div>
+                                            <div class="value partner">
+                                                <span class="label">Partenaire :</span>
+                                                <span class="content">{{diff.partnerValue}}</span>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
+                    </ng-container>
+                    <ng-template #matchesLoading>
+                        <div class="tab-loading" *ngIf="isTabLoading('matches')">
+                            <div class="spinner"></div>
+                            <p>Chargement des correspondances...</p>
+                            <div class="progress-bar" *ngIf="getTabProgress('matches') > 0">
+                                <div class="progress" [style.width.%]="getTabProgress('matches')"></div>
+                            </div>
+                            <span class="progress-text" *ngIf="getTabProgress('matches') > 0">
+                                {{getTabProgress('matches')}}%
+                            </span>
+                        </div>
+                        <div class="tab-error" *ngIf="getTabError('matches')">
+                            {{getTabError('matches')}}
+                        </div>
+                        <div class="tab-placeholder" *ngIf="!isTabLoading('matches') && !getTabError('matches')">
+                            <p>Cliquez sur l'onglet pour charger les correspondances.</p>
+                        </div>
+                    </ng-template>
 
                     <!-- ECART BO avec pagination -->
-                    <div *ngIf="activeTab === 'boOnly'" class="bo-only-section">
-                        <div class="search-section">
-                            <input 
-                                type="text" 
-                                [(ngModel)]="searchKey" 
-                                (input)="onSearch()"
-                                placeholder="Rechercher par clé..."
-                                class="search-input"
-                            >
-                            <label style="display:flex;align-items:center;gap:6px;">
-                                <input type="checkbox" [checked]="allBoSelectedOnPage" (change)="toggleSelectAllBoOnPage($event)">
-                                <span>Sélectionner la page</span>
-                            </label>
-                            <button (click)="exportResults()" class="export-button">
-                                📥 Exporter les ECART BO
-                            </button>
-                            <button (click)="saveEcartBoToEcartSolde()" class="save-button" [disabled]="isSavingEcartBo">
-                                {{ isSavingEcartBo ? '💾 Sauvegarde...' : '💾 Sauvegarder dans Ecart Solde' }}
-                            </button>
-                            <button (click)="saveEcartBoToTrxSf()" class="save-button" [disabled]="isSavingEcartBoToTrxSf">
-                                {{ isSavingEcartBoToTrxSf ? '💾 Sauvegarde...' : '💾 Sauvegarder dans TRX SF' }}
-                            </button>
-                        </div>
-                        <div class="volume-summary">
-                            <h4>📊 Résumé des volumes</h4>
-                            <div class="volume-grid">
-                                <div class="volume-card">
-                                    <div class="volume-label">Volume total BO</div>
-                                    <div class="volume-value">{{calculateTotalVolumeBoOnly() | number:'1.0-0'}}</div>
-                                </div>
-                                <div class="volume-card">
-                                    <div class="volume-label">Nombre de Transactions</div>
-                                    <div class="volume-value">{{filteredBoOnly.length}}</div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="pagination-controls">
-                            <button (click)="prevPage('boOnly')" [disabled]="boOnlyPage === 1">Précédent</button>
-                            <span>Page {{boOnlyPage}} / {{getTotalPages('boOnly')}}</span>
-                            <button (click)="nextPage('boOnly')" [disabled]="boOnlyPage === getTotalPages('boOnly')">Suivant</button>
-                        </div>
-                        <div class="unmatched-card" *ngFor="let record of getPagedBoOnly()">
-                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:8px;">
-                                <div style="font-weight:600;color:#d32f2f;">Ligne BO</div>
+                    <ng-container *ngIf="activeTab === 'boOnly'">
+                        <div *ngIf="isTabLoaded('boOnly'); else boOnlyLoading" class="bo-only-section">
+                            <div class="search-section">
+                                <input 
+                                    type="text" 
+                                    [(ngModel)]="searchKey" 
+                                    (input)="onSearch()"
+                                    placeholder="Rechercher par clé..."
+                                    class="search-input"
+                                >
                                 <label style="display:flex;align-items:center;gap:6px;">
-                                    <input type="checkbox" [checked]="isBoRecordSelected(record)" (change)="toggleBoSelection(record, $event)">
-                                    <span>Sélectionner</span>
+                                    <input type="checkbox" [checked]="allBoSelectedOnPage" (change)="toggleSelectAllBoOnPage($event)">
+                                    <span>Sélectionner la page</span>
                                 </label>
+                                <button (click)="exportResults()" class="export-button">
+                                    📥 Exporter les ECART BO
+                                </button>
+                                <button (click)="saveEcartBoToEcartSolde()" class="save-button" [disabled]="isSavingEcartBo">
+                                    {{ isSavingEcartBo ? '💾 Sauvegarde...' : '💾 Sauvegarder dans Ecart Solde' }}
+                                </button>
+                                <button (click)="saveEcartBoToTrxSf()" class="save-button" [disabled]="isSavingEcartBoToTrxSf">
+                                    {{ isSavingEcartBoToTrxSf ? '💾 Sauvegarde...' : '💾 Sauvegarder dans TRX SF' }}
+                                </button>
                             </div>
-                            <div class="data-grid">
-                                <div class="info-row">
-                                    <span class="label">Volume:</span>
-                                    <span class="value">{{getBoOnlyAgencyAndService(record).volume | number:'1.0-0'}}</span>
+                            <div class="volume-summary">
+                                <h4>📊 Résumé des volumes</h4>
+                                <div class="volume-grid">
+                                    <div class="volume-card">
+                                        <div class="volume-label">Volume total BO</div>
+                                        <div class="volume-value">{{calculateTotalVolumeBoOnly() | number:'1.0-0'}}</div>
+                                    </div>
+                                    <div class="volume-card">
+                                        <div class="volume-label">Nombre de Transactions</div>
+                                        <div class="volume-value">{{filteredBoOnly.length}}</div>
+                                    </div>
                                 </div>
-                                <div class="info-row">
-                                    <span class="label">Date:</span>
-                                    <span class="value">{{getBoOnlyAgencyAndService(record).date}}</span>
+                            </div>
+                            <div class="pagination-controls">
+                                <button (click)="prevPage('boOnly')" [disabled]="boOnlyPage === 1">Précédent</button>
+                                <span>Page {{boOnlyPage}} / {{getTotalPages('boOnly')}}</span>
+                                <button (click)="nextPage('boOnly')" [disabled]="boOnlyPage === getTotalPages('boOnly')">Suivant</button>
+                            </div>
+                            <div class="unmatched-card" *ngFor="let record of getPagedBoOnly()">
+                                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:8px;">
+                                    <div style="font-weight:600;color:#d32f2f;">Ligne BO</div>
+                                    <label style="display:flex;align-items:center;gap:6px;">
+                                        <input type="checkbox" [checked]="isBoRecordSelected(record)" (change)="toggleBoSelection(record, $event)">
+                                        <span>Sélectionner</span>
+                                    </label>
                                 </div>
-                                <div class="data-row" *ngFor="let key of getBoOnlyKeys(record)">
-                                    <span class="label">{{key}}:</span>
-                                    <span class="value">{{getRecordValue(record, key)}}</span>
+                                <div class="data-grid">
+                                    <div class="info-row">
+                                        <span class="label">Volume:</span>
+                                        <span class="value">{{getBoOnlyAgencyAndService(record).volume | number:'1.0-0'}}</span>
+                                    </div>
+                                    <div class="info-row">
+                                        <span class="label">Date:</span>
+                                        <span class="value">{{getBoOnlyAgencyAndService(record).date}}</span>
+                                    </div>
+                                    <div class="data-row" *ngFor="let key of getBoOnlyKeys(record)">
+                                        <span class="label">{{key}}:</span>
+                                        <span class="value">{{getRecordValue(record, key)}}</span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
+                    </ng-container>
+                    <ng-template #boOnlyLoading>
+                        <div class="tab-loading" *ngIf="isTabLoading('boOnly')">
+                            <div class="spinner"></div>
+                            <p>Chargement des écarts BO...</p>
+                            <div class="progress-bar" *ngIf="getTabProgress('boOnly') > 0">
+                                <div class="progress" [style.width.%]="getTabProgress('boOnly')"></div>
+                            </div>
+                            <span class="progress-text" *ngIf="getTabProgress('boOnly') > 0">
+                                {{getTabProgress('boOnly')}}%
+                            </span>
+                        </div>
+                        <div class="tab-error" *ngIf="getTabError('boOnly')">
+                            {{getTabError('boOnly')}}
+                        </div>
+                        <div class="tab-placeholder" *ngIf="!isTabLoading('boOnly') && !getTabError('boOnly')">
+                            <p>Cliquez sur l'onglet pour charger les écarts BO.</p>
+                        </div>
+                    </ng-template>
 
                     <!-- ECART Partenaire avec pagination -->
-                    <div *ngIf="activeTab === 'partnerOnly'" class="partner-only-section">
-                        <div class="search-section">
-                            <input 
-                                type="text" 
-                                [(ngModel)]="searchKey" 
-                                (input)="onSearch()"
-                                placeholder="Rechercher par clé..."
-                                class="search-input"
-                            >
-                            <label style="display:flex;align-items:center;gap:6px;">
-                                <input type="checkbox" [checked]="allPartnerSelectedOnPage" (change)="toggleSelectAllPartnerOnPage($event)">
-                                <span>Sélectionner la page</span>
-                            </label>
-                            <button (click)="exportResults()" class="export-button">
-                                📥 Exporter les ECART Partenaire
-                            </button>
-                            <button (click)="saveEcartPartnerToImpactOP()" class="save-button" [disabled]="isSavingEcartPartnerToImpactOP">
-                                {{ isSavingEcartPartnerToImpactOP ? '💾 Sauvegarde...' : '💾 Sauvegarder dans Import OP' }}
-                            </button>
-                        </div>
-                        <div class="volume-summary">
-                            <h4>📊 Résumé des volumes</h4>
-                            <div class="volume-grid">
-                                <div class="volume-card">
-                                    <div class="volume-label">Volume total Partenaire</div>
-                                    <div class="volume-value">{{calculateTotalVolumePartnerOnly() | number:'1.0-0'}}</div>
-                                </div>
-                                <div class="volume-card">
-                                    <div class="volume-label">Nombre de Transactions</div>
-                                    <div class="volume-value">{{filteredPartnerOnly.length}}</div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="pagination-controls">
-                            <button (click)="prevPage('partnerOnly')" [disabled]="partnerOnlyPage === 1">Précédent</button>
-                            <span>Page {{partnerOnlyPage}} / {{getTotalPages('partnerOnly')}}</span>
-                            <button (click)="nextPage('partnerOnly')" [disabled]="partnerOnlyPage === getTotalPages('partnerOnly')">Suivant</button>
-                        </div>
-                        <div class="unmatched-card" *ngFor="let record of getPagedPartnerOnly()">
-                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:8px;">
-                                <div style="display:flex;align-items:center;gap:10px;">
-                                    <div style="font-weight:600;color:#1976D2;">Ligne partenaire</div>
-                                    <button (click)="createOperationFromPartnerRecord(record)" class="save-button" [disabled]="!isPartnerRecordEligible(record)" title="Créer OP">➕ Créer OP</button>
-                                </div>
+                    <ng-container *ngIf="activeTab === 'partnerOnly'">
+                        <div *ngIf="isTabLoaded('partnerOnly'); else partnerLoading" class="partner-only-section">
+                            <div class="search-section">
+                                <input 
+                                    type="text" 
+                                    [(ngModel)]="searchKey" 
+                                    (input)="onSearch()"
+                                    placeholder="Rechercher par clé..."
+                                    class="search-input"
+                                >
                                 <label style="display:flex;align-items:center;gap:6px;">
-                                    <input type="checkbox" [checked]="isPartnerRecordSelected(record)" (change)="togglePartnerSelection(record, $event)">
-                                    <span>Sélectionner</span>
+                                    <input type="checkbox" [checked]="allPartnerSelectedOnPage" (change)="toggleSelectAllPartnerOnPage($event)">
+                                    <span>Sélectionner la page</span>
                                 </label>
+                                <button (click)="exportResults()" class="export-button">
+                                    📥 Exporter les ECART Partenaire
+                                </button>
+                                <button (click)="saveEcartPartnerToImpactOP()" class="save-button" [disabled]="isSavingEcartPartnerToImpactOP">
+                                    {{ isSavingEcartPartnerToImpactOP ? '💾 Sauvegarde...' : '💾 Sauvegarder dans Import OP' }}
+                                </button>
                             </div>
-                            <div class="data-grid">
-                                <div class="info-row">
-                                    <span class="label">Volume:</span>
-                                    <span class="value">{{getPartnerOnlyVolume(record) | number:'1.0-0'}}</span>
+                            <div class="volume-summary">
+                                <h4>📊 Résumé des volumes</h4>
+                                <div class="volume-grid">
+                                    <div class="volume-card">
+                                        <div class="volume-label">Volume total Partenaire</div>
+                                        <div class="volume-value">{{calculateTotalVolumePartnerOnly() | number:'1.0-0'}}</div>
+                                    </div>
+                                    <div class="volume-card">
+                                        <div class="volume-label">Nombre de Transactions</div>
+                                        <div class="volume-value">{{filteredPartnerOnly.length}}</div>
+                                    </div>
                                 </div>
-                                <div class="info-row">
-                                    <span class="label">Date:</span>
-                                    <span class="value">{{getPartnerOnlyDate(record)}}</span>
+                            </div>
+                            <div class="pagination-controls">
+                                <button (click)="prevPage('partnerOnly')" [disabled]="partnerOnlyPage === 1">Précédent</button>
+                                <span>Page {{partnerOnlyPage}} / {{getTotalPages('partnerOnly')}}</span>
+                                <button (click)="nextPage('partnerOnly')" [disabled]="partnerOnlyPage === getTotalPages('partnerOnly')">Suivant</button>
+                            </div>
+                            <div class="unmatched-card" *ngFor="let record of getPagedPartnerOnly()">
+                                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:8px;">
+                                    <div style="display:flex;align-items:center;gap:10px;">
+                                        <div style="font-weight:600;color:#1976D2;">Ligne partenaire</div>
+                                        <button (click)="createOperationFromPartnerRecord(record)" class="save-button" [disabled]="!isPartnerRecordEligible(record)" title="Créer OP">➕ Créer OP</button>
+                                    </div>
+                                    <label style="display:flex;align-items:center;gap:6px;">
+                                        <input type="checkbox" [checked]="isPartnerRecordSelected(record)" (change)="togglePartnerSelection(record, $event)">
+                                        <span>Sélectionner</span>
+                                    </label>
                                 </div>
-                                <div class="info-row">
-                                    <span class="label">Source:</span>
-                                    <span class="value" style="display:flex;align-items:center;gap:6px;">
-                                        <input type="checkbox" checked disabled>
-                                        {{ record['SOURCE'] || 'PARTENAIRE' }}
-                                    </span>
-                                </div>
-                                <div class="data-row" *ngFor="let key of getPartnerOnlyKeys(record)">
-                                    <span class="label">{{key}}:</span>
-                                    <span class="value">{{getRecordValue(record, key)}}</span>
+                                <div class="data-grid">
+                                    <div class="info-row">
+                                        <span class="label">Volume:</span>
+                                        <span class="value">{{getPartnerOnlyVolume(record) | number:'1.0-0'}}</span>
+                                    </div>
+                                    <div class="info-row">
+                                        <span class="label">Date:</span>
+                                        <span class="value">{{getPartnerOnlyDate(record)}}</span>
+                                    </div>
+                                    <div class="info-row">
+                                        <span class="label">Source:</span>
+                                        <span class="value" style="display:flex;align-items:center;gap:6px;">
+                                            <input type="checkbox" checked disabled>
+                                            {{ record['SOURCE'] || 'PARTENAIRE' }}
+                                        </span>
+                                    </div>
+                                    <div class="data-row" *ngFor="let key of getPartnerOnlyKeys(record)">
+                                        <span class="label">{{key}}:</span>
+                                        <span class="value">{{getRecordValue(record, key)}}</span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
+                    </ng-container>
+                    <ng-template #partnerLoading>
+                        <div class="tab-loading" *ngIf="isTabLoading('partnerOnly')">
+                            <div class="spinner"></div>
+                            <p>Chargement des écarts Partenaire...</p>
+                            <div class="progress-bar" *ngIf="getTabProgress('partnerOnly') > 0">
+                                <div class="progress" [style.width.%]="getTabProgress('partnerOnly')"></div>
+                            </div>
+                            <span class="progress-text" *ngIf="getTabProgress('partnerOnly') > 0">
+                                {{getTabProgress('partnerOnly')}}%
+                            </span>
+                        </div>
+                        <div class="tab-error" *ngIf="getTabError('partnerOnly')">
+                            {{getTabError('partnerOnly')}}
+                        </div>
+                        <div class="tab-placeholder" *ngIf="!isTabLoading('partnerOnly') && !getTabError('partnerOnly')">
+                            <p>Cliquez sur l'onglet pour charger les écarts Partenaire.</p>
+                        </div>
+                    </ng-template>
                 </div>
             </div>
 
@@ -971,6 +1057,45 @@ interface ApiError {
             padding: 20px;
             max-height: 600px;
             overflow-y: auto;
+        }
+
+        .tab-loading {
+            padding: 40px;
+            text-align: center;
+            color: #555;
+        }
+
+        .tab-placeholder {
+            padding: 40px;
+            text-align: center;
+            color: #777;
+            border: 1px dashed #ccc;
+            border-radius: 8px;
+            margin: 20px 0;
+            background: #fafafa;
+        }
+
+        .tab-error {
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 6px;
+            background: #fdecea;
+            color: #d32f2f;
+            border: 1px solid #f8c7c3;
+        }
+
+        .spinner {
+            width: 32px;
+            height: 32px;
+            border: 4px solid #e0e0e0;
+            border-top-color: #1976D2;
+            border-radius: 50%;
+            animation: spin 0.9s linear infinite;
+            margin: 0 auto 12px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
         }
 
         .matches-section, .unmatched-section {
@@ -1735,7 +1860,7 @@ interface ApiError {
 export class ReconciliationResultsComponent implements OnInit, OnDestroy {
     response: ReconciliationResponse | null = null;
     private subscription = new Subscription();
-    activeTab: 'matches' | 'boOnly' | 'partnerOnly' | 'agencySummary' = 'matches';
+    activeTab: ResultsTab | null = null;
     matchesPage = 1;
     boOnlyPage = 1;
     partnerOnlyPage = 1;
@@ -1744,6 +1869,9 @@ export class ReconciliationResultsComponent implements OnInit, OnDestroy {
     filteredMatches: Match[] = [];
     filteredBoOnly: Record<string, string>[] = [];
     filteredPartnerOnly: Record<string, string>[] = [];
+    private tabLoadState: Record<ResultsTab, { loaded: boolean; loading: boolean; error: string | null }> = this.createInitialTabState();
+    private tabLoadProgress: Record<ResultsTab, number> = this.createInitialProgressState();
+    private tabLoadPromises: Partial<Record<ResultsTab, Promise<void>>> = {};
     agencyPage = 1;
     readonly agencyPageSize = 10;
     selectedService: string = '';
@@ -1786,6 +1914,23 @@ export class ReconciliationResultsComponent implements OnInit, OnDestroy {
     availableBoColumns: string[] = []; // Colonnes BO
     selectedBoColumns: { [key: string]: boolean } = {};
     defaultColumns = ['Service', 'téléphone client', 'montant', 'Agence', 'Date', 'HEURE', 'SOURCE'];
+    private trxboKeyCache = new WeakMap<Record<string, string>, Map<string, string | null>>();
+    private readonly TRXBO_COLUMNS: string[] = [
+        'IDTransaction',
+        'téléphone client',
+        'montant',
+        'Service',
+        'Moyen de Paiement',
+        'Agence',
+        'Agent',
+        'Type agent',
+        'PIXI',
+        'Date',
+        'Numéro Trans',
+        'GU',
+        'GRX',
+        'Statut'
+    ];
     
     // Propriétés pour la sélection des colonnes d'export standard
     showExportColumnSelector = false;
@@ -3034,29 +3179,247 @@ export class ReconciliationResultsComponent implements OnInit, OnDestroy {
         this.subscription.unsubscribe();
     }
 
-    private initializeFilteredData() {
-        console.log('🔧 Initialisation des données filtrées...');
-        console.log('📊 Response:', this.response);
-        console.log('📊 Matches:', this.response?.matches);
-        console.log('📊 BoOnly:', this.response?.boOnly);
-        console.log('📊 PartnerOnly:', this.response?.partnerOnly);
-        
-        this.filteredMatches = this.getFilteredMatches();
-        this.filteredBoOnly = this.getFilteredBoOnly();
-        this.filteredPartnerOnly = this.getFilteredPartnerOnly();
-        
-        // Partager les données filtrées avec le service pour le rapport
-        this.reconciliationTabsService.setFilteredMatches(this.filteredMatches);
-        this.reconciliationTabsService.setFilteredBoOnly(this.filteredBoOnly);
-        this.reconciliationTabsService.setFilteredPartnerOnly(this.filteredPartnerOnly);
+    private initializeFilteredData(autoLoadActiveTab = false) {
+        console.log('🔧 Initialisation des états de chargement...');
+        this.filteredMatches = [];
+        this.filteredBoOnly = [];
+        this.filteredPartnerOnly = [];
+        this.tabLoadState = this.createInitialTabState();
+        this.tabLoadProgress = this.createInitialProgressState();
+        this.tabLoadPromises = {};
+        this.reconciliationTabsService.clearAllData();
         this.reconciliationTabsService.setFilteredMismatches(this.response?.mismatches || []);
+        this.invalidateCache();
         
-        console.log('✅ Données filtrées initialisées:');
-        console.log('📊 FilteredMatches:', this.filteredMatches.length);
-        console.log('📊 FilteredBoOnly:', this.filteredBoOnly.length);
-        console.log('📊 FilteredPartnerOnly:', this.filteredPartnerOnly.length);
-        
+        if (autoLoadActiveTab && this.activeTab) {
+            this.loadTabData(this.activeTab, true).catch(error => {
+                console.error(`❌ Impossible de recharger l'onglet ${this.activeTab}:`, error);
+            });
+        }
+    }
 
+    private createInitialTabState(): Record<ResultsTab, { loaded: boolean; loading: boolean; error: string | null }> {
+        return {
+            matches: { loaded: false, loading: false, error: null },
+            boOnly: { loaded: false, loading: false, error: null },
+            partnerOnly: { loaded: false, loading: false, error: null },
+            agencySummary: { loaded: false, loading: false, error: null }
+        };
+    }
+
+    private createInitialProgressState(): Record<ResultsTab, number> {
+        return {
+            matches: 0,
+            boOnly: 0,
+            partnerOnly: 0,
+            agencySummary: 0
+        };
+    }
+
+    isTabLoaded(tab: ResultsTab): boolean {
+        return !!this.tabLoadState[tab]?.loaded;
+    }
+
+    isTabLoading(tab: ResultsTab): boolean {
+        return !!this.tabLoadState[tab]?.loading;
+    }
+
+    getTabProgress(tab: ResultsTab): number {
+        return this.tabLoadProgress[tab] || 0;
+    }
+
+    getTabError(tab: ResultsTab): string | null {
+        return this.tabLoadState[tab]?.error || null;
+    }
+
+    async loadTabData(tab: ResultsTab, forceReload = false): Promise<void> {
+        if (!this.response) {
+            return;
+        }
+
+        const state = this.tabLoadState[tab];
+        if (!state) {
+            return;
+        }
+
+        if (state.loading) {
+            return this.tabLoadPromises[tab];
+        }
+
+        if (state.loaded && !forceReload) {
+            return;
+        }
+
+        state.loading = true;
+        state.error = null;
+        this.tabLoadProgress[tab] = 0;
+        this.cdr.detectChanges();
+
+        const loadPromise = (async () => {
+            try {
+                switch (tab) {
+                    case 'matches':
+                        await this.buildMatchesData();
+                        break;
+                    case 'boOnly':
+                        await this.buildBoOnlyData();
+                        break;
+                    case 'partnerOnly':
+                        await this.buildPartnerOnlyData();
+                        break;
+                    case 'agencySummary':
+                        await this.buildAgencySummaryData();
+                        break;
+                }
+                state.loaded = true;
+            } catch (error) {
+                console.error(`❌ Erreur lors du chargement de l'onglet ${tab}:`, error);
+                state.error = 'Erreur lors du chargement des données.';
+                throw error;
+            } finally {
+                state.loading = false;
+                if (this.tabLoadProgress[tab] === 0) {
+                    this.tabLoadProgress[tab] = 100;
+                }
+                this.cdr.detectChanges();
+            }
+        })();
+
+        this.tabLoadPromises[tab] = loadPromise;
+        try {
+            await loadPromise;
+        } finally {
+            delete this.tabLoadPromises[tab];
+        }
+    }
+
+    private async buildMatchesData(): Promise<void> {
+        this.filteredMatches = [];
+        const matches = this.response?.matches || [];
+        if (matches.length === 0) {
+            this.tabLoadProgress['matches'] = 100;
+            this.reconciliationTabsService.setFilteredMatches([]);
+            return;
+        }
+
+        const chunkSize = this.getChunkSize(matches.length);
+        let processed = 0;
+
+        for (let i = 0; i < matches.length; i++) {
+            const match = matches[i];
+            if (!this.selectedService || (match.boData['Service'] || '') === this.selectedService) {
+                this.filteredMatches.push(match);
+            }
+            processed++;
+            if (processed % chunkSize === 0 || processed === matches.length) {
+                this.updateTabProgress('matches', processed, matches.length);
+                await this.yieldToBrowser();
+            }
+        }
+
+        this.reconciliationTabsService.setFilteredMatches(this.filteredMatches);
+    }
+
+    private async buildBoOnlyData(): Promise<void> {
+        this.filteredBoOnly = [];
+        const mismatches = this.response?.mismatches || [];
+        const boOnly = this.response?.boOnly || [];
+        const total = mismatches.length + boOnly.length;
+
+        if (total === 0) {
+            this.tabLoadProgress['boOnly'] = 100;
+            this.reconciliationTabsService.setFilteredBoOnly([]);
+            return;
+        }
+
+        const chunkSize = this.getChunkSize(total);
+        let processed = 0;
+
+        processed = await this.processRecordsWithChunk(mismatches, chunkSize, processed, total, 'boOnly', record => {
+            if (!this.selectedService || (record['Service'] || '') === this.selectedService) {
+                this.filteredBoOnly.push(record);
+            }
+        });
+
+        processed = await this.processRecordsWithChunk(boOnly, chunkSize, processed, total, 'boOnly', record => {
+            if (!this.selectedService || (record['Service'] || '') === this.selectedService) {
+                this.filteredBoOnly.push(record);
+            }
+        });
+
+        this.reconciliationTabsService.setFilteredBoOnly(this.filteredBoOnly);
+    }
+
+    private async buildPartnerOnlyData(): Promise<void> {
+        this.filteredPartnerOnly = [];
+        const partnerOnly = this.response?.partnerOnly || [];
+        if (partnerOnly.length === 0) {
+            this.tabLoadProgress['partnerOnly'] = 100;
+            this.reconciliationTabsService.setFilteredPartnerOnly([]);
+            return;
+        }
+
+        const chunkSize = this.getChunkSize(partnerOnly.length);
+        let processed = 0;
+
+        processed = await this.processRecordsWithChunk(partnerOnly, chunkSize, processed, partnerOnly.length, 'partnerOnly', record => {
+            if (!this.selectedService || (record['Service'] || '') === this.selectedService) {
+                this.filteredPartnerOnly.push(record);
+            }
+        });
+
+        this.reconciliationTabsService.setFilteredPartnerOnly(this.filteredPartnerOnly);
+    }
+
+    private async buildAgencySummaryData(): Promise<void> {
+        await this.loadTabData('matches');
+        await this.loadTabData('boOnly');
+        this.invalidateCache();
+        this.cachedAgencySummary = null;
+        this.lastResponseHash = '';
+        const summary = this.getAgencySummary();
+        this.reconciliationSummaryService.setAgencySummary(summary);
+        this.tabLoadProgress['agencySummary'] = 100;
+    }
+
+    private async processRecordsWithChunk<T>(
+        source: T[],
+        chunkSize: number,
+        processed: number,
+        total: number,
+        tab: ResultsTab,
+        onItem: (item: T) => void
+    ): Promise<number> {
+        for (let i = 0; i < source.length; i++) {
+            onItem(source[i]);
+            processed++;
+            if (processed % chunkSize === 0 || processed === total) {
+                this.updateTabProgress(tab, processed, total);
+                await this.yieldToBrowser();
+            }
+        }
+        return processed;
+    }
+
+    private getChunkSize(total: number): number {
+        if (total > 50000) return 4000;
+        if (total > 20000) return 2000;
+        if (total > 10000) return 1000;
+        if (total > 2000) return 500;
+        return 200;
+    }
+
+    private updateTabProgress(tab: ResultsTab, processed: number, total: number) {
+        if (total <= 0) {
+            this.tabLoadProgress[tab] = 100;
+            return;
+        }
+        this.tabLoadProgress[tab] = Math.min(100, Math.round((processed / total) * 100));
+        this.cdr.detectChanges();
+    }
+
+    private yieldToBrowser(): Promise<void> {
+        return new Promise(resolve => setTimeout(resolve, 0));
     }
 
     onSearch() {
@@ -3122,12 +3485,31 @@ export class ReconciliationResultsComponent implements OnInit, OnDestroy {
         return Math.max(1, Math.ceil(data.length / this.pageSize));
     }
 
-    setActiveTab(tab: 'matches' | 'boOnly' | 'partnerOnly' | 'agencySummary') {
+    getMatchesCount(): number {
+        return this.response?.matches?.length || 0;
+    }
+
+    getBoEcartCount(): number {
+        return (this.response?.mismatches?.length || 0) + (this.response?.boOnly?.length || 0);
+    }
+
+    getPartnerOnlyCount(): number {
+        return this.response?.partnerOnly?.length || 0;
+    }
+
+    setActiveTab(tab: ResultsTab) {
         console.log('🔄 setActiveTab appelé avec:', tab);
         console.log('🔄 activeTab avant:', this.activeTab);
         this.activeTab = tab;
         console.log('🔄 activeTab après:', this.activeTab);
         this.agencyPage = 1;
+        if (tab === 'matches') {
+            this.matchesPage = 1;
+        } else if (tab === 'boOnly') {
+            this.boOnlyPage = 1;
+        } else if (tab === 'partnerOnly') {
+            this.partnerOnlyPage = 1;
+        }
         
         // Forcer la détection des changements
         setTimeout(() => {
@@ -3141,12 +3523,27 @@ export class ReconciliationResultsComponent implements OnInit, OnDestroy {
             this.cdr.detectChanges();
             console.log('✅ Rechargement complet forcé pour:', tab);
         }, 100);
+
+        this.loadTabData(tab).catch(error => {
+            console.error(`❌ Impossible de charger l'onglet ${tab}:`, error);
+        });
         
         console.log('✅ setActiveTab terminé pour:', tab);
     }
 
-    openReconciliationReport() {
-        console.log('📈 Navigation vers le rapport de réconciliation...');
+    async openReconciliationReport() {
+        console.log('📈 Préparation du rapport de réconciliation...');
+        try {
+            await Promise.all([
+                this.loadTabData('matches'),
+                this.loadTabData('boOnly'),
+                this.loadTabData('partnerOnly')
+            ]);
+        } catch (error) {
+            console.error('❌ Impossible de préparer les données pour le rapport de réconciliation:', error);
+            this.popupService.showError('Impossible de préparer les données nécessaires au rapport.');
+            return;
+        }
         this.router.navigate(['/reconciliation-report']);
     }
 
@@ -3165,37 +3562,84 @@ export class ReconciliationResultsComponent implements OnInit, OnDestroy {
     }
 
     getBoKeys(match: Match): string[] {
-        // Colonnes TRXBO attendues (dans l'ordre selon l'image fournie)
-        const trxboColumns = [
-            'IDTransaction',
-            'téléphone client',
-            'montant',
-            'Service',
-            'Moyen de Paiement',
-            'Agence',
-            'Agent',
-            'Type agent',
-            'PIXI',
-            'Date',
-            'Numéro Trans',
-            'GU',
-            'GRX',
-            'Statut'
-        ];
-        
-        // Détecter si c'est un fichier TRXBO
         const availableKeys = Object.keys(match.boData).map(key => fixGarbledCharacters(key));
-        const isTRXBO = availableKeys.some(key => 
-            ['IDTransaction', 'téléphone client', 'GRX', 'Service', 'Numéro Trans GU', 'Numero Trans GU'].includes(key)
-        );
         
-        if (isTRXBO) {
-            // Pour TRXBO, retourner toutes les colonnes attendues dans l'ordre
-            return trxboColumns;
+        if (this.isTrxboKeySet(availableKeys)) {
+            this.ensureTrxboKeyMap(match.boData);
+            return this.TRXBO_COLUMNS;
         }
         
-        // Sinon, retourner toutes les colonnes disponibles
         return availableKeys;
+    }
+
+    private isTrxboKeySet(keys: string[]): boolean {
+        if (!keys || keys.length === 0) return false;
+        const normalizedKeys = keys.map(key => this.normalizeKeyName(key));
+        const indicators = [
+            'idtransaction',
+            'telephone client',
+            'montant',
+            'service',
+            'moyen de paiement',
+            'type agent',
+            'pixi',
+            'grx',
+            'numero trans',
+            'gu',
+            'statut',
+            'date'
+        ];
+        const score = indicators.reduce((count, indicator) => 
+            count + (normalizedKeys.some(column => column.includes(indicator)) ? 1 : 0),
+            0
+        );
+        return score >= 3;
+    }
+
+    private normalizeKeyName(key: string): string {
+        return fixGarbledCharacters(key || '')
+            .toLowerCase()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+    }
+
+    private ensureTrxboKeyMap(record: Record<string, string>): Map<string, string | null> {
+        if (!this.trxboKeyCache.has(record)) {
+            const recordKeys = Object.keys(record);
+            const map = new Map<string, string | null>();
+            this.TRXBO_COLUMNS.forEach(label => {
+                const matchedKey = this.findMatchingRecordKey(recordKeys, label);
+                map.set(label, matchedKey);
+            });
+            this.trxboKeyCache.set(record, map);
+        }
+        return this.trxboKeyCache.get(record)!;
+    }
+
+    private findMatchingRecordKey(recordKeys: string[], targetLabel: string): string | null {
+        const normalizedTarget = this.normalizeKeyName(targetLabel);
+        const exact = recordKeys.find(key => this.normalizeKeyName(key) === normalizedTarget);
+        if (exact) return exact;
+        
+        const variations = this.getColumnVariations(targetLabel);
+        for (const variation of variations) {
+            const normalizedVariation = this.normalizeKeyName(variation);
+            const candidate = recordKeys.find(key => this.normalizeKeyName(key) === normalizedVariation);
+            if (candidate) return candidate;
+        }
+        
+        return null;
+    }
+
+    private getTrxboValue(record: Record<string, string>, label: string): string {
+        const map = this.ensureTrxboKeyMap(record);
+        const originalKey = map.get(label);
+        if (originalKey && record[originalKey] !== undefined && record[originalKey] !== null) {
+            return record[originalKey].toString();
+        }
+        return '';
     }
 
     getPartnerKeys(match: Match): string[] {
@@ -3229,10 +3673,16 @@ export class ReconciliationResultsComponent implements OnInit, OnDestroy {
         const isOPPART = availableKeys.some(key => 
             ['ID Opération', 'Type Opération', 'Solde avant', 'Solde aprés', 'Numéro Trans GU', 'Numero Trans GU'].includes(key)
         );
+        const isTRXBO = this.isTrxboKeySet(availableKeys);
         
         if (isOPPART) {
             // Pour OPPART, retourner toutes les colonnes attendues dans l'ordre
             return oppartColumns;
+        }
+        
+        if (isTRXBO) {
+            this.ensureTrxboKeyMap(match.partnerData);
+            return this.TRXBO_COLUMNS;
         }
         
         // Sinon, retourner toutes les colonnes disponibles
@@ -3280,6 +3730,13 @@ export class ReconciliationResultsComponent implements OnInit, OnDestroy {
         }
         
         // Chercher avec la clé originale
+        if (this.isTrxboKeySet(Object.keys(match.boData).map(key => fixGarbledCharacters(key)))) {
+            const trxboValue = this.getTrxboValue(match.boData, correctedKey);
+            if (trxboValue) {
+                return trxboValue;
+            }
+        }
+        
         const originalKey = this.getOriginalKey(match.boData, correctedKey);
         if (originalKey && match.boData[originalKey]) {
             return match.boData[originalKey].toString();
@@ -3369,6 +3826,14 @@ export class ReconciliationResultsComponent implements OnInit, OnDestroy {
         }
         
         // Chercher avec la clé originale
+        const recordKeys = Object.keys(record).map(key => fixGarbledCharacters(key));
+        if (this.isTrxboKeySet(recordKeys)) {
+            const trxboValue = this.getTrxboValue(record, correctedKey);
+            if (trxboValue) {
+                return trxboValue;
+            }
+        }
+        
         const originalKey = this.getOriginalKey(record, correctedKey);
         if (originalKey && record[originalKey]) {
             return record[originalKey].toString();
@@ -3420,7 +3885,7 @@ export class ReconciliationResultsComponent implements OnInit, OnDestroy {
         });
         
         // Détecter le type de données basé sur les colonnes présentes (avec clés corrigées)
-        const isTRXBO = correctedKeys.some(key => ['IDTransaction', 'téléphone client', 'GRX'].includes(key));
+        const isTRXBO = this.isTrxboKeySet(correctedKeys);
         const isOPPART = correctedKeys.some(key => ['ID Opération', 'Type Opération', 'Solde avant', 'Solde aprés'].includes(key));
         const isUSSDPART = correctedKeys.some(key => ['Code service', 'Déstinataire', 'Token', 'SMS Action faite'].includes(key));
         
@@ -3431,18 +3896,10 @@ export class ReconciliationResultsComponent implements OnInit, OnDestroy {
             // Colonnes TRXBO autorisées (logique de filtrage originale)
             // Inclure les variations pour gérer les différences d'encodage
             allowedColumns = [
+                ...this.TRXBO_COLUMNS,
                 'ID',
-                'IDTransaction',
-                'téléphone client',
-                'telephone client',
-                'montant',
-                'Service',
-                'Agence',
-                'Date',
                 'Numéro Trans GU',
-                'Numero Trans GU',
-                'GRX',
-                'Statut'
+                'Numero Trans GU'
             ];
         } else if (isOPPART) {
             // Colonnes OPPART autorisées (logique de filtrage originale)
@@ -3636,36 +4093,13 @@ export class ReconciliationResultsComponent implements OnInit, OnDestroy {
     }
 
     getBoOnlyKeys(record: Record<string, string>): string[] {
-        // Colonnes TRXBO attendues (dans l'ordre selon l'image fournie)
-        const trxboColumns = [
-            'IDTransaction',
-            'téléphone client',
-            'montant',
-            'Service',
-            'Moyen de Paiement',
-            'Agence',
-            'Agent',
-            'Type agent',
-            'PIXI',
-            'Date',
-            'Numéro Trans',
-            'GU',
-            'GRX',
-            'Statut'
-        ];
-        
-        // Détecter si c'est un fichier TRXBO
         const availableKeys = Object.keys(record).map(key => fixGarbledCharacters(key));
-        const isTRXBO = availableKeys.some(key => 
-            ['IDTransaction', 'téléphone client', 'GRX', 'Service', 'Numéro Trans GU', 'Numero Trans GU'].includes(key)
-        );
         
-        if (isTRXBO) {
-            // Pour TRXBO, retourner toutes les colonnes attendues dans l'ordre
-            return trxboColumns;
+        if (this.isTrxboKeySet(availableKeys)) {
+            this.ensureTrxboKeyMap(record);
+            return this.TRXBO_COLUMNS;
         }
         
-        // Sinon, retourner toutes les colonnes disponibles
         return availableKeys;
     }
 
@@ -3695,32 +4129,12 @@ export class ReconciliationResultsComponent implements OnInit, OnDestroy {
             'groupe de réseau'
         ];
         
-        // Colonnes TRXBO attendues (pour les écarts partenaire qui proviennent de TRXBO)
-        const trxboColumns = [
-            'IDTransaction',
-            'téléphone client',
-            'montant',
-            'Service',
-            'Moyen de Paiement',
-            'Agence',
-            'Agent',
-            'Type agent',
-            'PIXI',
-            'Date',
-            'Numéro Trans',
-            'GU',
-            'GRX',
-            'Statut'
-        ];
-        
         // Détecter le type de fichier partenaire
         const availableKeys = Object.keys(record).map(key => fixGarbledCharacters(key));
         const isOPPART = availableKeys.some(key => 
             ['ID Opération', 'Type Opération', 'Solde avant', 'Solde aprés', 'Numéro Trans GU', 'Numero Trans GU'].includes(key)
         );
-        const isTRXBO = availableKeys.some(key => 
-            ['IDTransaction', 'téléphone client', 'GRX', 'Service', 'Numéro Trans GU', 'Numero Trans GU'].includes(key)
-        );
+        const isTRXBO = this.isTrxboKeySet(availableKeys);
         
         if (isOPPART) {
             // Pour OPPART, retourner toutes les colonnes attendues dans l'ordre
@@ -3729,7 +4143,8 @@ export class ReconciliationResultsComponent implements OnInit, OnDestroy {
         
         if (isTRXBO) {
             // Pour TRXBO, retourner toutes les colonnes attendues dans l'ordre
-            return trxboColumns;
+            this.ensureTrxboKeyMap(record);
+            return this.TRXBO_COLUMNS;
         }
         
         // Sinon, retourner toutes les colonnes disponibles
@@ -4019,11 +4434,8 @@ export class ReconciliationResultsComponent implements OnInit, OnDestroy {
     }
 
    async exportResults() {
-    // Si le sélecteur de colonnes n'est pas ouvert, l'ouvrir d'abord
-    if (!this.showExportColumnSelector) {
-        this.openExportColumnSelector();
-        return;
-    }
+    // Pour les correspondances, écarts BO et écarts Partenaire : exporter directement sans sélection de colonnes
+    // Pour le rapport des écarts : la sélection de colonnes est gérée par exportEcartReport()
     
     console.log('Début de l\'export...');
     console.log('Onglet actif:', this.activeTab);
@@ -4037,8 +4449,54 @@ export class ReconciliationResultsComponent implements OnInit, OnDestroy {
         const fileName = await this.promptFileName();
         if (!fileName) {
             console.log('Export annulé par l\'utilisateur');
-            this.closeExportColumnSelector();
             return;
+        }
+
+        // Initialiser toutes les colonnes comme sélectionnées pour exporter toutes les colonnes
+        // (pas de sélection de colonnes pour correspondances et écarts)
+        if (this.activeTab === 'matches' || this.activeTab === 'boOnly' || this.activeTab === 'partnerOnly') {
+            // Préparer les colonnes disponibles et toutes les sélectionner
+            this.exportColumnContext = this.activeTab;
+            this.exportAvailableColumns = [];
+            const allColumns = new Set<string>();
+            
+            if (this.activeTab === 'matches') {
+                const matches = this.getFilteredMatches();
+                matches.forEach(match => {
+                    Object.keys(match.boData).forEach(key => {
+                        const correctedKey = fixGarbledCharacters(key);
+                        allColumns.add(`BO_${correctedKey}`);
+                    });
+                    Object.keys(match.partnerData).forEach(key => {
+                        const correctedKey = fixGarbledCharacters(key);
+                        allColumns.add(`PARTENAIRE_${correctedKey}`);
+                    });
+                });
+            } else if (this.activeTab === 'boOnly') {
+                const boOnly = this.getFilteredBoOnly();
+                boOnly.forEach(record => {
+                    Object.keys(record).forEach(key => {
+                        const correctedKey = fixGarbledCharacters(key);
+                        allColumns.add(correctedKey);
+                    });
+                });
+            } else if (this.activeTab === 'partnerOnly') {
+                const partnerOnly = this.getFilteredPartnerOnly();
+                partnerOnly.forEach(record => {
+                    Object.keys(record).forEach(key => {
+                        const correctedKey = fixGarbledCharacters(key);
+                        allColumns.add(correctedKey);
+                    });
+                });
+            }
+            
+            this.exportAvailableColumns = Array.from(allColumns).sort();
+            
+            // Sélectionner toutes les colonnes par défaut
+            this.exportSelectedColumns = {};
+            this.exportAvailableColumns.forEach(col => {
+                this.exportSelectedColumns[col] = true;
+            });
         }
 
         // Première étape : Génération des fichiers
@@ -4050,9 +4508,6 @@ export class ReconciliationResultsComponent implements OnInit, OnDestroy {
         console.log('Début du téléchargement...');
         await this.downloadExcelFile(workbooks, fileName);
         console.log('Téléchargement terminé avec succès');
-        
-        // Fermer le sélecteur après l'export
-        this.closeExportColumnSelector();
 
     } catch (error) {
         console.error('Erreur lors de l\'export:', error);
@@ -5317,10 +5772,12 @@ private async downloadExcelFile(workbooks: ExcelJS.Workbook[], fileName: string)
     }
 
     private invalidateCache() {
+        this.cachedAgencySummary = null;
         this.cachedPagedAgencySummary = null;
         this.cachedTotalVolume = null;
         this.cachedTotalRecords = null;
         this.lastAgencySummaryHash = '';
+        this.lastResponseHash = '';
     }
 
     applyServiceFilter() {
@@ -5329,7 +5786,7 @@ private async downloadExcelFile(workbooks: ExcelJS.Workbook[], fileName: string)
         this.boOnlyPage = 1;
         this.partnerOnlyPage = 1;
         this.agencyPage = 1;
-        this.initializeFilteredData();
+        this.initializeFilteredData(!!this.activeTab);
         this.cdr.detectChanges();
         this.invalidateCache();
     }
@@ -5420,8 +5877,8 @@ private async downloadExcelFile(workbooks: ExcelJS.Workbook[], fileName: string)
     }
 
     handleExport() {
-        // Ouvrir le sélecteur de colonnes avant l'export
-        this.openExportColumnSelector();
+        // Exporter directement sans sélection de colonnes pour les correspondances
+        this.exportResults();
     }
 
     formatTime(ms: number): string {
@@ -5805,7 +6262,18 @@ private async downloadExcelFile(workbooks: ExcelJS.Workbook[], fileName: string)
     /**
      * Ouvre la popup de sélection des colonnes pour l'export (rapport d'écarts)
      */
-    openColumnSelector(): void {
+    async openColumnSelector(): Promise<void> {
+        try {
+            await Promise.all([
+                this.loadTabData('boOnly'),
+                this.loadTabData('partnerOnly')
+            ]);
+        } catch (error) {
+            console.error('❌ Impossible de préparer les données pour le rapport des écarts:', error);
+            this.popupService.showError('Impossible de préparer les données pour le rapport des écarts.');
+            return;
+        }
+        
         // Vérifier s'il y a au moins des écarts BO ou Partenaire
         const hasBoEcart = this.response?.boOnly && this.response.boOnly.length > 0;
         const hasPartnerEcart = this.response?.partnerOnly && this.response.partnerOnly.length > 0;
