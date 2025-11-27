@@ -89,7 +89,7 @@ export interface ReconciliationReportData {
                         </button>
                     </div>
                     <datalist id="agency-list">
-                        <option *ngFor="let agency of uniqueAgencies" [value]="agency">{{agency}}</option>
+                        <option *ngFor="let agency of filteredAgencies" [value]="agency">{{agency}}</option>
                     </datalist>
                 </div>
                 <div class="filter-group">
@@ -98,7 +98,7 @@ export interface ReconciliationReportData {
                         <input 
                             type="text" 
                             [(ngModel)]="selectedCountry" 
-                            (input)="filterReport()"
+                            (input)="onCountryFilterChange()"
                             placeholder="Tapez pour rechercher un pays..."
                             class="filter-input"
                             list="country-list">
@@ -318,7 +318,7 @@ export interface ReconciliationReportData {
                             </td>
                             <td class="match-cell">
                                 <ng-container *ngIf="editingRow !== item; else editMatches">
-                                    {{item.matches | number}}
+                                    {{getDisplayMatches(item) | number}}
                                 </ng-container>
                                 <ng-template #editMatches>
                                     <input 
@@ -391,7 +391,14 @@ export interface ReconciliationReportData {
                                     </ng-container>
                                     <ng-template #glpiInput>
                                         <div class="glpi-input-container" [class.glpi-disabled]="item.status === 'OK'">
-                                            <input [(ngModel)]="item.glpiId" placeholder="ID TICKET" class="edit-input" [disabled]="item.status === 'OK'"/>
+                                            <input 
+                                                [(ngModel)]="item.glpiId" 
+                                                placeholder="ID TICKET" 
+                                                class="edit-input" 
+                                                [disabled]="item.status === 'OK'"
+                                                (ngModelChange)="onGlpiIdInputChange(item, $event)"
+                                                (blur)="onGlpiIdInputBlur(item)"
+                                                (keyup.enter)="onGlpiIdInputEnter(item)"/>
                                             <button 
                                                 *ngIf="!item.glpiId || item.glpiId.trim() === ''" 
                                                 class="btn-glpi-create"
@@ -412,7 +419,7 @@ export interface ReconciliationReportData {
                                           (click)="!isRowLocked(item) && startEditStatus(item)" 
                                           [style.cursor]="isRowLocked(item) ? 'not-allowed' : 'pointer'"
                                           [title]="isRowLocked(item) ? 'Ligne verrouillée (OK + Terminé)' : 'Cliquer pour modifier'">
-                                        {{item.status}}
+                                        {{getDisplayStatus(item.status)}}
                                     </span>
                                 </ng-container>
                                 <ng-template #editStatus>
@@ -1486,7 +1493,8 @@ export class ReconciliationReportComponent implements OnInit, OnDestroy {
     uniqueCountries: string[] = [];
     uniqueDates: string[] = [];
     uniqueStatuses: string[] = [];
-    filteredServices: string[] = []; // Services filtrés selon l'agence sélectionnée
+    filteredAgencies: string[] = []; // Agences filtrées selon le pays sélectionné
+    filteredServices: string[] = []; // Services filtrés selon l'agence/pays sélectionnés
 
     statusOptions: string[] = ['OK', 'NOK', 'REPORTING INCOMPLET', 'REPORTING INDISPONIBLE', 'EN COURS.....'];
     commentOptions: string[] = ['ECARTS TRANSMIS', "PAS D'ECARTS CONSTATES", 'NOK'];
@@ -1507,6 +1515,11 @@ export class ReconciliationReportComponent implements OnInit, OnDestroy {
 
     // Pays autorisés pour le cloisonnement
     private allowedCountryCodes: string[] | null = null;
+    private readonly DEFAULT_STATUS = 'EN COURS.....';
+
+    // Gestion des sauvegardes automatiques de l'ID TICKET
+    private glpiAutoSaveTimers = new WeakMap<ReconciliationReportData, ReturnType<typeof setTimeout>>();
+    private lastSavedGlpiIds = new WeakMap<ReconciliationReportData, string>();
 
     constructor(
         private route: ActivatedRoute,
@@ -1593,16 +1606,26 @@ export class ReconciliationReportComponent implements OnInit, OnDestroy {
                                 boOnly: stats.boOnly,
                                 partnerOnly: preservedPartnerOnly, // Préserver la valeur originale
                                 mismatches: stats.mismatches,
-                                matchRate,
-                                status: this.computeStatusFromCounts(stats.matches, stats.boOnly, preservedPartnerOnly, stats.mismatches, item.totalTransactions),
-                                comment: this.buildCommentForCounts(stats.matches, stats.boOnly, preservedPartnerOnly, stats.mismatches),
+                                // matchRate et comment seront recalculés par recalculateMatchRate
+                                status: this.computeStatusFromCounts(
+                                    stats.matches,
+                                    stats.boOnly,
+                                    preservedPartnerOnly,
+                                    stats.mismatches,
+                                    item.totalTransactions
+                                ),
                                 traitement: traitementFinal
                             };
                         });
+                        this.enforceDefaultStatusForReportData();
+
+                        // Appliquer la règle métier de recalcul sur les lignes issues du résumé
+                        this.reportData.forEach(item => this.recalculateMatchRate(item));
                     } else {
                         // Pas de résumé → construire à partir des données en cours
                     this.generateReportData();
                     }
+                    this.syncLastSavedGlpiValues(this.reportData);
                     this.extractUniqueValues();
                     this.filterReport();
                     this.currentSource = 'live';
@@ -1802,7 +1825,7 @@ export class ReconciliationReportComponent implements OnInit, OnDestroy {
                 traitement: traitementDefault
             });
             
-            return {
+            const reportItem: ReconciliationReportData = {
                 date: item.date,
                 agency: item.agency,
                 service: item.service,
@@ -1822,15 +1845,23 @@ export class ReconciliationReportComponent implements OnInit, OnDestroy {
                     mismatches,
                     item.recordCount
                 ),
-                comment: this.buildCommentForCounts(
-                    detailedStats.matches,
-                    boOnly,
-                    partnerOnly,
-                    mismatches
-                ),
+                comment: '',
                 traitement: traitementDefault
             };
+            this.updateCommentFromCounts(
+                reportItem,
+                detailedStats.matches,
+                boOnly,
+                partnerOnly,
+                mismatches,
+                { force: true }
+            );
+            return reportItem;
         });
+        this.enforceDefaultStatusForReportData();
+
+        // Appliquer la règle de recalcul (transactions / écarts / correspondances)
+        this.reportData.forEach(item => this.recalculateMatchRate(item));
         
         // Trier par date décroissante (les plus récentes en premier)
         this.reportData.sort((a, b) => {
@@ -1841,6 +1872,8 @@ export class ReconciliationReportComponent implements OnInit, OnDestroy {
         
         console.log('📊 Rapport final généré - reportData:', this.reportData);
         console.log('📊 Premier élément du rapport:', this.reportData[0]);
+
+        this.syncLastSavedGlpiValues(this.reportData);
     }
 
     private calculateTotalPartnerOnly(): number {
@@ -2085,13 +2118,12 @@ export class ReconciliationReportComponent implements OnInit, OnDestroy {
             data.totalVolume += this.parseAmount(record['amount'] || record['montant'] || '0');
         });
 
-        // Calculer les taux de correspondance
-        // Le taux de correspondance = (nombre de correspondances / nombre de transactions) * 100
+        // Calculer les taux de correspondance (valeur initiale)
         this.reportData = Array.from(groupedData.values()).map(data => {
             // Calculer le nombre total de transactions (correspondances + écarts BO + écarts partenaires + incohérences)
             const totalTransactions = data.matches + data.boOnly + data.partnerOnly + data.mismatches;
             const rate = totalTransactions > 0 ? (data.matches / totalTransactions) * 100 : 0;
-            
+
             // Définir le traitement par défaut selon la présence d'écarts
             // Convertir en nombres pour s'assurer que les valeurs sont numériques
             const boOnlyNum = Number(data.boOnly) || 0;
@@ -2100,8 +2132,8 @@ export class ReconciliationReportComponent implements OnInit, OnDestroy {
             const totalEcarts = boOnlyNum + partnerOnlyNum + mismatchesNum;
             const traitementDefault = totalEcarts > 0 ? 'Niveau Support' : 'Niveau Group';
             
-            return {
-            ...data,
+            const reportItem: ReconciliationReportData = {
+                ...data,
                 totalTransactions: totalTransactions,
                 matchRate: rate,
                 status: this.computeStatusFromCounts(
@@ -2111,10 +2143,23 @@ export class ReconciliationReportComponent implements OnInit, OnDestroy {
                     data.mismatches,
                     totalTransactions
                 ),
-                comment: this.buildCommentForCounts(data.matches, data.boOnly, data.partnerOnly, data.mismatches),
+                comment: '',
                 traitement: traitementDefault
             };
+            this.updateCommentFromCounts(
+                reportItem,
+                data.matches,
+                data.boOnly,
+                data.partnerOnly,
+                data.mismatches,
+                { force: true }
+            );
+            return reportItem;
         });
+        this.enforceDefaultStatusForReportData();
+
+        // Appliquer la règle métier de recalcul sur chaque ligne
+        this.reportData.forEach(item => this.recalculateMatchRate(item));
         
         // Trier par date décroissante (les plus récentes en premier)
         this.reportData.sort((a, b) => {
@@ -2125,28 +2170,106 @@ export class ReconciliationReportComponent implements OnInit, OnDestroy {
         
         // Mettre à jour la pagination après génération des données
         this.updatePagination();
+
+        this.syncLastSavedGlpiValues(this.reportData);
     }
 
     private getGroupKey(record: Record<string, string>): string {
-        const agency = record['agency'] || record['agence'] || 'Inconnue';
-        const service = record['service'] || record['type'] || 'Inconnu';
-        const country = record['country'] || record['pays'] || 'Inconnu';
-        const date = record['date'] || record['transaction_date'] || new Date().toISOString().split('T')[0];
+        // Harmoniser la récupération des métadonnées (Agence / Service / Pays / Date)
+        // avec la page de résultats (`/results`) pour éviter les valeurs "Inconnue"
+        // et surtout pour que la date utilisée pour le regroupement soit la même.
+        const agency =
+            record['agency'] ||
+            record['agence'] ||
+            record['Agence'] ||
+            record['AGENCE'] ||
+            '';
+
+        const service =
+            record['service'] ||
+            record['Service'] ||
+            record['SERVICE'] ||
+            record['type'] ||
+            '';
+
+        const country =
+            record['country'] ||
+            record['Pays'] ||
+            record['PAYS'] ||
+            record['pays'] ||
+            record['Pays provenance'] ||
+            '';
+
+        // La page `/results` utilise principalement :
+        // ['Date opération', 'Date', 'dateOperation', 'date_operation', 'DATE']
+        // On réutilise la même logique ici avant de tomber sur les champs techniques.
+        const rawDate =
+            record['Date opération'] ||
+            record['Date'] ||
+            record['dateOperation'] ||
+            record['date_operation'] ||
+            record['DATE'] ||
+            record['date'] ||
+            record['transaction_date'] ||
+            '';
+
+        const date = rawDate && String(rawDate).trim() !== ''
+            ? String(rawDate)
+            : new Date().toISOString().split('T')[0];
+
+        const safeAgency = agency || 'Inconnue';
+        const safeService = service || 'Inconnu';
+        const safeCountry = country || 'Inconnu';
         
-        return `${agency}|${service}|${country}|${date}`;
+        return `${safeAgency}|${safeService}|${safeCountry}|${date}`;
     }
 
     private createEmptyReportData(record: Record<string, string>): ReconciliationReportData {
-        const agency = record['agency'] || record['agence'] || 'Inconnue';
-        const service = record['service'] || record['type'] || 'Inconnu';
-        const country = record['country'] || record['pays'] || 'Inconnu';
-        const date = record['date'] || record['transaction_date'] || new Date().toISOString().split('T')[0];
+        const agency =
+            record['agency'] ||
+            record['agence'] ||
+            record['Agence'] ||
+            record['AGENCE'] ||
+            '';
+
+        const service =
+            record['service'] ||
+            record['Service'] ||
+            record['SERVICE'] ||
+            record['type'] ||
+            '';
+
+        const country =
+            record['country'] ||
+            record['Pays'] ||
+            record['PAYS'] ||
+            record['pays'] ||
+            record['Pays provenance'] ||
+            '';
+
+        const rawDate =
+            record['Date opération'] ||
+            record['Date'] ||
+            record['dateOperation'] ||
+            record['date_operation'] ||
+            record['DATE'] ||
+            record['date'] ||
+            record['transaction_date'] ||
+            '';
+
+        const date = rawDate && String(rawDate).trim() !== ''
+            ? String(rawDate)
+            : new Date().toISOString().split('T')[0];
+
+        const safeAgency = agency || 'Inconnue';
+        const safeService = service || 'Inconnu';
+        const safeCountry = country || 'Inconnu';
 
         return {
             date,
-            agency,
-            service,
-            country,
+            agency: safeAgency,
+            service: safeService,
+            country: safeCountry,
             glpiId: '',
             totalTransactions: 0,
             totalVolume: 0,
@@ -2155,7 +2278,7 @@ export class ReconciliationReportComponent implements OnInit, OnDestroy {
             partnerOnly: 0,
             mismatches: 0,
             matchRate: 0,
-            status: '',
+            status: this.DEFAULT_STATUS,
             comment: '',
             traitement: undefined
         };
@@ -2175,8 +2298,11 @@ export class ReconciliationReportComponent implements OnInit, OnDestroy {
         this.uniqueDates = [...new Set(this.reportData.map(item => item.date))].sort();
         this.uniqueStatuses = [...new Set(this.reportData.map(item => item.status).filter(status => status && status.trim() !== ''))].sort();
         
-        // Initialiser les services filtrés avec tous les services
+        // Initialiser les listes filtrées
+        this.filteredAgencies = [...this.uniqueAgencies];
         this.filteredServices = [...this.uniqueServices];
+        this.updateFilteredAgencies();
+        this.updateFilteredServices();
         
         // Initialiser filteredReportData avec toutes les données si pas encore fait
         if (this.filteredReportData.length === 0) {
@@ -2191,22 +2317,47 @@ export class ReconciliationReportComponent implements OnInit, OnDestroy {
     }
 
     /**
-     * Met à jour la liste des services filtrés selon l'agence sélectionnée
+     * Met à jour la liste des agences filtrées selon le pays sélectionné
+     */
+    private updateFilteredAgencies(): void {
+        const normalizedCountry = this.selectedCountry?.trim() ?? '';
+
+        if (!normalizedCountry) {
+            this.filteredAgencies = [...this.uniqueAgencies];
+            return;
+        }
+
+        const countrySearch = normalizedCountry.toLowerCase();
+        const agenciesForCountry = new Set<string>();
+        this.reportData
+            .filter(item => item.country?.toLowerCase().includes(countrySearch))
+            .forEach(item => agenciesForCountry.add(item.agency));
+        
+        this.filteredAgencies = Array.from(agenciesForCountry).sort();
+    }
+
+    /**
+     * Met à jour la liste des services filtrés selon l'agence/pays sélectionnés
      */
     private updateFilteredServices(): void {
-        if (!this.selectedAgency) {
-            // Si aucune agence sélectionnée, afficher tous les services
+        const agencySearch = this.selectedAgency ? this.selectedAgency.trim().toLowerCase() : null;
+        const countrySearch = this.selectedCountry ? this.selectedCountry.trim().toLowerCase() : null;
+
+        if (!agencySearch && !countrySearch) {
             this.filteredServices = [...this.uniqueServices];
-        } else {
-            // Filtrer les services selon l'agence sélectionnée
-            const servicesForAgency = new Set<string>();
-            this.reportData
-                .filter(item => item.agency.toLowerCase().includes(this.selectedAgency.toLowerCase()))
-                .forEach(item => {
-                    servicesForAgency.add(item.service);
-                });
-            this.filteredServices = Array.from(servicesForAgency).sort();
+            return;
         }
+
+        const servicesForSelection = new Set<string>();
+        this.reportData
+            .filter(item => {
+                const matchesCountry = !countrySearch || item.country?.toLowerCase().includes(countrySearch);
+                const matchesAgency = !agencySearch || item.agency?.toLowerCase().includes(agencySearch);
+                return matchesCountry && matchesAgency;
+            })
+            .forEach(item => servicesForSelection.add(item.service));
+
+        this.filteredServices = Array.from(servicesForSelection).sort();
     }
 
     /**
@@ -2219,6 +2370,33 @@ export class ReconciliationReportComponent implements OnInit, OnDestroy {
         // Mettre à jour la liste des services disponibles pour cette agence
         this.updateFilteredServices();
         
+        this.filterReport();
+    }
+
+    /**
+     * Gère le changement de filtre pays avec cloisonnement agence/service
+     */
+    onCountryFilterChange(): void {
+        this.updateFilteredAgencies();
+
+        if (this.selectedAgency) {
+            const normalizedAgency = this.selectedAgency.toLowerCase();
+            const agencyStillAvailable = this.filteredAgencies.some(agency => agency.toLowerCase() === normalizedAgency);
+            if (!agencyStillAvailable) {
+                this.selectedAgency = '';
+            }
+        }
+
+        this.updateFilteredServices();
+
+        if (this.selectedService) {
+            const normalizedService = this.selectedService.toLowerCase();
+            const serviceStillAvailable = this.filteredServices.some(service => service.toLowerCase() === normalizedService);
+            if (!serviceStillAvailable) {
+                this.selectedService = '';
+            }
+        }
+
         this.filterReport();
     }
 
@@ -2241,6 +2419,8 @@ export class ReconciliationReportComponent implements OnInit, OnDestroy {
 
     clearCountryFilter(): void {
         this.selectedCountry = '';
+        this.updateFilteredAgencies();
+        this.updateFilteredServices();
         this.filterReport();
     }
 
@@ -2347,33 +2527,79 @@ export class ReconciliationReportComponent implements OnInit, OnDestroy {
         if (matches > 0 && boOnly === 0 && partnerOnly === 0 && mismatches === 0) return 'OK';
         // Incomplet si uniquement un côté est présent sans correspondances
         if (matches === 0 && ((boOnly > 0 && partnerOnly === 0) || (partnerOnly > 0 && boOnly === 0))) return 'REPORTING INCOMPLET';
-        // Sinon NOK
-        return 'NOK';
+        // Sinon statut par défaut "EN COURS"
+        return this.DEFAULT_STATUS;
     }
 
     private buildCommentForCounts(matches: number, boOnly: number, partnerOnly: number, mismatches: number): string {
-        // Si pas d'écarts (correspondances = total transactions), retourner automatiquement "PAS D'ECARTS CONSTATES"
-        if (boOnly === 0 && partnerOnly === 0 && mismatches === 0) {
-            return "PAS D'ECARTS CONSTATES";
-        }
-        
         const parts: string[] = [];
+
+        // Appliquer la règle de recouvrement BO / Partenaire pour l'affichage
+        const effectivePartnerOnly =
+            boOnly > 0 && partnerOnly > 0
+                ? Math.max(0, partnerOnly - Math.min(boOnly, partnerOnly))
+                : partnerOnly;
+
         parts.push(`${matches} correspondances`);
         if (boOnly > 0) parts.push(`${boOnly} écart(s) BO`);
-        if (partnerOnly > 0) parts.push(`${partnerOnly} écart(s) Partenaire`);
+        if (effectivePartnerOnly > 0) parts.push(`${effectivePartnerOnly} écart(s) Partenaire`);
         if (mismatches > 0) parts.push(`${mismatches} incohérence(s)`);
         return parts.join(' • ');
     }
 
+    private shouldAutoUpdateComment(item: ReconciliationReportData | null | undefined, options?: { force?: boolean }): boolean {
+        return !!options?.force;
+    }
+
+    private updateCommentFromCounts(
+        item: ReconciliationReportData,
+        matches: number,
+        boOnly: number,
+        partnerOnly: number,
+        mismatches: number,
+        options?: { force?: boolean }
+    ): void {
+        if (!item) {
+            return;
+        }
+        if (!this.shouldAutoUpdateComment(item, options)) {
+            return;
+        }
+        item.comment = this.buildCommentForCounts(matches, boOnly, partnerOnly, mismatches);
+    }
+
+    private normalizeStatus(status?: string | null): string {
+        const value = (status ?? '').trim();
+        return value === '' ? this.DEFAULT_STATUS : value;
+    }
+
+    private applyDefaultStatus(item: ReconciliationReportData): ReconciliationReportData {
+        if (!item) {
+            return item;
+        }
+        item.status = this.normalizeStatus(item.status);
+        return item;
+    }
+
+    private enforceDefaultStatusForReportData(): void {
+        this.reportData = this.reportData.map(item => this.applyDefaultStatus(item));
+    }
+
+    getDisplayStatus(status?: string | null): string {
+        return this.normalizeStatus(status);
+    }
+
     /**
-     * Recalcule les données selon le statut sélectionné
-     * Si le statut passe à "OK", les écarts sont réinitialisés à 0 et ajoutés aux correspondances
+     * Recalcule les données selon le statut sélectionné.
+     * Si le statut passe à "OK", seules les correspondances sont alignées sur le total
+     * tout en conservant les écarts visibles pour l'utilisateur.
      */
     private recalculateDataBasedOnStatus(item: ReconciliationReportData): ReconciliationReportData {
         const matches = this.normalizeNumericValue(item.matches);
         const boOnly = this.normalizeNumericValue(item.boOnly);
         const partnerOnly = this.normalizeNumericValue(item.partnerOnly);
         const mismatches = this.normalizeNumericValue(item.mismatches);
+        const totalTransactions = this.normalizeNumericValue(item.totalTransactions);
 
         const recalculated = { 
             ...item,
@@ -2382,10 +2608,12 @@ export class ReconciliationReportComponent implements OnInit, OnDestroy {
             partnerOnly,
             mismatches
         };
-        const manualComment = item.comment ?? '';
-        const hasManualComment = manualComment.trim().length > 0;
+        const previousComment = item.comment ?? '';
 
-        // Si le statut est "OK", réinitialiser les écarts et les ajouter aux correspondances
+        const totalEcart = boOnly + partnerOnly + mismatches;
+        const effectiveTotalTransactions = totalTransactions > 0 ? totalTransactions : matches + totalEcart;
+
+        // Si le statut est "OK", aligner les correspondances sur le total et solder les écarts
         if (item.status === 'OK') {
             console.log('🔄 Recalcul pour statut OK:', {
                 avant: {
@@ -2397,19 +2625,18 @@ export class ReconciliationReportComponent implements OnInit, OnDestroy {
                 }
             });
 
-            // Ajouter tous les écarts aux correspondances
-            const totalEcart = boOnly + partnerOnly + mismatches;
-            recalculated.matches = matches + totalEcart;
+            // Les correspondances doivent refléter la totalité des transactions
+            recalculated.matches = effectiveTotalTransactions;
             
-            // Réinitialiser les écarts à 0
+            // Les écarts sont soldés (remis à zéro) puisque la ligne est finalisée
             recalculated.boOnly = 0;
             recalculated.partnerOnly = 0;
             recalculated.mismatches = 0;
             
             // Recalculer le nombre total de transactions et le taux de correspondance
-            recalculated.totalTransactions = recalculated.matches + recalculated.boOnly + recalculated.partnerOnly + recalculated.mismatches;
-            recalculated.matchRate = recalculated.totalTransactions > 0 ? 
-                (recalculated.matches / recalculated.totalTransactions) * 100 : 0;
+            recalculated.totalTransactions = effectiveTotalTransactions;
+            recalculated.matchRate = effectiveTotalTransactions > 0 ? 
+                (recalculated.matches / effectiveTotalTransactions) * 100 : 0;
             
             console.log('🔄 Recalcul pour statut OK:', {
                 apres: {
@@ -2423,21 +2650,14 @@ export class ReconciliationReportComponent implements OnInit, OnDestroy {
                 }
             });
         } else {
-            // Pour les autres statuts, recalculer le nombre total de transactions et le taux de correspondance normalement
-            recalculated.totalTransactions = recalculated.matches + recalculated.boOnly + recalculated.partnerOnly + recalculated.mismatches;
-            recalculated.matchRate = recalculated.totalTransactions > 0 ? 
-                (recalculated.matches / recalculated.totalTransactions) * 100 : 0;
+            // Pour les autres statuts, conserver les valeurs saisies mais fiabiliser les totaux
+            recalculated.totalTransactions = effectiveTotalTransactions;
+            recalculated.matchRate = effectiveTotalTransactions > 0 ? 
+                (recalculated.matches / effectiveTotalTransactions) * 100 : 0;
             
         }
 
-        const generatedComment = this.buildCommentForCounts(
-            recalculated.matches,
-            recalculated.boOnly,
-            recalculated.partnerOnly,
-            recalculated.mismatches
-        );
-
-        recalculated.comment = hasManualComment ? manualComment : generatedComment;
+        recalculated.comment = previousComment;
 
         return recalculated;
     }
@@ -2452,9 +2672,8 @@ export class ReconciliationReportComponent implements OnInit, OnDestroy {
     // Compteurs d'écarts
     get inProgressDiscrepancies(): number {
         if (!this.filteredReportData) return 0;
-        return this.filteredReportData
-            .filter(item => (item.status || '').toUpperCase().includes('EN COURS'))
-            .reduce((sum, item) => sum + (item.boOnly || 0) + (item.partnerOnly || 0) + (item.mismatches || 0), 0);
+        // Afficher le total de la colonne "Écarts Partenaire" comme demandé
+        return this.filteredReportData.reduce((sum, item) => sum + (item.partnerOnly || 0), 0);
     }
 
     get treatedDiscrepancies(): number {
@@ -2960,6 +3179,125 @@ export class ReconciliationReportComponent implements OnInit, OnDestroy {
         window.open(url, '_blank', 'noopener,noreferrer');
     }
 
+    onGlpiIdInputChange(item: ReconciliationReportData, value: string) {
+        if (!item || !item.id || this.editingRow === item) {
+            return;
+        }
+
+        const trimmed = (value || '').trim();
+        if (!trimmed) {
+            this.clearGlpiAutoSaveTimer(item);
+            return;
+        }
+
+        this.clearGlpiAutoSaveTimer(item);
+        const timer = setTimeout(() => this.triggerGlpiAutoSave(item), 800);
+        this.glpiAutoSaveTimers.set(item, timer);
+    }
+
+    onGlpiIdInputBlur(item: ReconciliationReportData) {
+        if (!item) return;
+        if (!item.id) {
+            if ((item.glpiId || '').trim()) {
+                this.popupService.showWarning('Ligne non sauvegardée', 'Veuillez sauvegarder la ligne avant de renseigner un ID TICKET.');
+            }
+            return;
+        }
+        this.triggerGlpiAutoSave(item, true);
+    }
+
+    onGlpiIdInputEnter(item: ReconciliationReportData) {
+        if (!item) return;
+        if (!item.id) {
+            if ((item.glpiId || '').trim()) {
+                this.popupService.showWarning('Ligne non sauvegardée', 'Veuillez sauvegarder la ligne avant de renseigner un ID TICKET.');
+            }
+            return;
+        }
+        this.triggerGlpiAutoSave(item, true);
+    }
+
+    private triggerGlpiAutoSave(item: ReconciliationReportData, force = false) {
+        this.clearGlpiAutoSaveTimer(item);
+
+        if (this.editingRow === item) {
+            return;
+        }
+
+        const glpiValue = (item.glpiId || '').trim();
+        if (!glpiValue) {
+            return;
+        }
+
+        const lastSaved = this.lastSavedGlpiIds.get(item) || '';
+        if (!force && glpiValue === lastSaved) {
+            return;
+        }
+
+        this.saveGlpiIdAutomatically(item, glpiValue);
+    }
+
+    private saveGlpiIdAutomatically(item: ReconciliationReportData, glpiId: string) {
+        if (!item.id) {
+            return;
+        }
+
+        const payload = this.buildUpdatePayload(item, { glpiId });
+        this.http.put<any>(`/api/result8rec/${item.id}`, payload)
+            .subscribe({
+                next: () => {
+                    item.glpiId = glpiId;
+                    this.lastSavedGlpiIds.set(item, glpiId);
+                    this.popupService.showSuccess('ID TICKET enregistré automatiquement');
+                },
+                error: (err: HttpErrorResponse) => {
+                    console.error('❌ Erreur lors de la sauvegarde automatique de l\'ID TICKET', err);
+                    this.popupService.showError('Erreur', 'Impossible d\'enregistrer automatiquement l\'ID TICKET.');
+                }
+            });
+    }
+
+    private clearGlpiAutoSaveTimer(item: ReconciliationReportData) {
+        const timer = this.glpiAutoSaveTimers.get(item);
+        if (timer) {
+            clearTimeout(timer);
+            this.glpiAutoSaveTimers.delete(item);
+        }
+    }
+
+    private syncLastSavedGlpiValues(items: ReconciliationReportData[]) {
+        if (!items || !items.length) {
+            return;
+        }
+        items.forEach(row => {
+            this.lastSavedGlpiIds.set(row, (row.glpiId || '').trim());
+        });
+    }
+
+    private buildUpdatePayload(item: ReconciliationReportData, overrides: Partial<ReconciliationReportData> = {}) {
+        const data = { ...item, ...overrides };
+        const traitementValue = typeof data.traitement === 'string' ? data.traitement.trim() : '';
+        const traitement = traitementValue !== '' ? data.traitement : this.determineDefaultTraitement(data);
+
+        return {
+            date: data.date,
+            agency: data.agency,
+            service: data.service,
+            country: data.country,
+            totalTransactions: data.totalTransactions,
+            totalVolume: data.totalVolume,
+            matches: data.matches,
+            boOnly: data.boOnly,
+            partnerOnly: data.partnerOnly,
+            mismatches: data.mismatches,
+            matchRate: data.matchRate,
+            status: data.status,
+            comment: data.comment,
+            traitement,
+            glpiId: data.glpiId || ''
+        };
+    }
+
     private loadSavedReportFromDatabase() {
         this.loadedFromDb = true;
         this.http.get<any[]>('/api/result8rec')
@@ -3007,6 +3345,12 @@ export class ReconciliationReportComponent implements OnInit, OnDestroy {
                         traitement: traitement
                     };
                 });
+                this.enforceDefaultStatusForReportData();
+
+                // Appliquer la logique de recalcul sur les données chargées depuis la base
+                this.reportData.forEach(item => this.recalculateMatchRate(item));
+                
+                this.syncLastSavedGlpiValues(this.reportData);
                 
                 // Trier par date décroissante (les plus récentes en premier)
                 this.reportData.sort((a, b) => {
@@ -3132,7 +3476,12 @@ export class ReconciliationReportComponent implements OnInit, OnDestroy {
         if (!confirmed) return;
 
         // Recalculer les valeurs selon le statut
-        const recalculatedData = this.recalculateDataBasedOnStatus(item);
+        // ⚠️ Pour le statut OK, les données (matches, écarts, commentaire) ont déjà été
+        // recalculées dans recalculateDataBasedOnStatus lors du changement de statut.
+        // On réutilise donc directement l'item courant pour ne pas perdre la mémoire des écarts.
+        const recalculatedData = item.status === 'OK'
+            ? { ...item }
+            : this.recalculateDataBasedOnStatus(item);
 
         // Définir le traitement par défaut si non spécifié
         const traitement = recalculatedData.traitement && recalculatedData.traitement.trim() !== ''
@@ -3453,14 +3802,6 @@ export class ReconciliationReportComponent implements OnInit, OnDestroy {
         // Recalculer le taux de correspondance si nécessaire
         this.recalculateMatchRate(item);
 
-        // Mettre à jour le commentaire avec les nouvelles valeurs
-        item.comment = this.buildCommentForCounts(
-            item.matches,
-            item.boOnly,
-            item.partnerOnly,
-            item.mismatches
-        );
-
         // Si c'est une nouvelle ligne (pas d'ID), sauvegarder
         if (!item.id) {
             await this.confirmAndSave(item);
@@ -3521,26 +3862,87 @@ export class ReconciliationReportComponent implements OnInit, OnDestroy {
     }
 
     private recalculateMatchRate(item: ReconciliationReportData) {
-        const matches = this.normalizeNumericValue(item.matches);
+        // Normaliser toutes les valeurs numériques
+        const totalTransactions = this.normalizeNumericValue(item.totalTransactions);
+        let matches = this.normalizeNumericValue(item.matches);
         const boOnly = this.normalizeNumericValue(item.boOnly);
         const partnerOnly = this.normalizeNumericValue(item.partnerOnly);
         const mismatches = this.normalizeNumericValue(item.mismatches);
 
+        if (totalTransactions > 0) {
+            // Calculer l'écart Partenaire effectif en tenant compte des écarts BO déjà pris en compte
+            const effectivePartnerOnly =
+                boOnly > 0 && partnerOnly > 0
+                    ? Math.max(0, partnerOnly - Math.min(boOnly, partnerOnly))
+                    : partnerOnly;
+
+            const totalEcarts = boOnly + effectivePartnerOnly + mismatches;
+
+            if (totalEcarts > 0) {
+                // Correspondances = Transactions - (Écarts BO + Écarts Partenaire restants + Incohérences)
+                matches = Math.max(0, totalTransactions - totalEcarts);
+            } else {
+                // Aucun écart : 100% de correspondance
+                matches = totalTransactions;
+            }
+        } else {
+            // Pas de transactions, donc pas de correspondances
+            matches = 0;
+        }
+
+        // Réaffecter les valeurs recalculées
+        item.totalTransactions = totalTransactions;
         item.matches = matches;
         item.boOnly = boOnly;
         item.partnerOnly = partnerOnly;
         item.mismatches = mismatches;
 
-        const total = matches + boOnly + partnerOnly + mismatches;
-        item.totalTransactions = total;
-        if (total > 0) {
-            item.matchRate = (matches / total) * 100;
+        // Calcul du taux de correspondance basé sur Transactions et Correspondances
+        if (totalTransactions > 0) {
+            if (boOnly === 0 && partnerOnly === 0 && mismatches === 0) {
+                // Cas "aucun écart" : taux forcé à 100%
+                item.matchRate = 100;
+            } else {
+                item.matchRate = (matches / totalTransactions) * 100;
+            }
         } else {
             item.matchRate = 0;
         }
         
-        // Mettre à jour automatiquement le commentaire avec les nouvelles valeurs
-        item.comment = this.buildCommentForCounts(matches, boOnly, partnerOnly, mismatches);
+        this.updateCommentFromCounts(item, matches, boOnly, partnerOnly, mismatches);
+    }
+
+    /**
+     * Calcule le nombre de correspondances à afficher selon les règles métier,
+     * sans dépendre des valeurs éventuellement incohérentes venant de la base.
+     */
+    getDisplayMatches(item: ReconciliationReportData): number {
+        const totalTransactions = this.normalizeNumericValue(item.totalTransactions);
+        const boOnly = this.normalizeNumericValue(item.boOnly);
+        const partnerOnly = this.normalizeNumericValue(item.partnerOnly);
+        const mismatches = this.normalizeNumericValue(item.mismatches);
+        let matches = this.normalizeNumericValue(item.matches);
+
+        if (totalTransactions <= 0) {
+            return 0;
+        }
+
+        // Calculer l'écart Partenaire effectif en tenant compte des écarts BO déjà pris en compte
+        const effectivePartnerOnly =
+            boOnly > 0 && partnerOnly > 0
+                ? Math.max(0, partnerOnly - Math.min(boOnly, partnerOnly))
+                : partnerOnly;
+
+        const totalEcarts = boOnly + effectivePartnerOnly + mismatches;
+
+        if (totalEcarts <= 0) {
+            // Aucun écart : correspondances = transactions
+            return totalTransactions;
+        }
+
+        // Correspondances affichées = Transactions - (Écarts BO + Écarts Partenaire restants + Incohérences)
+        matches = Math.max(0, totalTransactions - totalEcarts);
+        return matches;
     }
 
     // Méthode pour transférer une partie des écarts vers les correspondances
@@ -3596,26 +3998,10 @@ export class ReconciliationReportComponent implements OnInit, OnDestroy {
         // Recalculer le taux de correspondance
         this.recalculateMatchRate(item);
 
-        // Mettre à jour le commentaire avec les nouvelles valeurs
-        item.comment = this.buildCommentForCounts(
-            item.matches,
-            item.boOnly,
-            item.partnerOnly,
-            item.mismatches
-        );
-
         // Sauvegarder si la ligne existe déjà en base
         if (item.id) {
-            // Recalculer les valeurs selon le statut
+            // Recalculer les valeurs selon le statut (commentaire inclus)
             const recalculatedData = this.recalculateDataBasedOnStatus(item);
-            
-            // S'assurer que le commentaire est à jour
-            recalculatedData.comment = this.buildCommentForCounts(
-                recalculatedData.matches,
-                recalculatedData.boOnly,
-                recalculatedData.partnerOnly,
-                recalculatedData.mismatches
-            );
             
             // Définir le traitement par défaut si non spécifié
             const traitement = recalculatedData.traitement && recalculatedData.traitement.trim() !== ''
@@ -3678,13 +4064,14 @@ export class ReconciliationReportComponent implements OnInit, OnDestroy {
             partnerOnly: 0,
             mismatches: 0,
             matchRate: 0,
-            status: '',
+            status: this.DEFAULT_STATUS,
             comment: '',
             traitement: undefined
         };
 
         // Ajouter au début du tableau
         this.reportData.unshift(newRow);
+        this.lastSavedGlpiIds.set(newRow, '');
         
         // Mettre à jour les données filtrées et la pagination
         this.extractUniqueValues();
@@ -3695,9 +4082,9 @@ export class ReconciliationReportComponent implements OnInit, OnDestroy {
     }
 
     // Méthode pour convertir le statut en classe CSS
-    getStatusClass(status: string): string {
-        if (!status) return 'status-badge';
-        const cleanStatus = status.toLowerCase().replace(/\s+/g, '-');
+    getStatusClass(status?: string | null): string {
+        const normalizedStatus = this.normalizeStatus(status);
+        const cleanStatus = normalizedStatus.toLowerCase().replace(/\s+/g, '-');
         return `status-badge status-${cleanStatus}`;
     }
 
@@ -3793,16 +4180,8 @@ export class ReconciliationReportComponent implements OnInit, OnDestroy {
             // Recalculer le taux de correspondance si nécessaire
             this.recalculateMatchRate(item);
 
-            // Recalculer les données selon le statut (met les écarts à 0 et les ajoute aux correspondances)
+            // Recalculer les données selon le statut (logique centralisée dans recalculateDataBasedOnStatus)
             const recalculatedData = this.recalculateDataBasedOnStatus(item);
-
-            // Mettre à jour le commentaire avec les nouvelles valeurs
-            recalculatedData.comment = this.buildCommentForCounts(
-                recalculatedData.matches,
-                recalculatedData.boOnly,
-                recalculatedData.partnerOnly,
-                recalculatedData.mismatches
-            );
 
             // Mettre à jour l'item avec les données recalculées
             Object.assign(item, recalculatedData);

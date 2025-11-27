@@ -1931,6 +1931,25 @@ export class ReconciliationResultsComponent implements OnInit, OnDestroy {
         'GRX',
         'Statut'
     ];
+    private readonly TYPE_OPERATION_KEYS: string[] = [
+        'Type Opération',
+        'Type Opération ',
+        'Type opération',
+        'Type operation',
+        'Type Op�ration',
+        'Type Operation',
+        'TYPE OPERATION',
+        'TYPE OPÉRATION',
+        'type operation',
+        'type_operation',
+        'typeOperation',
+        'TypeOperation',
+        'TYPE_OPERATION',
+        'Operation',
+        'operation'
+    ];
+    private typeOperationKeyCache = new Map<string, string | null>();
+    private missingTypeOperationSignatures = new Set<string>();
     
     // Propriétés pour la sélection des colonnes d'export standard
     showExportColumnSelector = false;
@@ -3532,18 +3551,24 @@ export class ReconciliationResultsComponent implements OnInit, OnDestroy {
     }
 
     async openReconciliationReport() {
-        console.log('📈 Préparation du rapport de réconciliation...');
+        console.log('📈 Préparation du rapport de réconciliation (données en cours)...');
         try {
+            // Charger les données nécessaires pour chaque onglet
             await Promise.all([
                 this.loadTabData('matches'),
                 this.loadTabData('boOnly'),
                 this.loadTabData('partnerOnly')
             ]);
+
+            // Construire / actualiser le résumé par agence à partir des données courantes
+            await this.buildAgencySummaryData();
         } catch (error) {
             console.error('❌ Impossible de préparer les données pour le rapport de réconciliation:', error);
             this.popupService.showError('Impossible de préparer les données nécessaires au rapport.');
             return;
         }
+
+        // Rediriger vers la vue du rapport qui consommera les données en mémoire
         this.router.navigate(['/reconciliation-report']);
     }
 
@@ -3564,11 +3589,13 @@ export class ReconciliationResultsComponent implements OnInit, OnDestroy {
     getBoKeys(match: Match): string[] {
         const availableKeys = Object.keys(match.boData).map(key => fixGarbledCharacters(key));
         
+        // Retourner toutes les colonnes disponibles au lieu de se limiter à TRXBO_COLUMNS
+        // Conserver le mappage pour les valeurs si nécessaire
         if (this.isTrxboKeySet(availableKeys)) {
             this.ensureTrxboKeyMap(match.boData);
-            return this.TRXBO_COLUMNS;
         }
         
+        // Retourner toutes les colonnes disponibles
         return availableKeys;
     }
 
@@ -3598,11 +3625,10 @@ export class ReconciliationResultsComponent implements OnInit, OnDestroy {
 
     private normalizeKeyName(key: string): string {
         return fixGarbledCharacters(key || '')
-            .toLowerCase()
             .normalize('NFD')
             .replace(/[\u0300-\u036f]/g, '')
-            .replace(/\s+/g, ' ')
-            .trim();
+            .replace(/[\s'’`_-]+/g, '')
+            .toLowerCase();
     }
 
     private ensureTrxboKeyMap(record: Record<string, string>): Map<string, string | null> {
@@ -3643,49 +3669,16 @@ export class ReconciliationResultsComponent implements OnInit, OnDestroy {
     }
 
     getPartnerKeys(match: Match): string[] {
-        // Colonnes OPPART attendues (dans l'ordre selon la configuration)
-        const oppartColumns = [
-            'ID Opération',
-            'Type Opération',
-            'Montant',
-            'Solde avant',
-            'Solde aprés',
-            'Code proprietaire',
-            'Téléphone',
-            'Statut',
-            'ID Transaction',
-            'Num bordereau',
-            'Date opération',
-            'Date de versement',
-            'Banque appro',
-            'Login demandeur Appro',
-            'Login valideur Appro',
-            'Motif rejet',
-            'Frais connexion',
-            'Numéro Trans GU',
-            'Agent',
-            'Motif régularisation',
-            'groupe de réseau'
-        ];
-        
-        // Détecter si c'est un fichier OPPART
+        // Retourner toutes les colonnes partenaire disponibles
         const availableKeys = Object.keys(match.partnerData).map(key => fixGarbledCharacters(key));
-        const isOPPART = availableKeys.some(key => 
-            ['ID Opération', 'Type Opération', 'Solde avant', 'Solde aprés', 'Numéro Trans GU', 'Numero Trans GU'].includes(key)
-        );
+        
+        // Conserver le mappage pour les valeurs si nécessaire (pour TRXBO)
         const isTRXBO = this.isTrxboKeySet(availableKeys);
-        
-        if (isOPPART) {
-            // Pour OPPART, retourner toutes les colonnes attendues dans l'ordre
-            return oppartColumns;
-        }
-        
         if (isTRXBO) {
             this.ensureTrxboKeyMap(match.partnerData);
-            return this.TRXBO_COLUMNS;
         }
         
-        // Sinon, retourner toutes les colonnes disponibles
+        // Retourner toutes les colonnes disponibles au lieu de se limiter à une liste prédéfinie
         return availableKeys;
     }
 
@@ -4095,59 +4088,27 @@ export class ReconciliationResultsComponent implements OnInit, OnDestroy {
     getBoOnlyKeys(record: Record<string, string>): string[] {
         const availableKeys = Object.keys(record).map(key => fixGarbledCharacters(key));
         
+        // Retourner toutes les colonnes disponibles au lieu de se limiter à TRXBO_COLUMNS
+        // Conserver le mappage pour les valeurs si nécessaire
         if (this.isTrxboKeySet(availableKeys)) {
             this.ensureTrxboKeyMap(record);
-            return this.TRXBO_COLUMNS;
         }
         
+        // Retourner toutes les colonnes disponibles
         return availableKeys;
     }
 
     getPartnerOnlyKeys(record: Record<string, string>): string[] {
-        // Colonnes OPPART attendues (dans l'ordre selon la configuration)
-        const oppartColumns = [
-            'ID Opération',
-            'Type Opération',
-            'Montant',
-            'Solde avant',
-            'Solde aprés',
-            'Code proprietaire',
-            'Téléphone',
-            'Statut',
-            'ID Transaction',
-            'Num bordereau',
-            'Date opération',
-            'Date de versement',
-            'Banque appro',
-            'Login demandeur Appro',
-            'Login valideur Appro',
-            'Motif rejet',
-            'Frais connexion',
-            'Numéro Trans GU',
-            'Agent',
-            'Motif régularisation',
-            'groupe de réseau'
-        ];
-        
-        // Détecter le type de fichier partenaire
+        // Retourner toutes les colonnes partenaire disponibles
         const availableKeys = Object.keys(record).map(key => fixGarbledCharacters(key));
-        const isOPPART = availableKeys.some(key => 
-            ['ID Opération', 'Type Opération', 'Solde avant', 'Solde aprés', 'Numéro Trans GU', 'Numero Trans GU'].includes(key)
-        );
+        
+        // Conserver le mappage pour les valeurs si nécessaire (pour TRXBO)
         const isTRXBO = this.isTrxboKeySet(availableKeys);
-        
-        if (isOPPART) {
-            // Pour OPPART, retourner toutes les colonnes attendues dans l'ordre
-            return oppartColumns;
-        }
-        
         if (isTRXBO) {
-            // Pour TRXBO, retourner toutes les colonnes attendues dans l'ordre
             this.ensureTrxboKeyMap(record);
-            return this.TRXBO_COLUMNS;
         }
         
-        // Sinon, retourner toutes les colonnes disponibles
+        // Retourner toutes les colonnes disponibles au lieu de se limiter à une liste prédéfinie
         return availableKeys;
     }
 
@@ -4265,29 +4226,70 @@ export class ReconciliationResultsComponent implements OnInit, OnDestroy {
         return '';
     }
 
+    private hasNonEmptyValue(value: any): boolean {
+        return value !== undefined && value !== null && value !== '';
+    }
+
+    private buildRecordSignature(keys: string[]): string {
+        return keys.length ? [...keys].sort().join('|') : 'empty';
+    }
+
     /**
      * Extraire le type d'opération d'un enregistrement
      */
     private getTypeOperation(record: any): string {
-        const possibleKeys = [
-            'Type Opération',
-            'Type Op�ration', // Avec caractères d'encodage
-            'type operation',
-            'type_operation',
-            'typeOperation',
-            'TYPE_OPERATION',
-            'TypeOperation',
-            'Operation',
-            'operation'
-        ];
+        if (!record) {
+            return '';
+        }
 
-        for (const key of possibleKeys) {
-            if (record[key] !== undefined && record[key] !== null && record[key] !== '') {
-                console.log(`🔍 Type d'opération trouvé: "${key}" = "${record[key]}"`);
-                return record[key].toString();
+        const recordKeys = Object.keys(record);
+        if (recordKeys.length === 0) {
+            return '';
+        }
+
+        const signature = this.buildRecordSignature(recordKeys);
+        if (this.typeOperationKeyCache.has(signature)) {
+            const cachedKey = this.typeOperationKeyCache.get(signature);
+            if (cachedKey) {
+                const cachedValue = record[cachedKey];
+                return this.hasNonEmptyValue(cachedValue) ? cachedValue.toString() : '';
+            }
+            return '';
+        }
+
+        for (const key of this.TYPE_OPERATION_KEYS) {
+            const value = record[key];
+            if (this.hasNonEmptyValue(value)) {
+                const stringValue = value.toString();
+                this.typeOperationKeyCache.set(signature, key);
+                console.log(`🔍 Type d'opération trouvé: "${key}" = "${stringValue}"`);
+                return stringValue;
             }
         }
-        console.log('❌ Aucun type d\'opération trouvé dans:', Object.keys(record));
+
+        const normalizedKeys = recordKeys.map(original => ({
+            original,
+            normalized: this.normalizeKeyName(original)
+        }));
+
+        for (const { original, normalized } of normalizedKeys) {
+            if (normalized.includes('type') && normalized.includes('operation')) {
+                const value = record[original];
+                if (this.hasNonEmptyValue(value)) {
+                    const stringValue = value.toString();
+                    this.typeOperationKeyCache.set(signature, original);
+                    console.log(`🔍 Type d'opération détecté via clé normalisée "${original}" = "${stringValue}"`);
+                    return stringValue;
+                }
+            }
+        }
+
+        this.typeOperationKeyCache.set(signature, null);
+
+        if (!this.missingTypeOperationSignatures.has(signature)) {
+            this.missingTypeOperationSignatures.add(signature);
+            console.warn('❌ Aucun type d\'opération trouvée pour la structure:', recordKeys);
+        }
         return '';
     }
 
@@ -4397,7 +4399,7 @@ export class ReconciliationResultsComponent implements OnInit, OnDestroy {
         const commentaire = record['Commentaire'] || record['commentaire'] || '';
         
         // Si le backend a ajouté un commentaire, l'utiliser
-        if (commentaire === 'TSOP' || commentaire === 'TRXSF') {
+        if (commentaire === 'TSOP' || commentaire === 'TRXSF' || commentaire === 'Ecart') {
             return commentaire;
         }
         
@@ -4423,6 +4425,8 @@ export class ReconciliationResultsComponent implements OnInit, OnDestroy {
             return 'TSOP';
         } else if (commentaire === 'TRXSF') {
             return 'TRXSF';
+        } else if (commentaire === 'Ecart') {
+            return 'Ecart';
         }
         
         // Par défaut, TSOP pour les écarts BO
@@ -4775,6 +4779,17 @@ private async generateExcelFile(): Promise<ExcelJS.Workbook[]> {
                 }
             };
 
+            const ecartStyle = {
+                fill: { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb: 'FFFFA500' } }, // Orange
+                font: { color: { argb: 'FFFFFFFF' }, bold: true },
+                border: {
+                    top: { style: 'thin' as const },
+                    left: { style: 'thin' as const },
+                    bottom: { style: 'thin' as const },
+                    right: { style: 'thin' as const }
+                }
+            };
+
             const tsorSansFraisStyle = {
                 fill: { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb: 'FFFFFF00' } }, // Jaune
                 font: { color: { argb: 'FF000000' }, bold: true },
@@ -4862,6 +4877,12 @@ private async generateExcelFile(): Promise<ExcelJS.Workbook[]> {
                         cell.style = trxsfStyle;
                     });
                     console.log(`🟩 Ligne ECART BO ${index + 2} colorée en vert (TRXSF)`);
+                } else if (boOnlyType === 'Ecart') {
+                    // Style orange pour Ecart (écarts BO avec plusieurs correspondances)
+                    row.eachCell(cell => {
+                        cell.style = ecartStyle;
+                    });
+                    console.log(`🟠 Ligne ECART BO ${index + 2} colorée en orange (Ecart)`);
                 } else {
                     // Style normal
                     row.eachCell(cell => {
@@ -4914,6 +4935,11 @@ private async generateExcelFile(): Promise<ExcelJS.Workbook[]> {
                     Object.keys(record).forEach(key => allKeys.add(key));
                 });
                 keysArray = Array.from(allKeys);
+            }
+            
+            // Ajouter la colonne commentaire si elle n'existe pas
+            if (!keysArray.includes('Commentaire')) {
+                keysArray.push('Commentaire');
             }
             
             // Définir les colonnes
@@ -4993,13 +5019,24 @@ private async generateExcelFile(): Promise<ExcelJS.Workbook[]> {
                 const commentaire = record['Commentaire'] || record['commentaire'] || '';
                 
                 keysArray.forEach(key => {
-                    rowData[key] = record[key] || '';
+                    if (key === 'Commentaire') {
+                        // Ajouter le commentaire approprié
+                        rowData[key] = commentaire || '';
+                    } else {
+                        rowData[key] = record[key] || '';
+                    }
                 });
                 const row = worksheet.addRow(rowData);
                 
                 // Appliquer le style selon le type - ÉCARTS PARTENAIRE
-                // Priorité: Commentaire du backend (Ecart, TRXSF) > Type Opération (TSF, C_FRAIS)
-                if (commentaire === 'Ecart') {
+                // Priorité: Commentaire du backend (TSOP, Ecart, TRXSF) > Type Opération (TSF, C_FRAIS)
+                if (commentaire === 'TSOP') {
+                    // Style rouge pour TSOP (écarts Partenaire sans correspondance)
+                    row.eachCell(cell => {
+                        cell.style = tsorDuplicateStyle;
+                    });
+                    console.log(`🟥 Ligne ${index + 2} colorée en rouge (TSOP)`);
+                } else if (commentaire === 'Ecart') {
                     // Style orange pour tous les Ecart
                     row.eachCell(cell => {
                         cell.style = regularisationFraisStyle;
