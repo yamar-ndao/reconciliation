@@ -586,12 +586,6 @@ type ResultsTab = 'matches' | 'boOnly' | 'partnerOnly' | 'agencySummary';
             </div>
 
             <div class="action-buttons">
-                <button class="export-btn" (click)="exportResults()" [disabled]="isExporting">
-                    📥 Exporter les résultats
-                </button>
-                <button class="export-btn-optimized" (click)="exportResultsOptimized()" [disabled]="isExporting">
-                    🚀 Export optimisé
-                </button>
                 <button class="new-reconciliation-btn" (click)="nouvelleReconciliation()">
                     🔄 Nouvelle réconciliation
                 </button>

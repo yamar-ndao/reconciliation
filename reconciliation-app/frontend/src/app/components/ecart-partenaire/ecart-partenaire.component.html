@@ -41,12 +41,28 @@
             <input type="checkbox" [checked]="allPartnerSelectedOnPage" (change)="toggleSelectAllPartnerOnPage($event)">
             <span>Sélectionner la page</span>
         </label>
-        <button (click)="exportResults()" class="export-button">
-            📥 Exporter les ECART Partenaire
+        <button (click)="exportResults()" class="export-button" [disabled]="isExporting || !filteredPartnerOnly.length">
+            {{ isExporting ? '⏳ Export en cours...' : '📥 Exporter les ECART Partenaire' }}
         </button>
         <button (click)="saveEcartPartnerToImpactOP()" class="save-button" [disabled]="isSavingEcartPartnerToImpactOP">
             {{ isSavingEcartPartnerToImpactOP ? '💾 Sauvegarde...' : '💾 Sauvegarder dans Import OP' }}
         </button>
+    </div>
+
+    <!-- Indicateur de progression de l'export -->
+    <div *ngIf="isExporting" class="export-progress-overlay">
+        <div class="export-progress-card">
+            <h3>📥 Export en cours</h3>
+            <div class="export-progress-bar">
+                <div class="export-progress-fill" [style.width.%]="exportProgress"></div>
+            </div>
+            <div class="export-progress-text">
+                {{ exportProgress }}% - {{ exportMessage }}
+            </div>
+            <div class="export-progress-details">
+                {{ filteredPartnerOnly.length | number }} écarts Partenaire à exporter
+            </div>
+        </div>
     </div>
 
     <div class="volume-summary">

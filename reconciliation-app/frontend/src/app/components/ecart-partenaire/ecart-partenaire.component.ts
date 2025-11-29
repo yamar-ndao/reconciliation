@@ -9,6 +9,7 @@ import { ReconciliationTabsService } from '../../services/reconciliation-tabs.se
 import { ImpactOPService } from '../../services/impact-op.service';
 import { OperationService } from '../../services/operation.service';
 import { PopupService } from '../../services/popup.service';
+import { ExportOptimizationService } from '../../services/export-optimization.service';
 import { ImpactOP } from '../../models/impact-op.model';
 import { fixGarbledCharacters } from '../../utils/encoding-fixer';
 
@@ -32,6 +33,10 @@ export class EcartPartenaireComponent implements OnInit, OnDestroy {
   isSavingEcartPartnerToImpactOP = false;
   selectedPartnerOnlyKeys: string[] = [];
   selectedPartnerImportOpDate: string | null = null;
+  isExporting = false;
+  exportProgress = 0;
+  exportMessage = '';
+  private exportSubscription?: Subscription;
 
   constructor(
     private appStateService: AppStateService,
@@ -40,6 +45,7 @@ export class EcartPartenaireComponent implements OnInit, OnDestroy {
     private impactOPService: ImpactOPService,
     private operationService: OperationService,
     private popupService: PopupService,
+    private exportOptimizationService: ExportOptimizationService,
     private cdr: ChangeDetectorRef
   ) {}
 
@@ -66,6 +72,9 @@ export class EcartPartenaireComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.subscription.unsubscribe();
+    if (this.exportSubscription) {
+      this.exportSubscription.unsubscribe();
+    }
   }
 
   private async loadPartnerOnly(): Promise<void> {
@@ -471,7 +480,117 @@ export class EcartPartenaireComponent implements OnInit, OnDestroy {
   }
 
   async exportResults(): Promise<void> {
-    this.popupService.showInfo('Fonctionnalité d\'export en cours de développement');
+    if (!this.filteredPartnerOnly || this.filteredPartnerOnly.length === 0) {
+      this.popupService.showWarning('Aucun écart Partenaire à exporter');
+      return;
+    }
+
+    this.isExporting = true;
+    this.exportProgress = 0;
+    this.exportMessage = 'Préparation de l\'export...';
+    this.cdr.markForCheck();
+
+    try {
+      const totalRecords = this.filteredPartnerOnly.length;
+      const isLargeDataset = totalRecords > 5000;
+
+      // Étape 1: Collecter les colonnes
+      this.exportMessage = 'Collecte des colonnes...';
+      this.cdr.markForCheck();
+      
+      const allColumns = new Set<string>();
+      const columnMap = new Map<string, string>(); // correctedKey -> originalKey
+
+      // Collecter les colonnes sur un échantillon représentatif
+      const sampleRecord = this.filteredPartnerOnly[0];
+      Object.keys(sampleRecord).forEach(originalKey => {
+        const correctedKey = fixGarbledCharacters(originalKey);
+        allColumns.add(correctedKey);
+        columnMap.set(correctedKey, originalKey);
+      });
+
+      const columns = Array.from(allColumns).sort();
+
+      // Étape 2: Transformer les données par chunks
+      this.exportMessage = 'Transformation des données...';
+      this.cdr.markForCheck();
+
+      const rows: any[] = [];
+      const chunkSize = 1000;
+
+      for (let i = 0; i < totalRecords; i += chunkSize) {
+        const chunk = this.filteredPartnerOnly.slice(i, Math.min(i + chunkSize, totalRecords));
+        
+        chunk.forEach(record => {
+          const row: any = {};
+          columns.forEach(col => {
+            const originalKey = columnMap.get(col);
+            row[col] = originalKey && record[originalKey] !== undefined 
+              ? String(record[originalKey] || '') 
+              : '';
+          });
+          rows.push(row);
+        });
+
+        this.exportProgress = Math.round(((i + chunk.length) / totalRecords) * 50);
+        this.exportMessage = `Transformation: ${Math.min(i + chunk.length, totalRecords).toLocaleString()}/${totalRecords.toLocaleString()} écarts Partenaire`;
+        this.cdr.markForCheck();
+
+        await new Promise(resolve => setTimeout(resolve, 0));
+      }
+
+      // Étape 3: Exporter avec le service optimisé
+      this.exportMessage = 'Génération du fichier Excel...';
+      this.exportProgress = 50;
+      this.cdr.markForCheck();
+
+      const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+      const fileName = `ecart_partenaire_${timestamp}`;
+
+      // S'abonner à la progression de l'export
+      if (this.exportSubscription) {
+        this.exportSubscription.unsubscribe();
+      }
+
+      this.exportSubscription = this.exportOptimizationService.exportProgress$.subscribe(progress => {
+        this.exportProgress = 50 + Math.round(progress.percentage / 2);
+        this.exportMessage = progress.message;
+        this.cdr.markForCheck();
+
+        if (progress.isComplete) {
+          this.isExporting = false;
+          if (progress.message.includes('✅')) {
+            this.exportMessage = 'Export terminé avec succès !';
+            this.popupService.showSuccess('Export réussi !');
+          } else if (progress.message.includes('Erreur')) {
+            this.exportMessage = 'Erreur lors de l\'export';
+            this.popupService.showError('Erreur lors de l\'export');
+          }
+          this.cdr.markForCheck();
+        }
+      });
+
+      // Lancer l'export optimisé
+      if (isLargeDataset) {
+        await this.exportOptimizationService.exportExcelOptimized(rows, columns, fileName, {
+          chunkSize: 3000,
+          useWebWorker: true,
+          enableCompression: true
+        });
+      } else {
+        await this.exportOptimizationService.exportExcelOptimized(rows, columns, fileName, {
+          chunkSize: 2000,
+          useWebWorker: false
+        });
+      }
+
+    } catch (error) {
+      console.error('Erreur lors de l\'export:', error);
+      this.isExporting = false;
+      this.exportMessage = 'Erreur lors de l\'export';
+      this.popupService.showError('Erreur lors de l\'export des écarts Partenaire');
+      this.cdr.markForCheck();
+    }
   }
 
   goBack(): void {
