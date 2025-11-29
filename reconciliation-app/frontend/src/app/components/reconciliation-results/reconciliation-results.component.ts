@@ -61,7 +61,7 @@ type ResultsTab = 'matches' | 'boOnly' | 'partnerOnly' | 'agencySummary';
                     </div>
                     <div class="detail-item">
                         <span class="label">⏱️ Temps écoulé:</span>
-                        <span class="value">{{ formatTime(getElapsedTime()) }}</span>
+                        <span class="value">{{ formatTime(getRealTimeElapsed()) }}</span>
                     </div>
                     <div class="detail-item">
                         <span class="label">🚀 Vitesse:</span>
@@ -595,12 +595,12 @@ type ResultsTab = 'matches' | 'boOnly' | 'partnerOnly' | 'agencySummary';
             </div>
 
             <!-- Temps de réconciliation mis en exergue en bas -->
-            <div *ngIf="response" class="reconciliation-time-container">
+            <div *ngIf="response || showProgress" class="reconciliation-time-container">
                 <div class="reconciliation-time-card" [ngClass]="getReconciliationTimeClass()">
                     <div class="time-label">⏱️ Temps de réconciliation</div>
-                    <div class="time-value">{{ formatTime(getElapsedTime()) }}</div>
-                    <div *ngIf="isReconciliationTimeFast() && getElapsedTime() > 0" class="time-badge">⚡ Performance optimale</div>
-                    <div *ngIf="!isReconciliationTimeFast() && getElapsedTime() > 0" class="time-badge slow-badge">⏳ Temps supérieur à 3 minutes</div>
+                    <div class="time-value">{{ formatTime(getRealTimeElapsed()) }}</div>
+                    <div *ngIf="isReconciliationTimeFast() && getRealTimeElapsed() > 0" class="time-badge">⚡ Performance optimale</div>
+                    <div *ngIf="!isReconciliationTimeFast() && getRealTimeElapsed() > 0" class="time-badge slow-badge">⏳ Temps supérieur à 3 minutes</div>
                 </div>
             </div>
 
@@ -1926,6 +1926,8 @@ export class ReconciliationResultsComponent implements OnInit, OnDestroy {
     totalRecords = 0;
     executionTime = 0;
     startTime = 0;
+    realTimeElapsed = 0; // Temps écoulé en temps réel (en millisecondes)
+    private realTimeTimer: any = null; // Timer pour mettre à jour le temps en temps réel
     
     // Propriétés pour la sélection des colonnes (rapport d'écarts)
     showColumnSelector = false;
@@ -3170,22 +3172,34 @@ export class ReconciliationResultsComponent implements OnInit, OnDestroy {
                     console.log('⏱️ Initialisation des temps d\'exécution...');
                     console.log('📊 response.executionTimeMs:', response.executionTimeMs);
                     
+                    // Arrêter le timer en temps réel car la réconciliation est terminée
+                    this.stopRealTimeTimer();
+                    
                     if (response.executionTimeMs && response.executionTimeMs > 0) {
                         this.executionTime = response.executionTimeMs;
+                        this.realTimeElapsed = response.executionTimeMs;
                         console.log('✅ Temps d\'exécution du backend utilisé:', this.executionTime, 'ms');
                     } else {
                         // Si pas de temps du backend, calculer depuis le startTime
                         const stateStartTime = this.appStateService.getReconciliationStartTime();
                         if (stateStartTime > 0) {
                             this.executionTime = Date.now() - stateStartTime;
+                            this.realTimeElapsed = this.executionTime;
                             console.log('✅ Temps calculé depuis startTime:', this.executionTime, 'ms');
                         } else if (this.startTime > 0) {
                             this.executionTime = Date.now() - this.startTime;
+                            this.realTimeElapsed = this.executionTime;
                             console.log('✅ Temps calculé depuis this.startTime:', this.executionTime, 'ms');
                         } else {
-                            // Valeur par défaut seulement si vraiment aucune autre option
-                            this.executionTime = 0;
-                            console.log('⚠️ Aucun temps disponible, sera calculé dynamiquement');
+                            // Utiliser le temps réel écoulé si disponible
+                            if (this.realTimeElapsed > 0) {
+                                this.executionTime = this.realTimeElapsed;
+                                console.log('✅ Temps réel écoulé utilisé:', this.executionTime, 'ms');
+                            } else {
+                                // Valeur par défaut seulement si vraiment aucune autre option
+                                this.executionTime = 0;
+                                console.log('⚠️ Aucun temps disponible, sera calculé dynamiquement');
+                            }
                         }
                     }
                     
@@ -3224,14 +3238,31 @@ export class ReconciliationResultsComponent implements OnInit, OnDestroy {
                     this.startTime = this.appStateService.getReconciliationStartTime();
                     this.progressPercentage = 0;
                     this.processedRecords = 0;
+                    this.realTimeElapsed = 0;
+                    this.startRealTimeTimer();
                     this.listenToRealProgress();
+                } else {
+                    this.stopRealTimeTimer();
                 }
                 this.cdr.detectChanges();
             })
         );
+        
+        // Vérifier si la réconciliation est déjà en cours au moment de l'initialisation
+        const currentProgress = this.appStateService.getReconciliationProgress();
+        // Note: getReconciliationProgress() retourne un Observable, donc on doit s'abonner
+        // Mais on peut aussi vérifier directement le startTime
+        const currentStartTime = this.appStateService.getReconciliationStartTime();
+        if (currentStartTime > 0 && !this.realTimeTimer) {
+            this.startTime = currentStartTime;
+            this.showProgress = true;
+            this.startRealTimeTimer();
+            this.listenToRealProgress();
+        }
     }
 
     ngOnDestroy() {
+        this.stopRealTimeTimer();
         this.subscription.unsubscribe();
     }
 
@@ -6047,10 +6078,22 @@ private async downloadExcelFile(workbooks: ExcelJS.Workbook[], fileName: string)
     }
 
     /**
+     * Obtient le temps écoulé en temps réel
+     */
+    getRealTimeElapsed(): number {
+        // Si la réconciliation est en cours et qu'on a un timer actif, utiliser realTimeElapsed
+        if (this.showProgress && this.realTimeElapsed > 0) {
+            return this.realTimeElapsed;
+        }
+        // Sinon, utiliser la méthode classique
+        return this.getElapsedTime();
+    }
+
+    /**
      * Vérifie si le temps de réconciliation est inférieur ou égal à 3 minutes
      */
     isReconciliationTimeFast(): boolean {
-        const elapsedTime = this.getElapsedTime();
+        const elapsedTime = this.getRealTimeElapsed();
         const threeMinutes = 3 * 60 * 1000; // 3 minutes en millisecondes
         return elapsedTime > 0 && elapsedTime <= threeMinutes;
     }
@@ -6059,7 +6102,7 @@ private async downloadExcelFile(workbooks: ExcelJS.Workbook[], fileName: string)
      * Retourne la classe CSS selon le temps de réconciliation
      */
     getReconciliationTimeClass(): string {
-        const elapsedTime = this.getElapsedTime();
+        const elapsedTime = this.getRealTimeElapsed();
         // Si le temps est 0 ou non disponible, utiliser le style par défaut (violet)
         if (elapsedTime <= 0) {
             return '';
@@ -6073,7 +6116,7 @@ private async downloadExcelFile(workbooks: ExcelJS.Workbook[], fileName: string)
     }
 
     getProcessingSpeed(): string {
-        const elapsedTime = this.getElapsedTime();
+        const elapsedTime = this.getRealTimeElapsed();
         if (elapsedTime > 0 && this.processedRecords > 0) {
             const speed = Math.round((this.processedRecords / elapsedTime) * 1000);
             return speed.toString();
@@ -6097,6 +6140,41 @@ private async downloadExcelFile(workbooks: ExcelJS.Workbook[], fileName: string)
         }
     }
 
+    /**
+     * Démarre le timer pour mettre à jour le temps écoulé en temps réel
+     */
+    private startRealTimeTimer() {
+        // Arrêter le timer existant s'il y en a un
+        this.stopRealTimeTimer();
+        
+        // Initialiser le temps écoulé
+        if (this.startTime > 0) {
+            this.realTimeElapsed = Date.now() - this.startTime;
+        } else {
+            this.realTimeElapsed = 0;
+        }
+        
+        // Créer un timer qui se met à jour toutes les secondes
+        this.realTimeTimer = setInterval(() => {
+            if (this.showProgress && this.startTime > 0) {
+                this.realTimeElapsed = Date.now() - this.startTime;
+                this.cdr.detectChanges();
+            } else {
+                this.stopRealTimeTimer();
+            }
+        }, 1000); // Mise à jour toutes les secondes
+    }
+
+    /**
+     * Arrête le timer de temps réel
+     */
+    private stopRealTimeTimer() {
+        if (this.realTimeTimer) {
+            clearInterval(this.realTimeTimer);
+            this.realTimeTimer = null;
+        }
+    }
+
     private listenToRealProgress() {
         console.log('🎯 Écoute de la progression réelle de la réconciliation...');
         
@@ -6106,6 +6184,19 @@ private async downloadExcelFile(workbooks: ExcelJS.Workbook[], fileName: string)
                 this.progressPercentage = progress.percentage;
                 this.processedRecords = progress.processed;
                 this.totalRecords = progress.total;
+                
+                // Mettre à jour le temps écoulé si le timer n'est pas actif
+                if (this.startTime > 0 && !this.realTimeTimer) {
+                    this.realTimeElapsed = Date.now() - this.startTime;
+                }
+                
+                // Arrêter le timer si la réconciliation est terminée
+                if (progress.percentage >= 100) {
+                    this.stopRealTimeTimer();
+                    if (this.startTime > 0) {
+                        this.realTimeElapsed = Date.now() - this.startTime;
+                    }
+                }
                 
                 // Forcer la détection des changements pour mettre à jour l'interface
                 this.cdr.detectChanges();

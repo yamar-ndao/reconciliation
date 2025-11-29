@@ -175,6 +175,31 @@ export interface ReconciliationReportData {
                         <option *ngFor="let status of uniqueStatuses" [value]="status">{{status}}</option>
                     </select>
                 </div>
+                <div class="filter-group bulk-status-group" *ngIf="hasSelectedRows()">
+                    <label>Changer le statut des lignes sélectionnées:</label>
+                    <div class="bulk-status-controls">
+                        <select 
+                            [(ngModel)]="bulkStatusSelection" 
+                            class="filter-select bulk-status-select">
+                            <option value="">Sélectionner un statut</option>
+                            <option *ngFor="let status of statusOptions" [value]="status">{{status}}</option>
+                        </select>
+                        <button 
+                            class="btn btn-bulk-status" 
+                            (click)="applyBulkStatusChange()" 
+                            [disabled]="!bulkStatusSelection">
+                            ✅ Appliquer
+                        </button>
+                        <button 
+                            class="btn btn-clear-selection" 
+                            (click)="clearSelection()">
+                            🗑️ Désélectionner
+                        </button>
+                        <span class="selection-count">
+                            {{getSelectedRowsCount()}} ligne(s) sélectionnée(s)
+                        </span>
+                    </div>
+                </div>
                 <div class="filter-group">
                     <label>Traitement:</label>
                     <div class="filter-inline">
@@ -257,6 +282,14 @@ export interface ReconciliationReportData {
                 <table class="report-table">
                     <thead>
                         <tr>
+                            <th class="col-checkbox">
+                                <input 
+                                    type="checkbox" 
+                                    [checked]="isAllSelected()" 
+                                    [indeterminate]="isSomeSelected()"
+                                    (change)="toggleSelectAll($event)"
+                                    title="Sélectionner/Désélectionner tout">
+                            </th>
                             <th class="col-date">Date</th>
                             <th class="col-text">Agence</th>
                             <th class="col-service">Service</th>
@@ -276,7 +309,15 @@ export interface ReconciliationReportData {
                         </tr>
                     </thead>
                     <tbody>
-                        <tr *ngFor="let item of paginatedData; trackBy: trackByItem" [class.editing-row]="editingRow === item">
+                        <tr *ngFor="let item of paginatedData; trackBy: trackByItem" [class.editing-row]="editingRow === item" [class.row-selected]="isRowSelected(item)">
+                            <td class="checkbox-cell">
+                                <input 
+                                    type="checkbox" 
+                                    [checked]="isRowSelected(item)"
+                                    (change)="toggleRowSelection(item, $event)"
+                                    [disabled]="isRowLocked(item)"
+                                    [title]="isRowLocked(item) ? 'Ligne verrouillée (OK + Terminé)' : 'Sélectionner cette ligne'">
+                            </td>
                             <td class="text-cell">
                                 <ng-container *ngIf="editingRow !== item; else editDate">
                                     {{formatDate(item.date)}}
@@ -750,6 +791,80 @@ export interface ReconciliationReportData {
             max-width: 180px;
         }
 
+        .bulk-status-group {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            border: 2px solid #dee2e6;
+            margin-top: 20px;
+        }
+
+        .bulk-status-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .bulk-status-select {
+            flex: 1;
+            min-width: 200px;
+            max-width: 300px;
+        }
+
+        .btn-bulk-status {
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+            color: white;
+            border: none;
+            padding: 8px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .btn-bulk-status:hover:not(:disabled) {
+            background: linear-gradient(135deg, #218838 0%, #1ea085 100%);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(40, 167, 69, 0.3);
+        }
+
+        .btn-bulk-status:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .btn-clear-selection {
+            background: linear-gradient(135deg, #6c757d 0%, #5a6268 100%);
+            color: white;
+            border: none;
+            padding: 8px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .btn-clear-selection:hover:not(:disabled) {
+            background: linear-gradient(135deg, #5a6268 0%, #495057 100%);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(108, 117, 125, 0.3);
+        }
+
+        .btn-clear-selection:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .selection-count {
+            color: #495057;
+            font-weight: 600;
+            padding: 8px 15px;
+            background: #e9ecef;
+            border-radius: 6px;
+            font-size: 0.9rem;
+        }
+
         .filter-input {
             padding: 8px 12px;
             border: 1px solid #ced4da;
@@ -941,6 +1056,19 @@ export interface ReconciliationReportData {
         .col-date { text-align: left; }
 
         /* Column widths to keep alignment stable */
+        .col-checkbox { width: 40px; text-align: center; }
+        .checkbox-cell { text-align: center; padding: 8px; }
+        .checkbox-cell input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+        .row-selected {
+            background-color: #e3f2fd !important;
+        }
+        .row-selected:hover {
+            background-color: #bbdefb !important;
+        }
         .col-date { width: 110px; }
         .col-text { width: 140px; }
         .col-text input { width: 100%; padding: 6px 8px; box-sizing: border-box; }
@@ -1514,6 +1642,10 @@ export class ReconciliationReportComponent implements OnInit, OnDestroy {
     selectedStatus: string = '';
     selectedTraitement: string = '';
     activeCardFilter: 'inProgress' | 'treated' | 'ticketsToCreate' | null = null;
+    
+    // Sélection multiple pour changement de statut
+    selectedRows: Set<ReconciliationReportData> = new Set();
+    bulkStatusSelection: string = '';
 
     uniqueAgencies: string[] = [];
     uniqueServices: string[] = [];
@@ -2662,6 +2794,12 @@ export class ReconciliationReportComponent implements OnInit, OnDestroy {
         if (!item) {
             return;
         }
+        
+        // Si la ligne est "sété", préserver le commentaire existant (sauf si force est activé)
+        if (this.isRowSete(item) && !options?.force) {
+            return;
+        }
+        
         if (!this.shouldAutoUpdateComment(item, options)) {
             return;
         }
@@ -2672,10 +2810,15 @@ export class ReconciliationReportComponent implements OnInit, OnDestroy {
      * Synchronise le commentaire avec les valeurs réelles de l'item.
      * Cette méthode est appelée après le chargement des données pour s'assurer
      * que le commentaire correspond toujours aux valeurs affichées.
-     * Ne modifie pas le commentaire si le statut est "OK".
+     * Ne modifie pas le commentaire si la ligne est "sété" (statut OK ou traitement Terminé).
      */
     private syncCommentWithValues(item: ReconciliationReportData): void {
         if (!item) {
+            return;
+        }
+        
+        // Si la ligne est "sété", préserver le commentaire existant
+        if (this.isRowSete(item)) {
             return;
         }
         
@@ -2683,17 +2826,6 @@ export class ReconciliationReportComponent implements OnInit, OnDestroy {
         const boOnly = this.normalizeNumericValue(item.boOnly);
         const partnerOnly = this.normalizeNumericValue(item.partnerOnly);
         const mismatches = this.normalizeNumericValue(item.mismatches);
-        
-        // Si le statut est "OK" mais qu'il y a des écarts, ne pas modifier le commentaire
-        // Si le statut est "OK" et qu'il n'y a pas d'écarts, corriger le commentaire
-        if (item.status === 'OK') {
-            // Si tous les écarts sont à 0, mettre à jour le commentaire pour refléter la réalité
-            if (boOnly === 0 && partnerOnly === 0 && mismatches === 0) {
-                item.comment = this.buildCommentForCounts(matches, boOnly, partnerOnly, mismatches);
-            }
-            // Sinon, préserver le commentaire existant
-            return;
-        }
         
         // Recalculer le commentaire pour qu'il corresponde aux valeurs réelles
         item.comment = this.buildCommentForCounts(matches, boOnly, partnerOnly, mismatches);
@@ -2744,6 +2876,9 @@ export class ReconciliationReportComponent implements OnInit, OnDestroy {
         const totalEcart = boOnly + partnerOnly + mismatches;
         const effectiveTotalTransactions = totalTransactions > 0 ? totalTransactions : matches + totalEcart;
 
+        // Si la ligne est "sété", préserver le commentaire existant
+        const isSete = this.isRowSete(item);
+
         // Si le statut est "OK", aligner les correspondances sur le total et solder les écarts
         if (item.status === 'OK') {
             console.log('🔄 Recalcul pour statut OK:', {
@@ -2769,14 +2904,18 @@ export class ReconciliationReportComponent implements OnInit, OnDestroy {
             recalculated.matchRate = effectiveTotalTransactions > 0 ? 
                 (recalculated.matches / effectiveTotalTransactions) * 100 : 0;
             
-            // Pour le statut "OK", les écarts sont à 0, donc mettre à jour le commentaire
-            // pour refléter la réalité (pas d'écarts)
-            recalculated.comment = this.buildCommentForCounts(
-                recalculated.matches,
-                recalculated.boOnly,
-                recalculated.partnerOnly,
-                recalculated.mismatches
-            );
+            // Préserver le commentaire si la ligne est "sété"
+            if (isSete) {
+                recalculated.comment = previousComment;
+            } else {
+                // Pour le statut "OK" mais pas encore "sété", mettre à jour le commentaire
+                recalculated.comment = this.buildCommentForCounts(
+                    recalculated.matches,
+                    recalculated.boOnly,
+                    recalculated.partnerOnly,
+                    recalculated.mismatches
+                );
+            }
             
             console.log('🔄 Recalcul pour statut OK:', {
                 apres: {
@@ -2786,7 +2925,8 @@ export class ReconciliationReportComponent implements OnInit, OnDestroy {
                     mismatches: recalculated.mismatches,
                     totalTransactions: recalculated.totalTransactions,
                     matchRate: recalculated.matchRate,
-                    comment: recalculated.comment
+                    comment: recalculated.comment,
+                    isSete: isSete
                 }
             });
         } else {
@@ -2795,13 +2935,18 @@ export class ReconciliationReportComponent implements OnInit, OnDestroy {
             recalculated.matchRate = effectiveTotalTransactions > 0 ? 
                 (recalculated.matches / effectiveTotalTransactions) * 100 : 0;
             
-            // Mettre à jour le commentaire pour refléter les valeurs réelles
-            recalculated.comment = this.buildCommentForCounts(
-                recalculated.matches,
-                recalculated.boOnly,
-                recalculated.partnerOnly,
-                recalculated.mismatches
-            );
+            // Préserver le commentaire si la ligne est "sété"
+            if (isSete) {
+                recalculated.comment = previousComment;
+            } else {
+                // Mettre à jour le commentaire pour refléter les valeurs réelles
+                recalculated.comment = this.buildCommentForCounts(
+                    recalculated.matches,
+                    recalculated.boOnly,
+                    recalculated.partnerOnly,
+                    recalculated.mismatches
+                );
+            }
         }
         
         return recalculated;
@@ -3481,10 +3626,14 @@ export class ReconciliationReportComponent implements OnInit, OnDestroy {
                     // Initialiser le commentaire
                     let comment = r.comment || '';
                     
-                    // Si le statut est "OK" mais qu'il y a des écarts, ne pas modifier le commentaire
-                    // Si le statut est "OK" et qu'il n'y a pas d'écarts, corriger le commentaire
-                    if (r.status === 'OK') {
-                        // Si tous les écarts sont à 0, mettre à jour le commentaire pour refléter la réalité
+                    // Vérifier si la ligne est "sété" (statut OK ou traitement Terminé)
+                    const isSete = (r.status === 'OK' || (r.traitement && r.traitement.trim() === 'Terminé'));
+                    
+                    // Si la ligne est "sété", préserver le commentaire existant
+                    if (isSete && comment && comment.trim() !== '') {
+                        // Préserver le commentaire existant
+                    } else if (r.status === 'OK') {
+                        // Si le statut est "OK" mais pas encore "sété", mettre à jour le commentaire si tous les écarts sont à 0
                         if (boOnly === 0 && partnerOnly === 0 && mismatches === 0) {
                             comment = this.buildCommentForCounts(
                                 r.matches || 0,
@@ -4299,6 +4448,19 @@ export class ReconciliationReportComponent implements OnInit, OnDestroy {
         return item.status === 'OK' && item.traitement === 'Terminé';
     }
 
+    /**
+     * Vérifie si une ligne est "sété" (traitée) et ne doit plus être modifiée
+     * Une ligne est considérée comme "sété" si :
+     * - Le statut est "OK", OU
+     * - Le traitement est "Terminé"
+     */
+    private isRowSete(item: ReconciliationReportData): boolean {
+        if (!item) {
+            return false;
+        }
+        return item.status === 'OK' || item.traitement === 'Terminé';
+    }
+
     // Méthodes pour l'édition directe du traitement (comme dans banque)
     startEditTraitement(item: ReconciliationReportData) {
         this.editingTraitementRow = item;
@@ -4352,6 +4514,181 @@ export class ReconciliationReportComponent implements OnInit, OnDestroy {
                 // On pourrait aussi afficher un message d'erreur
                 this.popupService.showError('Erreur', 'Impossible de mettre à jour le traitement');
             }
+        });
+    }
+
+    // Méthodes pour la sélection multiple et changement de statut en masse
+    isRowSelected(item: ReconciliationReportData): boolean {
+        return this.selectedRows.has(item);
+    }
+
+    toggleRowSelection(item: ReconciliationReportData, event: Event): void {
+        const checkbox = event.target as HTMLInputElement;
+        if (checkbox.checked) {
+            if (!this.isRowLocked(item)) {
+                this.selectedRows.add(item);
+            } else {
+                checkbox.checked = false;
+            }
+        } else {
+            this.selectedRows.delete(item);
+        }
+    }
+
+    isAllSelected(): boolean {
+        if (this.paginatedData.length === 0) return false;
+        const unlockableItems = this.paginatedData.filter(item => !this.isRowLocked(item));
+        if (unlockableItems.length === 0) return false;
+        return unlockableItems.every(item => this.isRowSelected(item));
+    }
+
+    isSomeSelected(): boolean {
+        const selectedCount = this.paginatedData.filter(item => this.isRowSelected(item)).length;
+        return selectedCount > 0 && selectedCount < this.paginatedData.filter(item => !this.isRowLocked(item)).length;
+    }
+
+    toggleSelectAll(event: Event): void {
+        const checkbox = event.target as HTMLInputElement;
+        if (checkbox.checked) {
+            // Sélectionner toutes les lignes non verrouillées
+            this.paginatedData.forEach(item => {
+                if (!this.isRowLocked(item)) {
+                    this.selectedRows.add(item);
+                }
+            });
+        } else {
+            // Désélectionner toutes les lignes
+            this.paginatedData.forEach(item => {
+                this.selectedRows.delete(item);
+            });
+        }
+    }
+
+    hasSelectedRows(): boolean {
+        return this.selectedRows.size > 0;
+    }
+
+    getSelectedRowsCount(): number {
+        return this.selectedRows.size;
+    }
+
+    clearSelection(): void {
+        this.selectedRows.clear();
+        this.bulkStatusSelection = '';
+    }
+
+    async applyBulkStatusChange(): Promise<void> {
+        if (!this.bulkStatusSelection || this.selectedRows.size === 0) {
+            return;
+        }
+
+        const selectedItems = Array.from(this.selectedRows);
+        const unlockedItems = selectedItems.filter(item => !this.isRowLocked(item));
+
+        if (unlockedItems.length === 0) {
+            this.popupService.showWarning('Aucune ligne modifiable', 'Toutes les lignes sélectionnées sont verrouillées (OK + Terminé).');
+            this.clearSelection();
+            return;
+        }
+
+        // Confirmer le changement avec popup moderne
+        const confirmMessage = `Voulez-vous changer le statut de ${unlockedItems.length} ligne(s) en "${this.bulkStatusSelection}" ?`;
+        const confirmed = await this.popupService.showConfirm(confirmMessage, 'Confirmation de changement de statut');
+        if (!confirmed) {
+            return;
+        }
+
+        let successCount = 0;
+        let errorCount = 0;
+
+        // Appliquer le changement de statut à toutes les lignes sélectionnées
+        const savePromises = unlockedItems.map(async (item) => {
+            const oldStatus = item.status;
+            item.status = this.bulkStatusSelection;
+            
+            // Recalculer les données selon le nouveau statut
+            const recalculatedData = this.recalculateDataBasedOnStatus(item);
+            
+            try {
+                // Sauvegarder via l'API
+                await this.saveItemStatus(recalculatedData, oldStatus);
+                successCount++;
+            } catch (error) {
+                errorCount++;
+                // Revenir à l'ancien statut en cas d'erreur
+                item.status = oldStatus;
+                console.error('❌ Erreur lors de la sauvegarde du statut:', error);
+            }
+        });
+
+        // Attendre que toutes les sauvegardes soient terminées
+        await Promise.all(savePromises);
+
+        // Vider la sélection
+        this.clearSelection();
+        
+        // Rafraîchir les données après la sauvegarde
+        if (this.currentSource === 'db') {
+            // Si on est en mode base de données, recharger depuis la DB
+            this.loadSavedReportFromDatabase();
+        } else {
+            // Si on est en mode live, re-filtrer les données
+            this.filterReport();
+            this.updatePagination();
+        }
+        
+        // Afficher les résultats
+        if (successCount > 0) {
+            this.popupService.showSuccess(`Statut modifié pour ${successCount} ligne(s)`, 'Changement de statut en masse réussi');
+        }
+        if (errorCount > 0) {
+            this.popupService.showError(`Erreur lors de la modification de ${errorCount} ligne(s)`, 'Certaines modifications ont échoué');
+        }
+    }
+
+    private async saveItemStatus(item: ReconciliationReportData, oldStatus: string): Promise<void> {
+        return new Promise((resolve, reject) => {
+            if (!item.id) {
+                console.error('❌ Impossible de sauvegarder: ID manquant pour', item);
+                reject(new Error('ID manquant'));
+                return;
+            }
+
+            const payload = {
+                date: item.date,
+                agency: item.agency,
+                service: item.service,
+                country: item.country,
+                totalTransactions: item.totalTransactions,
+                totalVolume: item.totalVolume,
+                matches: item.matches,
+                boOnly: item.boOnly,
+                partnerOnly: item.partnerOnly,
+                mismatches: item.mismatches,
+                matchRate: item.matchRate,
+                status: item.status,
+                comment: item.comment,
+                traitement: item.traitement || '',
+                glpiId: item.glpiId || ''
+            };
+
+            this.http.put<any>(`/api/result8rec/${item.id}`, payload).subscribe({
+                next: (updated) => {
+                    console.log(`✅ Statut sauvegardé pour ${item.agency} - ${item.service}`);
+                    // Mettre à jour l'item avec les données retournées
+                    if (updated.status !== undefined) {
+                        item.status = updated.status;
+                    }
+                    if (updated.traitement !== undefined) {
+                        item.traitement = updated.traitement;
+                    }
+                    resolve();
+                },
+                error: (error: HttpErrorResponse) => {
+                    console.error('❌ Erreur lors de la sauvegarde du statut:', error);
+                    reject(error);
+                }
+            });
         });
     }
 
