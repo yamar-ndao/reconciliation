@@ -76,7 +76,7 @@ type ResultsTab = 'matches' | 'boOnly' | 'partnerOnly' | 'agencySummary';
         </div>
 
         <!-- Résumé des performances -->
-        <div *ngIf="response && executionTime > 0" class="performance-summary">
+        <div *ngIf="response && (executionTime > 0 || getElapsedTime() > 0)" class="performance-summary">
             <div class="performance-card">
                 <div class="performance-header">
                     <h3>📊 Performance de la réconciliation</h3>
@@ -592,6 +592,16 @@ type ResultsTab = 'matches' | 'boOnly' | 'partnerOnly' | 'agencySummary';
                 <button class="stats-btn" (click)="goToStats()">
                     📊 Voir les statistiques
                 </button>
+            </div>
+
+            <!-- Temps de réconciliation mis en exergue en bas -->
+            <div *ngIf="response" class="reconciliation-time-container">
+                <div class="reconciliation-time-card" [ngClass]="getReconciliationTimeClass()">
+                    <div class="time-label">⏱️ Temps de réconciliation</div>
+                    <div class="time-value">{{ formatTime(getElapsedTime()) }}</div>
+                    <div *ngIf="isReconciliationTimeFast() && getElapsedTime() > 0" class="time-badge">⚡ Performance optimale</div>
+                    <div *ngIf="!isReconciliationTimeFast() && getElapsedTime() > 0" class="time-badge slow-badge">⏳ Temps supérieur à 3 minutes</div>
+                </div>
             </div>
 
             <div *ngIf="isExporting" class="export-progress">
@@ -3160,13 +3170,26 @@ export class ReconciliationResultsComponent implements OnInit, OnDestroy {
                     console.log('⏱️ Initialisation des temps d\'exécution...');
                     console.log('📊 response.executionTimeMs:', response.executionTimeMs);
                     
-                    if (response.executionTimeMs) {
+                    if (response.executionTimeMs && response.executionTimeMs > 0) {
                         this.executionTime = response.executionTimeMs;
+                        console.log('✅ Temps d\'exécution du backend utilisé:', this.executionTime, 'ms');
                     } else {
-                        this.executionTime = 306; // Valeur par défaut
+                        // Si pas de temps du backend, calculer depuis le startTime
+                        const stateStartTime = this.appStateService.getReconciliationStartTime();
+                        if (stateStartTime > 0) {
+                            this.executionTime = Date.now() - stateStartTime;
+                            console.log('✅ Temps calculé depuis startTime:', this.executionTime, 'ms');
+                        } else if (this.startTime > 0) {
+                            this.executionTime = Date.now() - this.startTime;
+                            console.log('✅ Temps calculé depuis this.startTime:', this.executionTime, 'ms');
+                        } else {
+                            // Valeur par défaut seulement si vraiment aucune autre option
+                            this.executionTime = 0;
+                            console.log('⚠️ Aucun temps disponible, sera calculé dynamiquement');
+                        }
                     }
                     
-                    console.log('⏱️ executionTime final:', this.executionTime);
+                    console.log('⏱️ executionTime final:', this.executionTime, 'ms');
                     
                     if (response.processedRecords) {
                         this.processedRecords = response.processedRecords;
@@ -5989,6 +6012,9 @@ private async downloadExcelFile(workbooks: ExcelJS.Workbook[], fileName: string)
     }
 
     formatTime(ms: number): string {
+        if (!ms || ms <= 0) {
+            return '0s';
+        }
         const seconds = Math.floor(ms / 1000);
         const minutes = Math.floor(seconds / 60);
         const remainingSeconds = seconds % 60;
@@ -6001,10 +6027,49 @@ private async downloadExcelFile(workbooks: ExcelJS.Workbook[], fileName: string)
     }
 
     getElapsedTime(): number {
+        // Priorité 1: Utiliser le temps d'exécution du backend (temps réel du traitement)
+        if (this.executionTime > 0) {
+            return this.executionTime;
+        }
+        
+        // Priorité 2: Calculer depuis le startTime si disponible
         if (this.startTime > 0) {
             return Date.now() - this.startTime;
         }
+        
+        // Priorité 3: Essayer de récupérer depuis le service d'état
+        const stateStartTime = this.appStateService.getReconciliationStartTime();
+        if (stateStartTime > 0) {
+            return Date.now() - stateStartTime;
+        }
+        
         return 0;
+    }
+
+    /**
+     * Vérifie si le temps de réconciliation est inférieur ou égal à 3 minutes
+     */
+    isReconciliationTimeFast(): boolean {
+        const elapsedTime = this.getElapsedTime();
+        const threeMinutes = 3 * 60 * 1000; // 3 minutes en millisecondes
+        return elapsedTime > 0 && elapsedTime <= threeMinutes;
+    }
+
+    /**
+     * Retourne la classe CSS selon le temps de réconciliation
+     */
+    getReconciliationTimeClass(): string {
+        const elapsedTime = this.getElapsedTime();
+        // Si le temps est 0 ou non disponible, utiliser le style par défaut (violet)
+        if (elapsedTime <= 0) {
+            return '';
+        }
+        // Si <= 3 minutes, vert
+        if (this.isReconciliationTimeFast()) {
+            return 'fast-time';
+        }
+        // Sinon, rouge
+        return 'slow-time';
     }
 
     getProcessingSpeed(): string {

@@ -1,7 +1,7 @@
 import { Injectable, OnInit, OnDestroy } from '@angular/core';
-import { HttpClient, HttpErrorResponse, HttpHeaders, HttpParams } from '@angular/common/http';
+import { HttpClient, HttpErrorResponse, HttpHeaders, HttpParams, HttpEvent, HttpEventType } from '@angular/common/http';
 import { Observable, throwError, BehaviorSubject, Subject, timer, from, timeout } from 'rxjs';
-import { catchError, tap, map, finalize, retry, takeUntil, switchMap } from 'rxjs/operators';
+import { catchError, tap, map, finalize, retry, takeUntil, switchMap, filter, last } from 'rxjs/operators';
 import { ReconciliationRequest } from '../models/reconciliation-request.model';
 import { ReconciliationResponse } from '../models/reconciliation-response.model';
 import { AppStateService } from './app-state.service';
@@ -82,6 +82,12 @@ export class ReconciliationService implements OnInit, OnDestroy {
         
         // Détecter si c'est un gros fichier nécessitant un traitement par chunks
         const isLargeFile = this.isLargeFile(config.boFile, config.partnerFile);
+        const isVeryLargeFile = this.isVeryLargeFileForUpload(config.boFile, config.partnerFile);
+        
+        if (isVeryLargeFile) {
+            console.log('📊 Fichier très volumineux détecté (>150MB), utilisation de l\'upload par chunks');
+            return this.uploadLargeFilesWithChunks(config);
+        }
         
         if (isLargeFile) {
             console.log('📊 Gros fichier détecté, utilisation du traitement par chunks');
@@ -112,22 +118,134 @@ export class ReconciliationService implements OnInit, OnDestroy {
             estimatedTimeRemaining: 30000
         });
 
-        return this.http.post<{ jobId: string; status: string }>(`${this.apiUrl}/upload-and-prepare`, formData)
-            .pipe(
-                tap(response => {
-                    console.log('✅ Job créé:', response);
-                    this.currentJobId = response.jobId;
+        // Timeout augmenté pour les uploads (60 minutes pour les gros fichiers)
+        const UPLOAD_TIMEOUT = 3600000; // 60 minutes
+
+        return this.http.post<{ jobId: string; status: string }>(`${this.apiUrl}/upload-and-prepare`, formData, {
+            reportProgress: true,
+            observe: 'events'
+        }).pipe(
+            timeout(UPLOAD_TIMEOUT),
+            map((event: HttpEvent<any>) => {
+                if (event.type === HttpEventType.UploadProgress) {
+                    const total = event.total || 1;
+                    const loaded = event.loaded || 0;
+                    const uploadProgress = Math.round((loaded / total) * 100);
                     
                     this.updateProgress({
-                        percentage: 20,
-                        processed: 0,
-                        total: 100,
-                        step: 'Traitement en cours...',
-                        estimatedTimeRemaining: 25000
+                        percentage: 10 + Math.round((uploadProgress * 0.1)), // 10-20% pour l'upload
+                        processed: loaded,
+                        total: total,
+                        step: `Upload des fichiers... ${uploadProgress}%`,
+                        estimatedTimeRemaining: Math.max(10000, (total - loaded) / (loaded / 1000)) // Estimation basée sur la vitesse actuelle
                     });
-                }),
-                catchError(this.handleError)
-            );
+                    
+                    return null; // Ne pas émettre pendant l'upload
+                } else if (event.type === HttpEventType.Response) {
+                    return event.body;
+                }
+                return null;
+            }),
+            filter((response: any) => response !== null), // Filtrer les événements null
+            last(), // Prendre seulement la dernière valeur (la réponse)
+            tap(response => {
+                console.log('✅ Job créé:', response);
+                this.currentJobId = response.jobId;
+                
+                this.updateProgress({
+                    percentage: 20,
+                    processed: 0,
+                    total: 100,
+                    step: 'Traitement en cours...',
+                    estimatedTimeRemaining: 25000
+                });
+            }),
+            catchError(this.handleError)
+        ) as Observable<{ jobId: string; status: string }>;
+    }
+
+    /**
+     * Upload optimisé pour les fichiers volumineux (>150MB)
+     * Utilise l'upload standard avec suivi de progression et timeouts étendus
+     */
+    private uploadLargeFilesWithChunks(config: ReconciliationConfig): Observable<{ jobId: string; status: string }> {
+        console.log('📤 Upload optimisé pour fichiers volumineux (>150MB)');
+        
+        // Créer le FormData pour l'upload
+        const formData = new FormData();
+        formData.append('boFile', config.boFile);
+        formData.append('partnerFile', config.partnerFile);
+        formData.append('boReconciliationKey', config.boReconciliationKey);
+        formData.append('partnerReconciliationKey', config.partnerReconciliationKey);
+        formData.append('chunkedProcessing', 'true'); // Indicateur pour le backend
+        
+        if (config.additionalKeys) {
+            formData.append('additionalKeys', JSON.stringify(config.additionalKeys));
+        }
+        
+        if (config.tolerance) {
+            formData.append('tolerance', config.tolerance.toString());
+        }
+
+        // Mettre à jour la progression initiale
+        this.updateProgress({
+            percentage: 5,
+            processed: 0,
+            total: 100,
+            step: 'Préparation de l\'upload des fichiers volumineux...',
+            estimatedTimeRemaining: 300000 // 5 minutes estimées
+        });
+
+        // Timeout très étendu pour les fichiers volumineux (90 minutes)
+        const UPLOAD_TIMEOUT = 5400000; // 90 minutes
+
+        return this.http.post<{ jobId: string; status: string }>(`${this.apiUrl}/upload-and-prepare-chunked`, formData, {
+            reportProgress: true,
+            observe: 'events'
+        }).pipe(
+            timeout(UPLOAD_TIMEOUT),
+            map((event: HttpEvent<any>) => {
+                if (event.type === HttpEventType.UploadProgress) {
+                    const total = event.total || 1;
+                    const loaded = event.loaded || 0;
+                    const uploadProgress = Math.round((loaded / total) * 100);
+                    
+                    // Calculer le temps restant basé sur la vitesse actuelle
+                    // Utiliser une estimation basée sur la progression
+                    const remainingBytes = total - loaded;
+                    const uploadSpeed = loaded > 0 ? loaded / 1000 : 1; // Estimation simplifiée
+                    const estimatedTimeRemaining = uploadSpeed > 0 ? (remainingBytes / uploadSpeed) : 300000;
+                    
+                    this.updateProgress({
+                        percentage: 5 + Math.round((uploadProgress * 0.15)), // 5-20% pour l'upload
+                        processed: loaded,
+                        total: total,
+                        step: `Upload des fichiers volumineux... ${uploadProgress}% (${(loaded / (1024 * 1024)).toFixed(1)} MB / ${(total / (1024 * 1024)).toFixed(1)} MB)`,
+                        estimatedTimeRemaining: Math.max(10000, estimatedTimeRemaining)
+                    });
+                    
+                    return null; // Ne pas émettre pendant l'upload
+                } else if (event.type === HttpEventType.Response) {
+                    return event.body;
+                }
+                return null;
+            }),
+            filter((response: any) => response !== null),
+            last(), // Prendre seulement la dernière valeur (la réponse)
+            tap(response => {
+                console.log('✅ Job créé pour fichiers volumineux:', response);
+                this.currentJobId = response.jobId;
+                
+                this.updateProgress({
+                    percentage: 20,
+                    processed: 0,
+                    total: 100,
+                    step: 'Traitement par chunks en cours...',
+                    estimatedTimeRemaining: 45000
+                });
+            }),
+            catchError(this.handleError)
+        ) as Observable<{ jobId: string; status: string }>;
     }
 
     /**
@@ -167,16 +285,43 @@ export class ReconciliationService implements OnInit, OnDestroy {
             estimatedTimeRemaining: 60000
         });
 
-        return this.http.post<{ jobId: string; status: string }>(`${this.apiUrl}/upload-and-prepare-chunked`, formData)
-            .pipe(
-                tap(response => {
-                    console.log('✅ Job par chunks créé:', response);
-                    this.currentJobId = response.jobId;
+        // Timeout augmenté pour les uploads de chunks (60 minutes)
+        const UPLOAD_TIMEOUT = 3600000;
+
+        return this.http.post<{ jobId: string; status: string }>(`${this.apiUrl}/upload-and-prepare-chunked`, formData, {
+            reportProgress: true,
+            observe: 'events'
+        }).pipe(
+            timeout(UPLOAD_TIMEOUT),
+            map((event: HttpEvent<any>) => {
+                if (event.type === HttpEventType.UploadProgress) {
+                    const total = event.total || 1;
+                    const loaded = event.loaded || 0;
+                    const uploadProgress = Math.round((loaded / total) * 100);
                     
                     this.updateProgress({
-                        percentage: 15,
-                        processed: 0,
-                        total: 100,
+                        percentage: 5 + Math.round((uploadProgress * 0.1)), // 5-15% pour l'upload
+                        processed: loaded,
+                        total: total,
+                        step: `Upload des fichiers par chunks... ${uploadProgress}%`,
+                        estimatedTimeRemaining: Math.max(30000, (total - loaded) / (loaded / 1000))
+                    });
+                    
+                    return null;
+                } else if (event.type === HttpEventType.Response) {
+                    return event.body;
+                }
+                return null;
+            }),
+            filter((response: any) => response !== null),
+            tap(response => {
+                console.log('✅ Job par chunks créé:', response);
+                this.currentJobId = response.jobId;
+                
+                this.updateProgress({
+                    percentage: 15,
+                    processed: 0,
+                    total: 100,
                         step: 'Traitement par chunks en cours...',
                         estimatedTimeRemaining: 45000
                     });
@@ -246,7 +391,10 @@ export class ReconciliationService implements OnInit, OnDestroy {
                 const partnerChunk = partnerData.slice(i, i + chunkSize);
                 
                 // Traitement du chunk (logique de réconciliation simplifiée)
-                const chunkResults = this.processReconciliationChunk(boChunk, partnerChunk, config);
+                const chunkResults = this.processReconciliationChunk(boChunk, partnerChunk, {
+                    boReconciliationKey: config.boReconciliationKey,
+                    partnerReconciliationKey: config.partnerReconciliationKey
+                });
                 
                 // Fusionner les résultats
                 results.matchedRecords.push(...chunkResults.matchedRecords);
@@ -563,6 +711,14 @@ export class ReconciliationService implements OnInit, OnDestroy {
         // Désactiver le traitement frontend pour forcer l'utilisation du backend
         // Le backend est plus optimisé pour les gros volumes et la logique de correspondance
         return false;
+    }
+
+    /**
+     * Détermine si les fichiers nécessitent un upload par chunks (> 150MB)
+     */
+    private isVeryLargeFileForUpload(boFile: File, partnerFile: File): boolean {
+        const sizeThreshold = 150 * 1024 * 1024; // 150MB
+        return boFile.size > sizeThreshold || partnerFile.size > sizeThreshold;
     }
 
     /**
@@ -957,7 +1113,7 @@ export class ReconciliationService implements OnInit, OnDestroy {
         
         return new Observable(observer => {
             // Configuration de la taille des chunks pour les gros fichiers
-            const chunkSize = 100000; // 100k lignes par chunk
+            const chunkSize = 300000; // 300k lignes par chunk
             
             // Activer automatiquement le mode optimisé pour les chunks
             request.lightweightResponse = true;
@@ -1185,7 +1341,7 @@ export class ReconciliationService implements OnInit, OnDestroy {
         allPartnerOnly: any[],
         observer: any
     ): void {
-        const chunkSize = 100000; // 100k lignes par chunk
+        const chunkSize = 300000; // 300k lignes par chunk
         let iteration = 0;
         let currentBoData = [...remainingBoData];
         let currentPartnerData = [...remainingPartnerData];
@@ -1582,7 +1738,7 @@ export class ReconciliationService implements OnInit, OnDestroy {
                 const chunkResults = this.processReconciliationChunk(boChunk, partnerChunk, {
                     boReconciliationKey: request.boKeyColumn,
                     partnerReconciliationKey: request.partnerKeyColumn
-                } as ChunkProcessingConfig);
+                });
                 
                 // Fusionner les résultats
                 results.matchedRecords.push(...chunkResults.matchedRecords);

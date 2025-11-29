@@ -2878,6 +2878,33 @@ export class FileUploadComponent implements OnInit, OnDestroy {
         const fileSizeMB = file.size / (1024 * 1024);
         const startTime = Date.now();
         
+        // Pour les fichiers > 50MB, utiliser le backend pour éviter les crashes de mémoire
+        if (fileSizeMB > 50) {
+            console.log(`📁 Fichier très volumineux détecté (${fileSizeMB.toFixed(1)} MB). Utilisation du backend...`);
+            this.parseXLSXVeryLargeFile(file, isBo).catch(error => {
+                console.error('Erreur avec méthode backend, tentative avec méthode alternative:', error);
+                this.parseAutoXLSXLargeFile(file, isBo).catch(err => {
+                    console.error('Erreur lors du parsing Excel volumineux:', err);
+                    this.errorMessage = `Erreur lors du traitement du fichier: ${err instanceof Error ? err.message : String(err)}`;
+                    this.progressIndicatorService.hideProgress();
+                });
+            });
+            return;
+        }
+        
+        // Pour les fichiers > 30MB, utiliser la méthode optimisée pour éviter les crashes
+        if (fileSizeMB > 30) {
+            console.log(`📁 Fichier volumineux détecté (${fileSizeMB.toFixed(1)} MB). Utilisation du traitement optimisé...`);
+            this.parseAutoXLSXLargeFile(file, isBo).catch(error => {
+                console.error('Erreur lors du parsing Excel volumineux:', error);
+                this.errorMessage = `Erreur lors du traitement du fichier: ${error instanceof Error ? error.message : String(error)}`;
+                if (fileSizeMB > 5) {
+                    this.progressIndicatorService.hideProgress();
+                }
+            });
+            return;
+        }
+        
         if (fileSizeMB > 5) {
             console.log(`📁 Fichier volumineux détecté (${fileSizeMB.toFixed(1)} MB). Traitement optimisé en cours...`);
             this.progressIndicatorService.showProgress(
