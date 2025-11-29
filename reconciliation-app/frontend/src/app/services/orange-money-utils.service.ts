@@ -13,8 +13,26 @@ export class OrangeMoneyUtilsService {
   isOrangeMoneyFile(fileName: string): boolean {
     console.log('🔍 isOrangeMoneyFile appelée avec fileName:', fileName);
     const fileNameLower = fileName.toLowerCase();
+    const baseName = fileNameLower.split(/[/\\]/).pop() || fileNameLower;
     console.log('🔍 fileName.toLowerCase():', fileNameLower);
     
+    // Les fichiers TRXBO doivent être exclu explicitement de la logique Orange Money
+    if (baseName.includes('trxbo')) {
+      console.log('🟠 Fichier TRXBO détecté - ne pas appliquer la logique Orange Money');
+      return false;
+    }
+    
+    // Appliquer la logique uniquement pour les fichiers qui commencent par CIOM, COOM ou PMOM
+    const allowedPrefixes = ['ciom', 'coom', 'pmom'];
+    const startsWithAllowedPrefix = allowedPrefixes.some(prefix => baseName.startsWith(prefix));
+    
+    if (!startsWithAllowedPrefix) {
+      console.log('⚠️ Le fichier ne commence pas par CIOM/COOM/PMOM - logique Orange Money désactivée');
+      return false;
+    }
+    
+    // À partir de maintenant, nous savons que le fichier correspond à un pattern autorisé.
+    // On conserve les anciennes vérifications pour la journalisation détaillée
     const hasCiomcm = fileNameLower.includes('ciomcm');
     const hasOrange = fileNameLower.includes('orange');
     const hasOrangeMoney = fileNameLower.includes('orange money');
@@ -39,7 +57,12 @@ export class OrangeMoneyUtilsService {
     console.log('  - pattern PMOM + codes pays:', hasPmomCountryPattern);
     
     const result = hasCiomcm || hasOrange || hasOrangeMoney || hasCiomPattern || hasPmomPattern || hasCiomCountryPattern || hasPmomCountryPattern;
-    console.log('🔍 Résultat final:', result);
+    console.log('🔍 Résultat final (avant fallback prefix):', result);
+    
+    if (!result) {
+      console.log('✅ Aucun pattern additionnel trouvé mais préfixe autorisé détecté - retour true');
+      return true;
+    }
     
     return result;
   }

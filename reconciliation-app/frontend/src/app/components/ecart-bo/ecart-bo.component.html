@@ -1,0 +1,151 @@
+<div class="page-header">
+    <div class="breadcrumb">
+        <a (click)="goBack()" class="breadcrumb-link">← Retour aux Résultats</a>
+    </div>
+</div>
+
+<div class="ecart-bo-container">
+    <div class="header">
+        <h2>⚠️ Écarts BO ({{getBoEcartCount() | number:'1.0-0'}})</h2>
+    </div>
+
+    <div class="search-section">
+        <div class="search-container">
+            <div class="search-input-wrapper">
+                <span class="search-icon">🔍</span>
+                <input 
+                    type="text" 
+                    [(ngModel)]="searchKey" 
+                    (input)="onSearch()"
+                    placeholder="Rechercher dans toutes les colonnes (montant, date, agence, service...)"
+                    class="search-input"
+                >
+                <button 
+                    *ngIf="searchKey" 
+                    (click)="clearSearch()" 
+                    class="clear-search-btn"
+                    title="Effacer la recherche">
+                    ✕
+                </button>
+            </div>
+            <div class="search-results-info" *ngIf="searchKey">
+                <span class="results-count">
+                    {{ getSearchResultsCount() | number }} résultat(s) trouvé(s)
+                    <span *ngIf="getSearchResultsCount() !== getTotalResultsCount()">
+                        sur {{ getTotalResultsCount() | number }} au total
+                    </span>
+                </span>
+            </div>
+        </div>
+        <label style="display:flex;align-items:center;gap:6px;">
+            <input type="checkbox" [checked]="allBoSelectedOnPage" (change)="toggleSelectAllBoOnPage($event)">
+            <span>Sélectionner la page</span>
+        </label>
+        <button (click)="exportResults()" class="export-button">
+            📥 Exporter les ECART BO
+        </button>
+        <button (click)="saveEcartBoToEcartSolde()" class="save-button" [disabled]="isSavingEcartBo">
+            {{ isSavingEcartBo ? '💾 Sauvegarde...' : '💾 Sauvegarder dans Ecart Solde' }}
+        </button>
+        <button (click)="saveEcartBoToTrxSf()" class="save-button" [disabled]="isSavingEcartBoToTrxSf">
+            {{ isSavingEcartBoToTrxSf ? '💾 Sauvegarde...' : '💾 Sauvegarder dans TRX SF' }}
+        </button>
+    </div>
+
+    <div class="volume-summary">
+        <h4>📊 Résumé des volumes</h4>
+        <div class="volume-grid">
+            <div class="volume-card">
+                <div class="volume-label">Volume total BO</div>
+                <div class="volume-value">{{calculateTotalVolumeBoOnly() | number:'1.0-0'}}</div>
+            </div>
+            <div class="volume-card">
+                <div class="volume-label">Nombre de Transactions</div>
+                <div class="volume-value">
+                    {{ filteredBoOnly.length | number }}
+                    <span *ngIf="searchKey && getSearchResultsCount() !== getTotalResultsCount()" class="filtered-badge">
+                        (filtré)
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pagination -->
+    <div class="pagination-section" *ngIf="filteredBoOnly.length > 0 && !isLoading">
+        <div class="pagination-controls">
+            <div class="items-per-page">
+                <label>Lignes par page :</label>
+                <select [(ngModel)]="pageSize" (change)="onItemsPerPageChange()" class="form-control">
+                    <option [value]="10">10</option>
+                    <option [value]="20">20</option>
+                    <option [value]="50">50</option>
+                    <option [value]="100">100</option>
+                </select>
+            </div>
+            
+            <button 
+                class="btn pagination-btn" 
+                [disabled]="boOnlyPage === 1"
+                (click)="goToPage(boOnlyPage - 1)">
+                ← Précédent
+            </button>
+            
+            <div class="page-numbers">
+                <button 
+                    *ngFor="let page of getVisiblePages()"
+                    class="btn page-btn"
+                    [class.active]="boOnlyPage === page"
+                    (click)="goToPage(page)">
+                    {{ page }}
+                </button>
+            </div>
+            
+            <button 
+                class="btn pagination-btn" 
+                [disabled]="boOnlyPage === getTotalPages()"
+                (click)="goToPage(boOnlyPage + 1)">
+                Suivant →
+            </button>
+        </div>
+        
+        <div class="pagination-info">
+            Affichage de {{ getStartIndex() + 1 }} à {{ getEndIndex() }} sur {{ filteredBoOnly.length | number }} élément(s)
+            (Page {{ boOnlyPage }} / {{ getTotalPages() }})
+        </div>
+    </div>
+
+    <div *ngIf="isLoading" class="loading">
+        <div class="spinner"></div>
+        <p>Chargement des écarts BO... {{loadProgress}}%</p>
+        <div class="progress-bar" *ngIf="loadProgress > 0">
+            <div class="progress" [style.width.%]="loadProgress"></div>
+        </div>
+    </div>
+
+    <div *ngIf="!isLoading" class="bo-only-section">
+        <div class="unmatched-card" *ngFor="let record of getPagedBoOnly()">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:8px;">
+                <div style="font-weight:600;color:#d32f2f;">Ligne BO</div>
+                <label style="display:flex;align-items:center;gap:6px;">
+                    <input type="checkbox" [checked]="isBoRecordSelected(record)" (change)="toggleBoSelection(record, $event)">
+                    <span>Sélectionner</span>
+                </label>
+            </div>
+            <div class="data-grid">
+                <div class="info-row">
+                    <span class="label">Volume:</span>
+                    <span class="value">{{getBoOnlyAgencyAndService(record).volume | number:'1.0-0'}}</span>
+                </div>
+                <div class="info-row">
+                    <span class="label">Date:</span>
+                    <span class="value">{{getBoOnlyAgencyAndService(record).date}}</span>
+                </div>
+                <div class="data-row" *ngFor="let key of getBoOnlyKeys(record)">
+                    <span class="label">{{key}}:</span>
+                    <span class="value">{{getRecordValue(record, key)}}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

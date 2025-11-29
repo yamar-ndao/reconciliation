@@ -381,6 +381,46 @@ public class ReconciliationController {
         }
     }
 
+    @Autowired
+    private com.reconciliation.service.ExcelParsingService excelParsingService;
+
+    /**
+     * Endpoint pour parser les fichiers Excel volumineux côté backend
+     * Retourne les données sous forme de JSON
+     */
+    @PostMapping("/parse-excel")
+    public ResponseEntity<?> parseExcel(@RequestParam("file") MultipartFile file, HttpServletRequest httpRequest) {
+        long startTime = System.currentTimeMillis();
+        String userId = extractUserId(httpRequest);
+        
+        try {
+            log.info("📤 === REQUÊTE DE PARSING EXCEL ===");
+            log.info("📁 Fichier: {} ({} MB)", file.getOriginalFilename(), file.getSize() / (1024 * 1024));
+            log.info("👤 User ID: {}", userId);
+            
+            List<Map<String, String>> data = excelParsingService.parseExcelFile(file);
+            
+            long totalTime = System.currentTimeMillis() - startTime;
+            log.info("✅ Parsing Excel terminé avec succès en {} ms - {} lignes extraites", totalTime, data.size());
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("data", data);
+            response.put("rowCount", data.size());
+            response.put("fileName", file.getOriginalFilename());
+            
+            return ResponseEntity.ok(response);
+            
+        } catch (IllegalArgumentException e) {
+            long totalTime = System.currentTimeMillis() - startTime;
+            log.error("❌ Erreur de validation lors du parsing après {} ms: {}", totalTime, e.getMessage());
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        } catch (Exception e) {
+            long totalTime = System.currentTimeMillis() - startTime;
+            log.error("❌ Erreur lors du parsing Excel après {} ms: {}", totalTime, e.getMessage(), e);
+            return ResponseEntity.status(500).body(Map.of("error", "Erreur lors du parsing du fichier Excel: " + e.getMessage()));
+        }
+    }
+
     @PostMapping("/execute-magic")
     public ResponseEntity<Map<String, Object>> executeMagicReconciliation(
             @RequestParam("boFile") MultipartFile boFile,
@@ -1299,17 +1339,29 @@ public class ReconciliationController {
         // Pour le pays, chercher aussi dans paysProvenance (fichiers GRX)
         if ("country".equals(key)) {
             log.debug("🔍 DEBUG getStringValue - Recherche du pays dans les colonnes GRX");
+            
             Object paysProvenance = map.get("paysProvenance");
             if (paysProvenance != null) {
                 log.info("✅ DEBUG getStringValue - Pays trouvé dans 'paysProvenance': {}", paysProvenance);
                 return paysProvenance.toString();
             }
-            // Chercher aussi dans "Pays provenance"
+            
             Object paysProvenanceWithSpace = map.get("Pays provenance");
             if (paysProvenanceWithSpace != null) {
                 log.info("✅ DEBUG getStringValue - Pays trouvé dans 'Pays provenance': {}", paysProvenanceWithSpace);
                 return paysProvenanceWithSpace.toString();
             }
+            
+            // Chercher aussi dans "GRX"
+            Object grxValue = map.get("GRX");
+            if (grxValue == null) {
+                grxValue = map.get("grx");
+            }
+            if (grxValue != null) {
+                log.info("✅ DEBUG getStringValue - Pays trouvé dans 'GRX': {}", grxValue);
+                return grxValue.toString();
+            }
+            
             log.warn("❌ DEBUG getStringValue - Aucun pays trouvé dans les colonnes GRX");
         }
         
@@ -1411,69 +1463,60 @@ public class ReconciliationController {
                 optimizedMatch.setKey(match.getKey());
                 // Ne garder que les différences (plus léger que les objets complets)
                 optimizedMatch.setDifferences(match.getDifferences());
-                // Créer des objets minimaux avec seulement les colonnes essentielles
+                // Inclure toutes les colonnes disponibles dans les données BO et Partenaire
                 if (match.getBoData() != null && match.getPartnerData() != null) {
-                    Map<String, String> minimalBo = new HashMap<>();
-                    minimalBo.put(boKeyColumn, match.getKey());
-                    // Garder seulement quelques colonnes essentielles
-                    if (match.getBoData().containsKey("Date")) minimalBo.put("Date", match.getBoData().get("Date"));
-                    if (match.getBoData().containsKey("montant")) minimalBo.put("montant", match.getBoData().get("montant"));
+                    // Créer une copie complète de toutes les colonnes BO
+                    Map<String, String> completeBo = new HashMap<>(match.getBoData());
+                    // S'assurer que la clé est présente
+                    if (!completeBo.containsKey(boKeyColumn)) {
+                        completeBo.put(boKeyColumn, match.getKey());
+                    }
                     
-                    Map<String, String> minimalPartner = new HashMap<>();
-                    minimalPartner.put(partnerKeyColumn, match.getKey());
-                    if (match.getPartnerData().containsKey("Date")) minimalPartner.put("Date", match.getPartnerData().get("Date"));
-                    if (match.getPartnerData().containsKey("Débit")) minimalPartner.put("Débit", match.getPartnerData().get("Débit"));
-                    if (match.getPartnerData().containsKey("Crédit")) minimalPartner.put("Crédit", match.getPartnerData().get("Crédit"));
+                    // Créer une copie complète de toutes les colonnes Partenaire
+                    Map<String, String> completePartner = new HashMap<>(match.getPartnerData());
+                    // S'assurer que la clé est présente
+                    if (!completePartner.containsKey(partnerKeyColumn)) {
+                        completePartner.put(partnerKeyColumn, match.getKey());
+                    }
                     
-                    optimizedMatch.setBoData(minimalBo);
-                    optimizedMatch.setPartnerData(minimalPartner);
+                    optimizedMatch.setBoData(completeBo);
+                    optimizedMatch.setPartnerData(completePartner);
                 }
                 optimizedMatches.add(optimizedMatch);
             }
             optimized.setMatches(optimizedMatches);
-            log.info("📊 Matches optimisés: {} (taille réduite de ~80%)", optimizedMatches.size());
+            log.info("📊 Matches avec toutes les colonnes: {}", optimizedMatches.size());
         }
         
-        // Pour boOnly et partnerOnly : ne garder que les clés et colonnes essentielles
+        // Pour boOnly : inclure toutes les colonnes disponibles
         if (response.getBoOnly() != null && !response.getBoOnly().isEmpty()) {
-            List<Map<String, String>> optimizedBoOnly = new ArrayList<>();
+            List<Map<String, String>> completeBoOnly = new ArrayList<>();
             for (Map<String, String> record : response.getBoOnly()) {
-                Map<String, String> minimal = new HashMap<>();
-                String key = record.get(boKeyColumn);
-                if (key != null) {
-                    minimal.put(boKeyColumn, key);
-                    if (record.containsKey("Date")) minimal.put("Date", record.get("Date"));
-                    if (record.containsKey("montant")) minimal.put("montant", record.get("montant"));
-                    optimizedBoOnly.add(minimal);
-                }
+                // Créer une copie complète de toutes les colonnes
+                Map<String, String> complete = new HashMap<>(record);
+                completeBoOnly.add(complete);
             }
-            optimized.setBoOnly(optimizedBoOnly);
-            log.info("📊 BoOnly optimisé: {} (taille réduite)", optimizedBoOnly.size());
+            optimized.setBoOnly(completeBoOnly);
+            log.info("📊 BoOnly complet: {} enregistrements avec toutes les colonnes", completeBoOnly.size());
         }
         
         if (response.getPartnerOnly() != null && !response.getPartnerOnly().isEmpty()) {
-            List<Map<String, String>> optimizedPartnerOnly = new ArrayList<>();
+            List<Map<String, String>> completePartnerOnly = new ArrayList<>();
             for (Map<String, String> record : response.getPartnerOnly()) {
-                Map<String, String> minimal = new HashMap<>();
-                String key = record.get(partnerKeyColumn);
-                if (key != null) {
-                    minimal.put(partnerKeyColumn, key);
-                    if (record.containsKey("Date")) minimal.put("Date", record.get("Date"));
-                    if (record.containsKey("Débit")) minimal.put("Débit", record.get("Débit"));
-                    if (record.containsKey("Crédit")) minimal.put("Crédit", record.get("Crédit"));
-                    optimizedPartnerOnly.add(minimal);
-                }
+                // Créer une copie complète de toutes les colonnes
+                Map<String, String> complete = new HashMap<>(record);
+                completePartnerOnly.add(complete);
             }
-            optimized.setPartnerOnly(optimizedPartnerOnly);
-            log.info("📊 PartnerOnly optimisé: {} (taille réduite)", optimizedPartnerOnly.size());
+            optimized.setPartnerOnly(completePartnerOnly);
+            log.info("📊 PartnerOnly complet: {} enregistrements avec toutes les colonnes", completePartnerOnly.size());
         }
         
         // Pour les mismatches : garder les objets complets (nécessaires pour l'analyse)
         optimized.setMismatches(response.getMismatches());
         
         long optimizationTime = System.currentTimeMillis() - optimizationStart;
-        log.info("⏱️  [TIMING] Temps d'optimisation de la réponse: {} ms", optimizationTime);
-        log.info("✅ Réponse optimisée - Taille réduite pour le transfert réseau");
+        log.info("⏱️  [TIMING] Temps de préparation de la réponse: {} ms", optimizationTime);
+        log.info("✅ Réponse préparée - Toutes les colonnes incluses");
         
         return optimized;
     }

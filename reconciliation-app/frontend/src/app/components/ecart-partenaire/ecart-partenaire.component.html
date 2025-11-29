@@ -1,0 +1,158 @@
+<div class="page-header">
+    <div class="breadcrumb">
+        <a (click)="goBack()" class="breadcrumb-link">← Retour aux Résultats</a>
+    </div>
+</div>
+
+<div class="ecart-partenaire-container">
+    <div class="header">
+        <h2>⚠️ Écarts Partenaire ({{getPartnerOnlyCount() | number:'1.0-0'}})</h2>
+    </div>
+
+    <div class="search-section">
+        <div class="search-container">
+            <div class="search-input-wrapper">
+                <span class="search-icon">🔍</span>
+                <input 
+                    type="text" 
+                    [(ngModel)]="searchKey" 
+                    (input)="onSearch()"
+                    placeholder="Rechercher dans toutes les colonnes (montant, date, numéro trans GU, ID opération...)"
+                    class="search-input"
+                >
+                <button 
+                    *ngIf="searchKey" 
+                    (click)="clearSearch()" 
+                    class="clear-search-btn"
+                    title="Effacer la recherche">
+                    ✕
+                </button>
+            </div>
+            <div class="search-results-info" *ngIf="searchKey">
+                <span class="results-count">
+                    {{ getSearchResultsCount() | number }} résultat(s) trouvé(s)
+                    <span *ngIf="getSearchResultsCount() !== getTotalResultsCount()">
+                        sur {{ getTotalResultsCount() | number }} au total
+                    </span>
+                </span>
+            </div>
+        </div>
+        <label style="display:flex;align-items:center;gap:6px;">
+            <input type="checkbox" [checked]="allPartnerSelectedOnPage" (change)="toggleSelectAllPartnerOnPage($event)">
+            <span>Sélectionner la page</span>
+        </label>
+        <button (click)="exportResults()" class="export-button">
+            📥 Exporter les ECART Partenaire
+        </button>
+        <button (click)="saveEcartPartnerToImpactOP()" class="save-button" [disabled]="isSavingEcartPartnerToImpactOP">
+            {{ isSavingEcartPartnerToImpactOP ? '💾 Sauvegarde...' : '💾 Sauvegarder dans Import OP' }}
+        </button>
+    </div>
+
+    <div class="volume-summary">
+        <h4>📊 Résumé des volumes</h4>
+        <div class="volume-grid">
+            <div class="volume-card">
+                <div class="volume-label">Volume total Partenaire</div>
+                <div class="volume-value">{{calculateTotalVolumePartnerOnly() | number:'1.0-0'}}</div>
+            </div>
+            <div class="volume-card">
+                <div class="volume-label">Nombre de Transactions</div>
+                <div class="volume-value">
+                    {{ filteredPartnerOnly.length | number }}
+                    <span *ngIf="searchKey && getSearchResultsCount() !== getTotalResultsCount()" class="filtered-badge">
+                        (filtré)
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pagination -->
+    <div class="pagination-section" *ngIf="filteredPartnerOnly.length > 0 && !isLoading">
+        <div class="pagination-controls">
+            <div class="items-per-page">
+                <label>Lignes par page :</label>
+                <select [(ngModel)]="pageSize" (change)="onItemsPerPageChange()" class="form-control">
+                    <option [value]="10">10</option>
+                    <option [value]="20">20</option>
+                    <option [value]="50">50</option>
+                    <option [value]="100">100</option>
+                </select>
+            </div>
+            
+            <button 
+                class="btn pagination-btn" 
+                [disabled]="partnerOnlyPage === 1"
+                (click)="goToPage(partnerOnlyPage - 1)">
+                ← Précédent
+            </button>
+            
+            <div class="page-numbers">
+                <button 
+                    *ngFor="let page of getVisiblePages()"
+                    class="btn page-btn"
+                    [class.active]="partnerOnlyPage === page"
+                    (click)="goToPage(page)">
+                    {{ page }}
+                </button>
+            </div>
+            
+            <button 
+                class="btn pagination-btn" 
+                [disabled]="partnerOnlyPage === getTotalPages()"
+                (click)="goToPage(partnerOnlyPage + 1)">
+                Suivant →
+            </button>
+        </div>
+        
+        <div class="pagination-info">
+            Affichage de {{ getStartIndex() + 1 }} à {{ getEndIndex() }} sur {{ filteredPartnerOnly.length | number }} élément(s)
+            (Page {{ partnerOnlyPage }} / {{ getTotalPages() }})
+        </div>
+    </div>
+
+    <div *ngIf="isLoading" class="loading">
+        <div class="spinner"></div>
+        <p>Chargement des écarts Partenaire... {{loadProgress}}%</p>
+        <div class="progress-bar" *ngIf="loadProgress > 0">
+            <div class="progress" [style.width.%]="loadProgress"></div>
+        </div>
+    </div>
+
+    <div *ngIf="!isLoading" class="partner-only-section">
+        <div class="unmatched-card" *ngFor="let record of getPagedPartnerOnly()">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:8px;">
+                <div style="display:flex;align-items:center;gap:10px;">
+                    <div style="font-weight:600;color:#1976D2;">Ligne partenaire</div>
+                    <button (click)="createOperationFromPartnerRecord(record)" class="save-button" [disabled]="!isPartnerRecordEligible(record)" title="Créer OP">➕ Créer OP</button>
+                </div>
+                <label style="display:flex;align-items:center;gap:6px;">
+                    <input type="checkbox" [checked]="isPartnerRecordSelected(record)" (change)="togglePartnerSelection(record, $event)">
+                    <span>Sélectionner</span>
+                </label>
+            </div>
+            <div class="data-grid">
+                <div class="info-row">
+                    <span class="label">Volume:</span>
+                    <span class="value">{{getPartnerOnlyVolume(record) | number:'1.0-0'}}</span>
+                </div>
+                <div class="info-row">
+                    <span class="label">Date:</span>
+                    <span class="value">{{getPartnerOnlyDate(record)}}</span>
+                </div>
+                <div class="info-row">
+                    <span class="label">Source:</span>
+                    <span class="value" style="display:flex;align-items:center;gap:6px;">
+                        <input type="checkbox" checked disabled>
+                        {{ record['SOURCE'] || 'PARTENAIRE' }}
+                    </span>
+                </div>
+                <div class="data-row" *ngFor="let key of getPartnerOnlyKeys(record)">
+                    <span class="label">{{key}}:</span>
+                    <span class="value">{{getRecordValue(record, key)}}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

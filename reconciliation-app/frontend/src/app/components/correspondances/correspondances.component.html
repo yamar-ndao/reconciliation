@@ -1,0 +1,141 @@
+<div class="page-header">
+    <div class="breadcrumb">
+        <a (click)="goBack()" class="breadcrumb-link">← Retour aux Résultats</a>
+    </div>
+</div>
+
+<div class="correspondances-container">
+    <div class="header">
+        <h2>✅ Correspondances ({{getMatchesCount() | number:'1.0-0'}})</h2>
+    </div>
+
+    <div class="search-section">
+        <input 
+            type="text" 
+            [(ngModel)]="searchKey" 
+            (input)="onSearch()"
+            placeholder="Rechercher par clé..."
+            class="search-input"
+        >
+        <button (click)="showColumnSelector = !showColumnSelector" class="column-button">
+            ⚙️ Colonnes
+        </button>
+        <button (click)="toggleColumnReorderMode()" class="reorder-button" [class.active]="isColumnReorderMode">
+            {{ isColumnReorderMode ? '✅ Fin réorganisation' : '🔄 Réorganiser' }}
+        </button>
+        <button (click)="handleExport()" class="export-button" [disabled]="isExporting || !filteredMatches.length">
+            {{ isExporting ? '⏳ Export en cours...' : '📥 Exporter les correspondances' }}
+        </button>
+    </div>
+
+    <!-- Sélecteur de colonnes -->
+    <div *ngIf="showColumnSelector" class="column-selector-panel">
+        <h4>👁️ Sélection des colonnes</h4>
+        <div class="column-list">
+            <label *ngFor="let col of allColumns" class="column-checkbox">
+                <input 
+                    type="checkbox" 
+                    [checked]="isColumnVisible(col)"
+                    (change)="toggleColumnVisibility(col)"
+                >
+                <span>{{ col }}</span>
+            </label>
+        </div>
+        <div class="column-selector-actions">
+            <button (click)="showAllColumns()">
+                Tout afficher
+            </button>
+            <button (click)="hideAllColumns()">
+                Tout masquer
+            </button>
+        </div>
+    </div>
+
+    <!-- Indicateur de progression de l'export -->
+    <div *ngIf="isExporting" class="export-progress-overlay">
+        <div class="export-progress-card">
+            <h3>📥 Export en cours</h3>
+            <div class="export-progress-bar">
+                <div class="export-progress-fill" [style.width.%]="exportProgress"></div>
+            </div>
+            <div class="export-progress-text">
+                {{ exportProgress }}% - {{ exportMessage }}
+            </div>
+            <div class="export-progress-details">
+                {{ filteredMatches.length | number }} correspondances à exporter
+            </div>
+        </div>
+    </div>
+
+    <div class="volume-summary">
+        <h4>📊 Résumé des volumes</h4>
+        <div class="volume-grid">
+            <div class="volume-card">
+                <div class="volume-label">Volume total BO</div>
+                <div class="volume-value">{{calculateTotalVolume('bo') | number:'1.0-0'}}</div>
+            </div>
+            <div class="volume-card">
+                <div class="volume-label">Volume total Partenaire</div>
+                <div class="volume-value">{{calculateTotalVolume('partner') | number:'1.0-0'}}</div>
+            </div>
+            <div class="volume-card">
+                <div class="volume-label">Différence totale</div>
+                <div class="volume-value" [class.positive]="calculateVolumeDifference() > 0" [class.negative]="calculateVolumeDifference() < 0">
+                    {{calculateVolumeDifference() | number:'1.0-0'}}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="pagination-controls">
+        <button (click)="prevPage()" [disabled]="matchesPage === 1">Précédent</button>
+        <span>Page {{matchesPage}} / {{getTotalPages()}}</span>
+        <button (click)="nextPage()" [disabled]="matchesPage === getTotalPages()">Suivant</button>
+    </div>
+
+    <div *ngIf="isLoading" class="loading">
+        <div class="spinner"></div>
+        <p>Chargement des correspondances... {{loadProgress}}%</p>
+        <div class="progress-bar" *ngIf="loadProgress > 0">
+            <div class="progress" [style.width.%]="loadProgress"></div>
+        </div>
+    </div>
+
+    <div *ngIf="!isLoading && getVisibleColumns().length > 0" class="table-container">
+        <div class="table-wrapper">
+            <table class="correspondances-table">
+                <thead>
+                    <tr>
+                        <th 
+                            *ngFor="let col of getVisibleColumns(); let i = index"
+                            [draggable]="isColumnReorderMode"
+                            (dragstart)="onColumnDragStart($event, col)"
+                            (dragover)="onColumnDragOver($event, col)"
+                            (drop)="onColumnDrop($event, col)"
+                            (dragend)="onColumnDragEnd()"
+                            [class.dragging]="draggedColumn === col"
+                            [class.drag-over]="dragOverColumn === col"
+                            [class.reorder-mode]="isColumnReorderMode"
+                            class="table-header">
+                            <div class="header-content">
+                                <span>{{ col }}</span>
+                                <span *ngIf="isColumnReorderMode" class="drag-handle">⋮⋮</span>
+                            </div>
+                        </th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr *ngFor="let match of getPagedMatches()" [class.has-differences]="hasDifferences(match)">
+                        <td *ngFor="let col of getVisibleColumns()" [class.bo-column]="col.startsWith('BO_')" [class.partner-column]="col.startsWith('PARTENAIRE_')">
+                            {{ getCellValue(match, col) }}
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div *ngIf="!isLoading && getVisibleColumns().length === 0" class="no-columns-message">
+        <p>⚠️ Aucune colonne visible. Veuillez sélectionner au moins une colonne à afficher.</p>
+    </div>
+</div>

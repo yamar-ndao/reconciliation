@@ -143,18 +143,18 @@ type ResultsTab = 'matches' | 'boOnly' | 'partnerOnly' | 'agencySummary';
             <div class="results-tabs">
                 <div class="tab-buttons">
                     <button 
-                        [class.active]="activeTab === 'matches'"
-                        (click)="setActiveTab('matches')">
+                        class="nav-button"
+                        (click)="navigateToCorrespondances()">
                         ✅ Correspondances ({{getMatchesCount() | number:'1.0-0'}})
                     </button>
                     <button 
-                        [class.active]="activeTab === 'boOnly'"
-                        (click)="setActiveTab('boOnly')">
+                        class="nav-button"
+                        (click)="navigateToEcartBo()">
                         ⚠️ ECART BO ({{getBoEcartCount() | number:'1.0-0'}})
                     </button>
                     <button 
-                        [class.active]="activeTab === 'partnerOnly'"
-                        (click)="setActiveTab('partnerOnly')">
+                        class="nav-button"
+                        (click)="navigateToEcartPartenaire()">
                         ⚠️ ECART Partenaire ({{getPartnerOnlyCount() | number:'1.0-0'}})
                     </button>
                     <button 
@@ -1031,6 +1031,22 @@ type ResultsTab = 'matches' | 'boOnly' | 'partnerOnly' | 'agencySummary';
         .tab-buttons button.active {
             background: #2196F3;
             color: white;
+        }
+
+        .tab-buttons .nav-button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            margin-right: 10px;
+            font-weight: 600;
+            box-shadow: 0 2px 4px rgba(102, 126, 234, 0.3);
+        }
+
+        .tab-buttons .nav-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(102, 126, 234, 0.4);
+            background: linear-gradient(135deg, #5a6fd8 0%, #6a4190 100%);
         }
 
         .report-button {
@@ -1914,6 +1930,8 @@ export class ReconciliationResultsComponent implements OnInit, OnDestroy {
     availableBoColumns: string[] = []; // Colonnes BO
     selectedBoColumns: { [key: string]: boolean } = {};
     defaultColumns = ['Service', 'téléphone client', 'montant', 'Agence', 'Date', 'HEURE', 'SOURCE'];
+    // Cache pour les colonnes collectées (évite de recalculer à chaque fois)
+    private columnsCache: { boColumns: string[], partnerColumns: string[] } | null = null;
     private trxboKeyCache = new WeakMap<Record<string, string>, Map<string, string | null>>();
     private readonly TRXBO_COLUMNS: string[] = [
         'IDTransaction',
@@ -3137,6 +3155,8 @@ export class ReconciliationResultsComponent implements OnInit, OnDestroy {
                 if (response) {
                     console.log('✅ Données valides reçues, initialisation...');
                     this.response = response;
+                    // Invalider le cache des colonnes car les données ont changé
+                    this.columnsCache = null;
                     this.initializeFilteredData();
                     
                     // Vider le cache quand les données changent
@@ -3516,6 +3536,18 @@ export class ReconciliationResultsComponent implements OnInit, OnDestroy {
         return this.response?.partnerOnly?.length || 0;
     }
 
+    navigateToCorrespondances(): void {
+        this.router.navigate(['/correspondances']);
+    }
+
+    navigateToEcartBo(): void {
+        this.router.navigate(['/ecart-bo']);
+    }
+
+    navigateToEcartPartenaire(): void {
+        this.router.navigate(['/ecart-partenaire']);
+    }
+
     setActiveTab(tab: ResultsTab) {
         console.log('🔄 setActiveTab appelé avec:', tab);
         console.log('🔄 activeTab avant:', this.activeTab);
@@ -3552,6 +3584,53 @@ export class ReconciliationResultsComponent implements OnInit, OnDestroy {
 
     async openReconciliationReport() {
         console.log('📈 Préparation du rapport de réconciliation (données en cours)...');
+        
+        // OPTIMISATION: Vérifier si le résumé par agence est déjà disponible
+        const existingSummary = this.reconciliationSummaryService.getAgencySummary();
+        if (existingSummary && existingSummary.length > 0) {
+            console.log('✅ Résumé par agence déjà disponible, navigation immédiate');
+            // Le résumé est déjà disponible, naviguer immédiatement
+            this.router.navigate(['/reconciliation-report']);
+            return;
+        }
+
+        // Si le résumé n'est pas disponible, vérifier si les données nécessaires sont déjà chargées
+        const matchesLoaded = this.tabLoadState['matches']?.loaded;
+        const boOnlyLoaded = this.tabLoadState['boOnly']?.loaded;
+        
+        // Si les données sont déjà chargées, construire le résumé rapidement
+        if (matchesLoaded && boOnlyLoaded) {
+            console.log('✅ Données déjà chargées, construction rapide du résumé...');
+            try {
+                // Construire le résumé sans recharger les données
+                this.invalidateCache();
+                this.cachedAgencySummary = null;
+                this.lastResponseHash = '';
+                const summary = this.getAgencySummary();
+                this.reconciliationSummaryService.setAgencySummary(summary);
+                this.router.navigate(['/reconciliation-report']);
+                return;
+            } catch (error) {
+                console.warn('⚠️ Erreur lors de la construction rapide du résumé, chargement complet...', error);
+            }
+        }
+
+        // Navigation immédiate avec chargement en arrière-plan
+        console.log('🚀 Navigation immédiate, chargement des données en arrière-plan...');
+        this.router.navigate(['/reconciliation-report']);
+        
+        // Charger les données en arrière-plan (non bloquant)
+        this.loadReportDataInBackground().catch(error => {
+            console.error('❌ Erreur lors du chargement en arrière-plan:', error);
+            // Ne pas afficher d'erreur à l'utilisateur car la navigation a déjà eu lieu
+            // Le composant rapport gérera l'absence de données
+        });
+    }
+
+    /**
+     * Charge les données du rapport en arrière-plan (non bloquant)
+     */
+    private async loadReportDataInBackground(): Promise<void> {
         try {
             // Charger les données nécessaires pour chaque onglet
             await Promise.all([
@@ -3562,14 +3641,11 @@ export class ReconciliationResultsComponent implements OnInit, OnDestroy {
 
             // Construire / actualiser le résumé par agence à partir des données courantes
             await this.buildAgencySummaryData();
+            console.log('✅ Données du rapport chargées en arrière-plan avec succès');
         } catch (error) {
-            console.error('❌ Impossible de préparer les données pour le rapport de réconciliation:', error);
-            this.popupService.showError('Impossible de préparer les données nécessaires au rapport.');
-            return;
+            console.error('❌ Erreur lors du chargement en arrière-plan des données du rapport:', error);
+            throw error;
         }
-
-        // Rediriger vers la vue du rapport qui consommera les données en mémoire
-        this.router.navigate(['/reconciliation-report']);
     }
 
     nextPage(type: 'matches' | 'boOnly' | 'partnerOnly') {
@@ -6298,20 +6374,10 @@ private async downloadExcelFile(workbooks: ExcelJS.Workbook[], fileName: string)
     
     /**
      * Ouvre la popup de sélection des colonnes pour l'export (rapport d'écarts)
+     * OPTIMISÉ : Utilise un échantillon représentatif et un cache pour améliorer les performances
      */
     async openColumnSelector(): Promise<void> {
-        try {
-            await Promise.all([
-                this.loadTabData('boOnly'),
-                this.loadTabData('partnerOnly')
-            ]);
-        } catch (error) {
-            console.error('❌ Impossible de préparer les données pour le rapport des écarts:', error);
-            this.popupService.showError('Impossible de préparer les données pour le rapport des écarts.');
-            return;
-        }
-        
-        // Vérifier s'il y a au moins des écarts BO ou Partenaire
+        // Vérifier s'il y a au moins des écarts BO ou Partenaire (sans charger toutes les données)
         const hasBoEcart = this.response?.boOnly && this.response.boOnly.length > 0;
         const hasPartnerEcart = this.response?.partnerOnly && this.response.partnerOnly.length > 0;
         
@@ -6320,139 +6386,179 @@ private async downloadExcelFile(workbooks: ExcelJS.Workbook[], fileName: string)
             return;
         }
 
-        // Extraire TOUTES les colonnes disponibles du fichier BO
-        // Collecter depuis TOUTES les sources possibles : matches, écarts, mismatches, ET données originales
-        this.availableBoColumns = [];
+        // Utiliser le cache si disponible
+        if (this.columnsCache) {
+            console.log('📋 Utilisation du cache pour les colonnes');
+            this.availableBoColumns = [...this.columnsCache.boColumns];
+            this.availableColumns = [...this.columnsCache.partnerColumns];
+            this.initializeColumnSelections();
+            this.showColumnSelector = true;
+            return;
+        }
+
+        // Afficher un indicateur de chargement
+        this.popupService.showInfo('⏳ Préparation des colonnes disponibles...');
+
+        // Collecter les colonnes de manière optimisée (échantillon représentatif)
         const allBoColumns = new Set<string>();
+        const allPartnerColumns = new Set<string>();
         
-        // PRIORITÉ 1: Collecter depuis les données originales si disponibles (contient TOUTES les colonnes)
+        // Constante pour limiter le nombre d'enregistrements à analyser
+        const SAMPLE_SIZE = 100; // Analyser seulement les 100 premiers enregistrements de chaque type
+
+        // Collecter les colonnes BO depuis un échantillon représentatif
+        this.collectBoColumnsOptimized(allBoColumns, SAMPLE_SIZE);
+        
+        // Collecter les colonnes Partenaire depuis un échantillon représentatif
+        this.collectPartnerColumnsOptimized(allPartnerColumns, SAMPLE_SIZE);
+
+        // Forcer l'inclusion de la colonne SOURCE pour identification d'origine
+        allPartnerColumns.add('SOURCE');
+        
+        // Stocker dans le cache
+        this.columnsCache = {
+            boColumns: Array.from(allBoColumns).sort(),
+            partnerColumns: Array.from(allPartnerColumns).sort()
+        };
+        
+        this.availableBoColumns = [...this.columnsCache.boColumns];
+        this.availableColumns = [...this.columnsCache.partnerColumns];
+        
+        console.log('📋 Colonnes collectées (optimisé):', {
+            bo: this.availableBoColumns.length,
+            partner: this.availableColumns.length
+        });
+        
+        this.initializeColumnSelections();
+        this.showColumnSelector = true;
+    }
+
+    /**
+     * Collecte les colonnes BO de manière optimisée (échantillon représentatif)
+     */
+    private collectBoColumnsOptimized(allBoColumns: Set<string>, sampleSize: number): void {
+        // PRIORITÉ 1: Collecter depuis les données originales (échantillon)
         try {
             const originalBoData = this.appStateService.getBoData();
             if (originalBoData && originalBoData.length > 0) {
-                originalBoData.forEach(record => {
+                const sample = originalBoData.slice(0, Math.min(sampleSize, originalBoData.length));
+                sample.forEach(record => {
                     Object.keys(record).forEach(key => {
-                        const correctedKey = fixGarbledCharacters(key);
-                        allBoColumns.add(correctedKey);
+                        allBoColumns.add(fixGarbledCharacters(key));
                     });
                 });
-                console.log('📋 Colonnes BO collectées depuis données originales:', allBoColumns.size);
+                console.log('📋 Colonnes BO collectées depuis données originales (échantillon):', allBoColumns.size);
             }
         } catch (error) {
             console.warn('⚠️ Impossible de récupérer les données BO originales:', error);
         }
         
-        // PRIORITÉ 2: Collecter depuis les matches (correspondances) - peut contenir des colonnes supplémentaires
-        if (this.response.matches && this.response.matches.length > 0) {
-            this.response.matches.forEach(match => {
+        // PRIORITÉ 2: Collecter depuis les matches (échantillon)
+        if (this.response?.matches && this.response.matches.length > 0) {
+            const sample = this.response.matches.slice(0, Math.min(sampleSize, this.response.matches.length));
+            sample.forEach(match => {
                 if (match.boData) {
                     Object.keys(match.boData).forEach(key => {
-                        const correctedKey = fixGarbledCharacters(key);
-                        allBoColumns.add(correctedKey);
+                        allBoColumns.add(fixGarbledCharacters(key));
                     });
                 }
             });
         }
         
-        // PRIORITÉ 3: Collecter depuis les écarts BO (contient toutes les colonnes des enregistrements non correspondants)
-        if (hasBoEcart && this.response.boOnly && this.response.boOnly.length > 0) {
-            this.response.boOnly.forEach(record => {
+        // PRIORITÉ 3: Collecter depuis les écarts BO (échantillon)
+        if (this.response?.boOnly && this.response.boOnly.length > 0) {
+            const sample = this.response.boOnly.slice(0, Math.min(sampleSize, this.response.boOnly.length));
+            sample.forEach(record => {
                 Object.keys(record).forEach(key => {
-                    const correctedKey = fixGarbledCharacters(key);
-                    allBoColumns.add(correctedKey);
+                    allBoColumns.add(fixGarbledCharacters(key));
                 });
             });
         }
         
-        // PRIORITÉ 4: Collecter aussi depuis les mismatches si disponibles
-        if (this.response.mismatches && this.response.mismatches.length > 0) {
-            this.response.mismatches.forEach(mismatch => {
+        // PRIORITÉ 4: Collecter depuis les mismatches (échantillon)
+        if (this.response?.mismatches && this.response.mismatches.length > 0) {
+            const sample = this.response.mismatches.slice(0, Math.min(sampleSize, this.response.mismatches.length));
+            sample.forEach(mismatch => {
                 if (mismatch.boData) {
                     Object.keys(mismatch.boData).forEach(key => {
-                        const correctedKey = fixGarbledCharacters(key);
-                        allBoColumns.add(correctedKey);
+                        allBoColumns.add(fixGarbledCharacters(key));
+                    });
+                }
+            });
+        }
+    }
+
+    /**
+     * Collecte les colonnes Partenaire de manière optimisée (échantillon représentatif)
+     */
+    private collectPartnerColumnsOptimized(allPartnerColumns: Set<string>, sampleSize: number): void {
+        // PRIORITÉ 1: Collecter depuis les données originales (échantillon)
+        try {
+            const originalPartnerData = this.appStateService.getPartnerData();
+            if (originalPartnerData && originalPartnerData.length > 0) {
+                const sample = originalPartnerData.slice(0, Math.min(sampleSize, originalPartnerData.length));
+                sample.forEach(record => {
+                    Object.keys(record).forEach(key => {
+                        allPartnerColumns.add(fixGarbledCharacters(key));
+                    });
+                });
+                console.log('📋 Colonnes Partenaire collectées depuis données originales (échantillon):', allPartnerColumns.size);
+            }
+        } catch (error) {
+            console.warn('⚠️ Impossible de récupérer les données Partenaire originales:', error);
+        }
+        
+        // PRIORITÉ 2: Collecter depuis les matches (échantillon)
+        if (this.response?.matches && this.response.matches.length > 0) {
+            const sample = this.response.matches.slice(0, Math.min(sampleSize, this.response.matches.length));
+            sample.forEach(match => {
+                if (match.partnerData) {
+                    Object.keys(match.partnerData).forEach(key => {
+                        allPartnerColumns.add(fixGarbledCharacters(key));
                     });
                 }
             });
         }
         
-        this.availableBoColumns = Array.from(allBoColumns).sort();
-        console.log('📋 Total colonnes BO disponibles:', this.availableBoColumns.length, this.availableBoColumns);
+        // PRIORITÉ 3: Collecter depuis les écarts Partenaire (échantillon)
+        if (this.response?.partnerOnly && this.response.partnerOnly.length > 0) {
+            const sample = this.response.partnerOnly.slice(0, Math.min(sampleSize, this.response.partnerOnly.length));
+            sample.forEach(record => {
+                Object.keys(record).forEach(key => {
+                    allPartnerColumns.add(fixGarbledCharacters(key));
+                });
+            });
+        }
         
-        // Initialiser toutes les colonnes BO comme sélectionnées par défaut (colonnes importantes)
+        // PRIORITÉ 4: Collecter depuis les mismatches (échantillon)
+        if (this.response?.mismatches && this.response.mismatches.length > 0) {
+            const sample = this.response.mismatches.slice(0, Math.min(sampleSize, this.response.mismatches.length));
+            sample.forEach(mismatch => {
+                if (mismatch.partnerData) {
+                    Object.keys(mismatch.partnerData).forEach(key => {
+                        allPartnerColumns.add(fixGarbledCharacters(key));
+                    });
+                }
+            });
+        }
+    }
+
+    /**
+     * Initialise les sélections de colonnes par défaut
+     */
+    private initializeColumnSelections(): void {
+        // Initialiser les colonnes BO
         this.selectedBoColumns = {};
         const defaultBoColumns = ['Service', 'téléphone client', 'montant', 'Agence', 'Date', 'Numéro Trans GU', 'IDTransaction', 'SOURCE'];
         this.availableBoColumns.forEach(col => {
             this.selectedBoColumns[col] = defaultBoColumns.includes(col);
         });
 
-        // Extraire TOUTES les colonnes disponibles du fichier partenaire
-        // Collecter depuis TOUTES les sources possibles : matches, écarts, mismatches, ET données originales
-        this.availableColumns = [];
-        const allPartnerColumns = new Set<string>();
-        
-        // PRIORITÉ 1: Collecter depuis les données originales si disponibles (contient TOUTES les colonnes)
-        try {
-            const originalPartnerData = this.appStateService.getPartnerData();
-            if (originalPartnerData && originalPartnerData.length > 0) {
-                originalPartnerData.forEach(record => {
-                    Object.keys(record).forEach(key => {
-                        const correctedKey = fixGarbledCharacters(key);
-                        allPartnerColumns.add(correctedKey);
-                    });
-                });
-                console.log('📋 Colonnes Partenaire collectées depuis données originales:', allPartnerColumns.size);
-            }
-        } catch (error) {
-            console.warn('⚠️ Impossible de récupérer les données Partenaire originales:', error);
-        }
-        
-        // PRIORITÉ 2: Collecter depuis les matches (correspondances) - peut contenir des colonnes supplémentaires
-        if (this.response.matches && this.response.matches.length > 0) {
-            this.response.matches.forEach(match => {
-                if (match.partnerData) {
-                    Object.keys(match.partnerData).forEach(key => {
-                        const correctedKey = fixGarbledCharacters(key);
-                        allPartnerColumns.add(correctedKey);
-                    });
-                }
-            });
-        }
-        
-        // PRIORITÉ 3: Collecter depuis les écarts Partenaire (contient toutes les colonnes des enregistrements non correspondants)
-        if (hasPartnerEcart && this.response.partnerOnly && this.response.partnerOnly.length > 0) {
-            this.response.partnerOnly.forEach(record => {
-                Object.keys(record).forEach(key => {
-                    const correctedKey = fixGarbledCharacters(key);
-                    allPartnerColumns.add(correctedKey);
-                });
-            });
-        }
-        
-        // PRIORITÉ 4: Collecter aussi depuis les mismatches si disponibles
-        if (this.response.mismatches && this.response.mismatches.length > 0) {
-            this.response.mismatches.forEach(mismatch => {
-                if (mismatch.partnerData) {
-                    Object.keys(mismatch.partnerData).forEach(key => {
-                        const correctedKey = fixGarbledCharacters(key);
-                        allPartnerColumns.add(correctedKey);
-                    });
-                }
-            });
-        }
-
-        // Forcer l'inclusion de la colonne SOURCE pour identification d'origine si elle n'existe pas déjà
-        allPartnerColumns.add('SOURCE');
-        this.availableColumns = Array.from(allPartnerColumns).sort();
-        console.log('📋 Total colonnes Partenaire disponibles:', this.availableColumns.length, this.availableColumns);
-        
-        // Initialiser toutes les colonnes Partenaire comme non sélectionnées par défaut
+        // Initialiser les colonnes Partenaire
         this.selectedColumns = {};
         this.availableColumns.forEach(col => {
-            // Cocher par défaut les colonnes définies dans defaultColumns
             this.selectedColumns[col] = this.defaultColumns.includes(col);
         });
-
-        this.showColumnSelector = true;
     }
 
     /**
@@ -6585,32 +6691,31 @@ private async downloadExcelFile(workbooks: ExcelJS.Workbook[], fileName: string)
                 
                 // Ligne ECART BO
                 if (i < report.ecartBo.length && selectedBoColumns.length > 0) {
-                    const boItem = report.ecartBo[i];
-                    // Récupérer les valeurs selon les colonnes sélectionnées
-                    const boValues = selectedBoColumns.map(col => {
-                        // Chercher la valeur dans les données originales
-                        const originalRecord = this.response?.boOnly?.[i];
-                        if (originalRecord) {
-                            // Chercher la clé originale correspondante
+                    // Utiliser directement les données originales pour garantir la correspondance avec les en-têtes
+                    const originalRecord = this.response?.boOnly?.[i];
+                    if (!originalRecord) {
+                        boRow = ';'.repeat(boColumnsCount - 1);
+                    } else {
+                        // Récupérer les valeurs selon les colonnes sélectionnées
+                        const boValues = selectedBoColumns.map(col => {
+                            // Chercher la clé originale correspondante (col est le nom corrigé)
                             const originalKey = Object.keys(originalRecord).find(k => fixGarbledCharacters(k) === col);
+                            
                             if (originalKey && originalRecord[originalKey] !== undefined && originalRecord[originalKey] !== null) {
+                                // Utiliser la valeur originale directement
                                 return String(originalRecord[originalKey]);
                             }
-                        }
-                        // Fallback sur les propriétés transformées
-                        switch (col) {
-                            case 'Service': return boItem.Service || '';
-                            case 'téléphone client': return boItem.telephoneClient || '';
-                            case 'montant': return boItem.montant || '';
-                            case 'Agence': return boItem.Agence || '';
-                            case 'Date': return boItem.Date || '';
-                            case 'Numéro Trans GU': return boItem.numeroTransGU || '';
-                            case 'IDTransaction': return boItem.IDTransaction || '';
-                            case 'SOURCE': return boItem.SOURCE || 'BO';
-                            default: return '';
-                        }
-                    });
-                    boRow = boValues.join(';');
+                            
+                            // Si la colonne est SOURCE (ajoutée artificiellement), retourner 'BO'
+                            if (col === 'SOURCE') {
+                                return 'BO';
+                            }
+                            
+                            // Si aucune correspondance trouvée, retourner une chaîne vide
+                            return '';
+                        });
+                        boRow = boValues.join(';');
+                    }
                 } else if (selectedBoColumns.length > 0) {
                     // Remplir avec des valeurs vides si pas de données
                     boRow = ';'.repeat(boColumnsCount - 1);
@@ -6817,16 +6922,27 @@ private async downloadExcelFile(workbooks: ExcelJS.Workbook[], fileName: string)
             for (let i = 0; i < maxRows; i++) {
                 const rowIndex = i + topSpacing + 4; // +topSpacing (2) + 4 car on a le titre principal + titres sections + en-têtes
 
-                // Données BO
-                if (i < report.ecartBo.length) {
-                    const boItem = report.ecartBo[i];
-                    const boData = [boItem.Service || boItem.CLE, boItem.telephoneClient, boItem.montant, boItem.Agence, boItem.Date, boItem.numeroTransGU, boItem.IDTransaction, boItem.SOURCE];
-                    
-                    boData.forEach((value, colIndex) => {
-                        const cell = worksheet.getCell(rowIndex, colIndex + 1);
-                        cell.value = value;
-                        cell.style = dataStyle;
-                    });
+                // Données BO - Utiliser les données originales pour garantir la correspondance avec les en-têtes
+                if (i < report.ecartBo.length && selectedBoColumns.length > 0) {
+                    const originalRecord = this.response?.boOnly?.[i];
+                    if (originalRecord) {
+                        // Récupérer les valeurs selon les colonnes sélectionnées (dans le même ordre que les en-têtes)
+                        selectedBoColumns.forEach((col, colIndex) => {
+                            // Chercher la clé originale correspondante
+                            const originalKey = Object.keys(originalRecord).find(k => fixGarbledCharacters(k) === col);
+                            let value: any = '';
+                            
+                            if (originalKey && originalRecord[originalKey] !== undefined && originalRecord[originalKey] !== null) {
+                                value = originalRecord[originalKey];
+                            } else if (col === 'SOURCE') {
+                                value = 'BO';
+                            }
+                            
+                            const cell = worksheet.getCell(rowIndex, colIndex + 1);
+                            cell.value = value;
+                            cell.style = dataStyle;
+                        });
+                    }
                 }
 
                 // Données Partenaire

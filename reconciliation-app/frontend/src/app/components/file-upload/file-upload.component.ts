@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Output, ChangeDetectorRef } from '@angular/core';
+import { Component, EventEmitter, Output, ChangeDetectorRef, OnInit, OnDestroy } from '@angular/core';
 import { ReconciliationService } from '../../services/reconciliation.service';
 import { AutoProcessingService, ProcessingResult } from '../../services/auto-processing.service';
 import { OrangeMoneyUtilsService } from '../../services/orange-money-utils.service';
@@ -7,7 +7,7 @@ import * as Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 import { Router } from '@angular/router';
 import { AppStateService } from '../../services/app-state.service';
-import { forkJoin } from 'rxjs';
+import { forkJoin, Subscription } from 'rxjs';
 import { PopupService } from '../../services/popup.service';
 import { ProgressIndicatorService } from '../../services/progress-indicator.service';
 
@@ -16,7 +16,7 @@ import { ProgressIndicatorService } from '../../services/progress-indicator.serv
     templateUrl: './file-upload.component.html',
     styleUrls: ['./file-upload.component.scss']
 })
-export class FileUploadComponent {
+export class FileUploadComponent implements OnInit, OnDestroy {
     @Output() filesLoaded = new EventEmitter<{
         boData: Record<string, string>[];
         partnerData: Record<string, string>[];
@@ -64,6 +64,19 @@ export class FileUploadComponent {
         memory?: string;
     } | null = null;
 
+    // Variables pour l'affichage de l'évolution des chunks
+    chunkProgress: {
+        currentBoChunk?: number;
+        totalBoChunks?: number;
+        matchesCount?: number;
+        boOnlyCount?: number;
+        partnerRemaining?: number;
+        step?: string;
+        percentage?: number;
+    } | null = null;
+    showChunkProgress = false;
+    private progressSubscription?: Subscription;
+
     // Sélection de services pour TRXBO
     showServiceSelection = false;
     availableServices: string[] = [];
@@ -75,6 +88,23 @@ export class FileUploadComponent {
     manualAvailableServices: string[] = [];
     manualSelectedServices: string[] = [];
     manualServiceSelectionData: Record<string, string>[] = [];
+
+    readonly trxboColumnOrder: string[] = [
+        'IDTransaction',
+        'téléphone client',
+        'montant',
+        'Service',
+        'Moyen de Paiement',
+        'Agence',
+        'Agent',
+        'Type agent',
+        'PIXI',
+        'Date',
+        'Numéro Trans',
+        'GU',
+        'GRX',
+        'Statut'
+    ];
 
     // Configuration des formats supportés
     supportedFormats = [
@@ -96,6 +126,37 @@ export class FileUploadComponent {
         // Initialiser le type de réconciliation depuis le service (forcé à 1-1)
         const serviceType = this.appStateService.getReconciliationType();
         this.reconciliationType = serviceType === '1-1' ? '1-1' : '1-1'; // Forcer à 1-1
+    }
+
+    ngOnInit(): void {
+        // S'abonner aux mises à jour de progression des chunks
+        this.progressSubscription = this.reconciliationService.getProgress().subscribe(progress => {
+            if (progress.currentBoChunk !== undefined || progress.totalBoChunks !== undefined) {
+                this.chunkProgress = {
+                    currentBoChunk: progress.currentBoChunk,
+                    totalBoChunks: progress.totalBoChunks,
+                    matchesCount: progress.matchesCount,
+                    boOnlyCount: progress.boOnlyCount,
+                    partnerRemaining: progress.partnerRemaining,
+                    step: progress.step,
+                    percentage: progress.percentage
+                };
+                this.showChunkProgress = true;
+                this.cd.detectChanges();
+            } else {
+                // Si pas d'infos de chunks, masquer l'affichage
+                if (progress.percentage === 100 || progress.step === 'Terminé') {
+                    this.showChunkProgress = false;
+                }
+            }
+        });
+    }
+
+    ngOnDestroy(): void {
+        // Se désabonner pour éviter les fuites mémoire
+        if (this.progressSubscription) {
+            this.progressSubscription.unsubscribe();
+        }
     }
 
     // onReconciliationTypeChange - COMMENTÉ (seul le type 1-1 est conservé)
@@ -577,7 +638,8 @@ export class FileUploadComponent {
 
     /**
      * Sélectionne et ordonne les colonnes Orange Money pour correspondre à la logique du menu Traitement
-     * Ordre attendu: Référence, Débit, Crédit, N° de Compte, Date, Service, Statut
+     * Ordre attendu: Date, Heure, Référence, Service, Paiement, Statut, Mode,
+     *                N° de Compte, Wallet, N° Pseudo, Débit, Crédit
      * Si le fichier ne semble pas être Orange Money, renvoie les données telles quelles.
      * EXCEPTION: Le fichier PMOMBF ne doit pas utiliser les colonnes par défaut Orange Money.
      */
@@ -641,10 +703,17 @@ export class FileUploadComponent {
         console.log('🔍 [APPLY_OM] Nom du fichier:', fileName);
         
         const lower = (s: string) => s.toLowerCase();
+        const normalizeKey = (s: string) => lower(s).normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        const isEligibleFile = !!fileName && this.orangeMoneyUtilsService.isOrangeMoneyFile(fileName);
 
         // EXCEPTION: Le fichier PMOMBF ne doit pas utiliser les colonnes par défaut Orange Money
         if (fileName && lower(fileName).includes('pmombf')) {
             console.log('🚫 Exception PMOMBF détectée - retour des données originales sans transformation Orange Money');
+            return normalizedRows;
+        }
+
+        if (!isEligibleFile) {
+            console.log('⚠️ Fichier non éligible (ne commence pas par CIOM/COOM/PMOM) - aucune transformation Orange Money appliquée');
             return normalizedRows;
         }
 
@@ -661,13 +730,18 @@ export class FileUploadComponent {
         }
 
         const targetOrder = [
-            'Référence',
-            'Débit',
-            'Crédit',
-            'N° de Compte',
             'Date',
+            'Heure',
+            'Référence',
             'Service',
-            'Statut'
+            'Paiement',
+            'Statut',
+            'Mode',
+            'N° de Compte',
+            'Wallet',
+            'N° Pseudo',
+            'Débit',
+            'Crédit'
         ];
 
         // Fonction de matching souple inspirée de la logique du menu Traitement
@@ -680,13 +754,19 @@ export class FileUploadComponent {
             // Correspondances partielles spécifiques
             for (const h of headers) {
                 const hLower = lower(h);
+                const hNormalized = normalizeKey(h);
+                if (target === 'Date' && (hLower.includes('date') || hNormalized.includes('date'))) return h;
+                if (target === 'Heure' && (hLower.includes('heure') || hNormalized.includes('heure'))) return h;
                 if (target === 'Référence' && (hLower.includes('référence') || hLower.includes('reference'))) return h;
-                if (target === 'Débit' && hLower.includes('débit')) return h;
-                if (target === 'Crédit' && hLower.includes('crédit')) return h;
-                if (target === 'N° de Compte' && ((hLower.includes('n°') || hLower.includes('no') || hLower.includes('nº')) && hLower.includes('compte'))) return h;
-                if (target === 'Date' && hLower.includes('date')) return h;
                 if (target === 'Service' && hLower.includes('service')) return h;
+                if (target === 'Paiement' && (hLower.includes('paiement') || hLower.includes('payment'))) return h;
                 if (target === 'Statut' && (hLower.includes('statut') || hLower.includes('status'))) return h;
+                if (target === 'Mode' && hLower.includes('mode')) return h;
+                if (target === 'N° de Compte' && ((hLower.includes('n°') || hLower.includes('no') || hLower.includes('nº')) && hLower.includes('compte'))) return h;
+                if (target === 'Wallet' && hLower.includes('wallet')) return h;
+                if (target === 'N° Pseudo' && (hLower.includes('pseudo') || (hLower.includes('n°') && hLower.includes('pseudo')))) return h;
+                if (target === 'Débit' && (hLower.includes('débit') || hNormalized.includes('debit'))) return h;
+                if (target === 'Crédit' && (hLower.includes('crédit') || hNormalized.includes('credit'))) return h;
             }
             return null;
         };
@@ -804,17 +884,20 @@ export class FileUploadComponent {
             const lines = text.split('\n');
             console.log(`📊 Fichier ${file.name}: ${lines.length} lignes détectées`);
             
-            // Pour les gros fichiers (>50k lignes), utiliser un parsing optimisé
-            if (lines.length > 50000) {
+            // Pour les gros fichiers (>100k lignes), utiliser un parsing optimisé
+            if (lines.length > 100000) {
                 console.log(`🚀 Traitement optimisé pour gros fichier: ${lines.length} lignes`);
-                this.parseLargeCSV(lines, isBo, file.name);
+                this.parseLargeCSV(lines, isBo, file.name).catch(error => {
+                    console.error('Erreur lors du parsing CSV volumineux:', error);
+                    this.errorMessage = `Erreur lors du traitement du fichier: ${error instanceof Error ? error.message : String(error)}`;
+                });
             } else {
                 // Parsing normal pour petits fichiers avec détection automatique du délimiteur
                 const delimiter = this.detectDelimiter(lines[0]);
                 console.log(`🔍 Délimiteur détecté: "${delimiter}"`);
                 
                 // Détection Orange Money
-                const orangeMoneyDetection = this.detectOrangeMoneyFile(text, delimiter);
+                const orangeMoneyDetection = this.detectOrangeMoneyFile(text, delimiter, file.name);
                 console.log(`🟠 Détection Orange Money:`, orangeMoneyDetection);
                 
                 if (orangeMoneyDetection.isOrangeMoney) {
@@ -965,11 +1048,16 @@ export class FileUploadComponent {
     /**
      * Détecte si un fichier est un fichier Orange Money et trouve la ligne d'en-tête
      */
-    private detectOrangeMoneyFile(content: string, delimiter: string): {
+    private detectOrangeMoneyFile(content: string, delimiter: string, fileName?: string): {
         isOrangeMoney: boolean;
         headerRowIndex: number;
         headerRow: string[];
     } {
+        if (!fileName || !this.orangeMoneyUtilsService.isOrangeMoneyFile(fileName)) {
+            console.log('⚠️ Fichier non éligible (ne commence pas par CIOM/COOM/PMOM) - désactivation de la détection Orange Money');
+            return { isOrangeMoney: false, headerRowIndex: -1, headerRow: [] };
+        }
+
         console.log('🔍 Détection ciblée des en-têtes Excel - Nouvelle approche');
         
         const lines = content.split('\n').filter(line => line.trim());
@@ -1191,9 +1279,9 @@ export class FileUploadComponent {
         return normalized;
     }
 
-    private parseLargeCSV(lines: string[], isBo: boolean, fileName: string): void {
+    private async parseLargeCSV(lines: string[], isBo: boolean, fileName: string): Promise<void> {
         const parseStartTime = performance.now();
-        const CHUNK_SIZE = 10000;
+        const CHUNK_SIZE = 50000; // Chunks de 50k pour optimiser la performance
         const data: Record<string, string>[] = [];
         
         console.log(`📦 [PARSE_LARGE] Début du parsing optimisé pour ${fileName}`);
@@ -1209,16 +1297,17 @@ export class FileUploadComponent {
         const detectStartTime = performance.now();
         const firstLine = lines[0];
         const delimiter = this.detectDelimiter(firstLine);
-        const headers = firstLine.split(delimiter);
+        const headers = firstLine.split(delimiter).map(h => this.normalizeColumnName(h));
         const detectDuration = ((performance.now() - detectStartTime) / 1000).toFixed(3);
         
         console.log(`🔧 [PARSE_LARGE] Parsing optimisé: délimiteur "${delimiter}", ${headers.length} colonnes (${detectDuration}s)`);
         
-        // Traitement par chunks
+        // Traitement par chunks asynchrone pour permettre à l'UI de respirer
         for (let i = 1; i < lines.length; i += CHUNK_SIZE) {
             const chunk = lines.slice(i, i + CHUNK_SIZE);
             const chunkData: Record<string, string>[] = [];
             
+            // Traiter le chunk
             for (const line of chunk) {
                 if (line.trim() === '') continue;
                 
@@ -1226,58 +1315,116 @@ export class FileUploadComponent {
                 const row: Record<string, string> = {};
                 
                 headers.forEach((header, index) => {
-                    row[header] = values[index] || '';
+                    row[header] = this.normalizeValue(values[index] || '');
                 });
                 
                 chunkData.push(row);
             }
             
-            data.push(...chunkData);
+            // Ajouter par lots pour éviter le dépassement de pile
+            if (chunkData.length > 10000) {
+                // Pour les très gros chunks, ajouter par sous-lots
+                const subChunkSize = 10000;
+                for (let j = 0; j < chunkData.length; j += subChunkSize) {
+                    const subChunk = chunkData.slice(j, j + subChunkSize);
+                    data.push(...subChunk);
+                }
+            } else {
+                data.push(...chunkData);
+            }
             
             // Mettre à jour la progression
             const progress = Math.min(100, (i / lines.length) * 100);
             this.processingProgress = Math.round(progress);
-            this.processingMessage = `Traitement: ${data.length} lignes traitées sur ${lines.length - 1}`;
+            this.processingMessage = `Traitement: ${data.length.toLocaleString()} lignes traitées sur ${(lines.length - 1).toLocaleString()}`;
             
-            console.log(`📊 Progression parsing: ${Math.round(progress)}% (${data.length} lignes traitées)`);
+            console.log(`📊 Progression parsing: ${Math.round(progress)}% (${data.length.toLocaleString()} lignes traitées)`);
             
-            // Petite pause pour permettre l'affichage de la progression
-            setTimeout(() => {}, 10);
+            // Pause asynchrone pour permettre à l'UI de respirer (tous les 50k lignes)
+            if (i % (CHUNK_SIZE * 2) === 1 || i + CHUNK_SIZE >= lines.length) {
+                await new Promise(resolve => setTimeout(resolve, 0));
+                this.cd.detectChanges();
+            }
         }
         
         const parseEndTime = performance.now();
         const parseDuration = ((parseEndTime - parseStartTime) / 1000).toFixed(2);
-        console.log(`✅ [PARSE_LARGE] Parsing terminé en ${parseDuration}s: ${data.length} lignes traitées`);
-        console.log(`📊 [PARSE_LARGE] Taille mémoire approximative: ${(JSON.stringify(data).length / (1024 * 1024)).toFixed(2)} MB`);
+        console.log(`✅ [PARSE_LARGE] Parsing terminé en ${parseDuration}s: ${data.length.toLocaleString()} lignes traitées`);
         
-        // Désactiver l'indicateur de progression
-        this.isProcessingLargeFile = false;
-        this.processingProgress = 0;
-        this.processingMessage = '';
-        
-        // Traitement des données avec logs
+        // Traitement des données avec logs et pauses pour l'UI
         console.log(`🔄 [PARSE_LARGE] Début du traitement post-parsing...`);
         const postProcessStartTime = performance.now();
         
         try {
+            // Traitement par chunks pour éviter de bloquer l'UI
             if (isBo) {
                 console.log(`🔄 [PARSE_LARGE] Application de applyOrangeMoneyColumnSelection pour BO...`);
                 const selectionStartTime = performance.now();
-                this.boData = this.applyOrangeMoneyColumnSelection(data, fileName);
+                
+                // Traiter par chunks si très volumineux
+                if (data.length > 200000) {
+                    this.boData = [];
+                    const processChunkSize = 100000;
+                    for (let i = 0; i < data.length; i += processChunkSize) {
+                        const chunk = data.slice(i, i + processChunkSize);
+                        const processedChunk = this.applyOrangeMoneyColumnSelection(chunk, fileName);
+                        this.boData.push(...processedChunk);
+                        this.processingProgress = Math.min(95, 80 + (i / data.length) * 15);
+                        this.processingMessage = `Post-traitement: ${this.boData.length.toLocaleString()} lignes traitées`;
+                        await new Promise(resolve => setTimeout(resolve, 0));
+                        this.cd.detectChanges();
+                    }
+                } else {
+                    this.boData = this.applyOrangeMoneyColumnSelection(data, fileName);
+                }
+                
                 const selectionDuration = ((performance.now() - selectionStartTime) / 1000).toFixed(2);
-                console.log(`✅ [PARSE_LARGE] applyOrangeMoneyColumnSelection terminé en ${selectionDuration}s: ${this.boData.length} enregistrements`);
+                console.log(`✅ [PARSE_LARGE] applyOrangeMoneyColumnSelection terminé en ${selectionDuration}s: ${this.boData.length.toLocaleString()} enregistrements`);
             } else {
                 console.log(`🔄 [PARSE_LARGE] Conversion débit/crédit pour Partenaire...`);
                 const convertStartTime = performance.now();
-                const convertedData = this.convertDebitCreditToNumber(data);
+                
+                let convertedData: Record<string, string>[];
+                if (data.length > 200000) {
+                    convertedData = [];
+                    const convertChunkSize = 100000;
+                    for (let i = 0; i < data.length; i += convertChunkSize) {
+                        const chunk = data.slice(i, i + convertChunkSize);
+                        const convertedChunk = this.convertDebitCreditToNumber(chunk);
+                        convertedData.push(...convertedChunk);
+                        this.processingProgress = Math.min(90, 70 + (i / data.length) * 20);
+                        this.processingMessage = `Conversion: ${convertedData.length.toLocaleString()} lignes traitées`;
+                        await new Promise(resolve => setTimeout(resolve, 0));
+                        this.cd.detectChanges();
+                    }
+                } else {
+                    convertedData = this.convertDebitCreditToNumber(data);
+                }
+                
                 const convertDuration = ((performance.now() - convertStartTime) / 1000).toFixed(2);
                 console.log(`✅ [PARSE_LARGE] Conversion terminée en ${convertDuration}s`);
                 
                 console.log(`🔄 [PARSE_LARGE] Application de applyOrangeMoneyColumnSelection pour Partenaire...`);
                 const selectionStartTime = performance.now();
-                this.partnerData = this.applyOrangeMoneyColumnSelection(convertedData, fileName);
+                
+                if (convertedData.length > 200000) {
+                    this.partnerData = [];
+                    const processChunkSize = 100000;
+                    for (let i = 0; i < convertedData.length; i += processChunkSize) {
+                        const chunk = convertedData.slice(i, i + processChunkSize);
+                        const processedChunk = this.applyOrangeMoneyColumnSelection(chunk, fileName);
+                        this.partnerData.push(...processedChunk);
+                        this.processingProgress = Math.min(95, 80 + (i / convertedData.length) * 15);
+                        this.processingMessage = `Post-traitement: ${this.partnerData.length.toLocaleString()} lignes traitées`;
+                        await new Promise(resolve => setTimeout(resolve, 0));
+                        this.cd.detectChanges();
+                    }
+                } else {
+                    this.partnerData = this.applyOrangeMoneyColumnSelection(convertedData, fileName);
+                }
+                
                 const selectionDuration = ((performance.now() - selectionStartTime) / 1000).toFixed(2);
-                console.log(`✅ [PARSE_LARGE] applyOrangeMoneyColumnSelection terminé en ${selectionDuration}s: ${this.partnerData.length} enregistrements`);
+                console.log(`✅ [PARSE_LARGE] applyOrangeMoneyColumnSelection terminé en ${selectionDuration}s: ${this.partnerData.length.toLocaleString()} enregistrements`);
             }
             
             const postProcessDuration = ((performance.now() - postProcessStartTime) / 1000).toFixed(2);
@@ -1286,14 +1433,15 @@ export class FileUploadComponent {
             // Mettre à jour l'estimation seulement si les deux fichiers sont chargés
             if (this.boFile && this.partnerFile) {
                 console.log(`🔄 [PARSE_LARGE] Mise à jour de l'estimation du temps...`);
-                const estimateStartTime = performance.now();
                 this.updateEstimatedTime();
-                const estimateDuration = ((performance.now() - estimateStartTime) / 1000).toFixed(2);
-                console.log(`✅ [PARSE_LARGE] Estimation mise à jour en ${estimateDuration}s`);
             }
             
+            // Désactiver l'indicateur de progression
+            this.isProcessingLargeFile = false;
+            this.processingProgress = 100;
+            this.processingMessage = 'Traitement terminé';
+            
             // Forcer la détection des changements
-            console.log(`🔄 [PARSE_LARGE] Détection des changements...`);
             this.cd.detectChanges();
             console.log(`✅ [PARSE_LARGE] Processus complet terminé`);
             
@@ -1307,6 +1455,12 @@ export class FileUploadComponent {
                 dataLength: data.length,
                 isBo: isBo
             });
+            
+            // Désactiver l'indicateur en cas d'erreur
+            this.isProcessingLargeFile = false;
+            this.processingProgress = 0;
+            this.processingMessage = '';
+            
             throw error;
         }
     }
@@ -1517,6 +1671,28 @@ export class FileUploadComponent {
     }
 
     private parseXLSX(file: File, isBo: boolean): void {
+        const fileSizeMB = file.size / (1024 * 1024);
+        const isVeryLargeFile = fileSizeMB > 50 || file.size > 50 * 1024 * 1024; // Fichier > 50MB
+        const isLargeFile = fileSizeMB > 10 || file.size > 10 * 1024 * 1024; // Fichier > 10MB
+        
+        if (isVeryLargeFile) {
+            console.log(`📦 Fichier Excel très volumineux détecté (${fileSizeMB.toFixed(1)} MB), utilisation du traitement ultra-optimisé`);
+            this.parseXLSXVeryLargeFile(file, isBo).catch(error => {
+                console.error('Erreur lors du parsing Excel très volumineux:', error);
+                this.errorMessage = `Erreur lors du traitement du fichier: ${error instanceof Error ? error.message : String(error)}`;
+            });
+            return;
+        }
+        
+        if (isLargeFile) {
+            console.log(`📦 Fichier Excel volumineux détecté (${fileSizeMB.toFixed(1)} MB), utilisation du traitement optimisé`);
+            this.parseXLSXLargeFile(file, isBo).catch(error => {
+                console.error('Erreur lors du parsing Excel volumineux:', error);
+                this.errorMessage = `Erreur lors du traitement du fichier: ${error instanceof Error ? error.message : String(error)}`;
+            });
+            return;
+        }
+        
         const reader = new FileReader();
         reader.onload = (e: ProgressEvent<FileReader>) => {
             try {
@@ -1643,6 +1819,409 @@ export class FileUploadComponent {
             this.errorMessage = 'Erreur lors de la lecture du fichier';
         };
         reader.readAsArrayBuffer(file);
+    }
+
+    private async parseXLSXLargeFile(file: File, isBo: boolean): Promise<void> {
+        const fileSizeMB = file.size / (1024 * 1024);
+        console.log(`🔄 Traitement fichier Excel volumineux (${fileSizeMB.toFixed(1)} MB)`);
+        
+        this.isProcessingLargeFile = true;
+        this.processingMessage = 'Lecture du fichier Excel volumineux...';
+        this.processingProgress = 0;
+        
+        try {
+            const arrayBuffer = await this.readFileAsArrayBuffer(file);
+            const data = new Uint8Array(arrayBuffer);
+            
+            this.processingProgress = 20;
+            this.processingMessage = 'Parsing du fichier Excel...';
+            this.cd.detectChanges();
+            
+            // Pause pour permettre à l'UI de respirer
+            await new Promise(resolve => setTimeout(resolve, 50));
+            
+            const options: XLSX.ParsingOptions = {
+                type: 'array',
+                cellDates: false,
+                cellNF: false,
+                cellText: false,
+                sheetStubs: false,
+                bookProps: false,
+                bookVBA: false,
+                cellStyles: false,
+                cellHTML: false,
+                cellFormula: false
+            };
+
+            const workbook = XLSX.read(data, options);
+            
+            this.processingProgress = 40;
+            this.processingMessage = 'Extraction des données...';
+            this.cd.detectChanges();
+            
+            // Pause pour permettre à l'UI de respirer
+            await new Promise(resolve => setTimeout(resolve, 50));
+            
+            const firstSheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[firstSheetName];
+            
+            let jsonData: any[][];
+            try {
+                jsonData = XLSX.utils.sheet_to_json(worksheet, { 
+                    header: 1,
+                    defval: '',
+                    raw: true
+                }) as any[][];
+            } catch (error) {
+                console.log('⚠️ Erreur lors de la lecture, tentative alternative:', error);
+                jsonData = XLSX.utils.sheet_to_json(worksheet, { 
+                    header: 1,
+                    defval: '',
+                    raw: true,
+                    blankrows: false
+                }) as any[][];
+            }
+
+            if (!jsonData || jsonData.length === 0) {
+                throw new Error('Aucune donnée trouvée dans le fichier');
+            }
+
+            console.log(`📊 Données Excel: ${jsonData.length.toLocaleString()} lignes`);
+            
+            this.processingProgress = 60;
+            this.processingMessage = `Traitement de ${jsonData.length.toLocaleString()} lignes...`;
+            this.cd.detectChanges();
+            
+            // Pause pour permettre à l'UI de respirer
+            await new Promise(resolve => setTimeout(resolve, 50));
+            
+            if (jsonData.length > 200000) {
+                await this.processExcelDataByChunks(jsonData, isBo, file.name);
+            } else {
+                const headerDetection = this.detectExcelHeadersImproved(jsonData);
+                const headers = headerDetection.headerRow;
+                const headerRowIndex = headerDetection.headerRowIndex;
+                
+                const processedData = this.processExcelRows(jsonData, headers, headerRowIndex);
+                
+                if (isBo) {
+                    this.boData = this.applyOrangeMoneyColumnSelection(this.normalizeData(processedData), file.name);
+                } else {
+                    const convertedData = this.convertDebitCreditToNumber(processedData);
+                    this.partnerData = this.applyOrangeMoneyColumnSelection(this.normalizeData(convertedData), file.name);
+                }
+            }
+            
+            this.processingProgress = 100;
+            this.processingMessage = 'Traitement terminé';
+            this.isProcessingLargeFile = false;
+            this.cd.detectChanges();
+            
+            if (this.boFile && this.partnerFile) {
+                this.updateEstimatedTime();
+            }
+            
+        } catch (error) {
+            console.error('❌ Erreur lors du traitement du fichier Excel volumineux:', error);
+            this.isProcessingLargeFile = false;
+            this.processingProgress = 0;
+            this.processingMessage = '';
+            this.errorMessage = `Erreur lors de la lecture du fichier Excel: ${error instanceof Error ? error.message : String(error)}`;
+            this.cd.detectChanges();
+        }
+    }
+
+    /**
+     * Traitement ultra-optimisé pour les fichiers Excel > 50MB
+     * Utilise des chunks très petits et beaucoup de pauses pour éviter les plantages
+     */
+    private async parseXLSXVeryLargeFile(file: File, isBo: boolean): Promise<void> {
+        const fileSizeMB = file.size / (1024 * 1024);
+        console.log(`🔄 Traitement fichier Excel très volumineux (${fileSizeMB.toFixed(1)} MB) via backend`);
+        
+        this.isProcessingLargeFile = true;
+        this.processingMessage = '📤 Envoi du fichier au serveur pour traitement complet...';
+        this.processingProgress = 0;
+        this.cd.detectChanges();
+        
+        try {
+            // Envoyer le fichier au backend pour parsing complet
+            this.processingProgress = 10;
+            this.processingMessage = 'Upload du fichier vers le serveur...';
+            this.cd.detectChanges();
+            
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            this.processingProgress = 20;
+            this.processingMessage = 'Parsing du fichier Excel côté serveur (cela peut prendre du temps)...';
+            this.cd.detectChanges();
+            
+            // Appeler l'endpoint backend
+            const response = await fetch('/api/reconciliation/parse-excel', {
+                method: 'POST',
+                body: formData
+            });
+            
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ error: 'Erreur inconnue' }));
+                throw new Error(errorData.error || `Erreur HTTP ${response.status}`);
+            }
+            
+            this.processingProgress = 80;
+            this.processingMessage = 'Récupération des données parsées...';
+            this.cd.detectChanges();
+            
+            const result = await response.json();
+            const data: Record<string, string>[] = result.data || [];
+            
+            console.log(`✅ Fichier parsé avec succès: ${data.length.toLocaleString()} lignes`);
+            
+            this.processingProgress = 90;
+            this.processingMessage = 'Traitement des données...';
+            this.cd.detectChanges();
+            
+            // Traiter les données comme pour un fichier normal
+            if (isBo) {
+                this.boData = this.applyOrangeMoneyColumnSelection(this.normalizeData(data), file.name);
+            } else {
+                const convertedData = this.convertDebitCreditToNumber(data);
+                this.partnerData = this.applyOrangeMoneyColumnSelection(this.normalizeData(convertedData), file.name);
+            }
+            
+            this.processingProgress = 100;
+            this.processingMessage = 'Traitement terminé';
+            this.isProcessingLargeFile = false;
+            this.cd.detectChanges();
+            
+            // Détecter si on est en mode automatique ou manuel
+            const isAutoMode = this.reconciliationMode === 'automatic';
+            const hasBoFile = isAutoMode ? (this.autoBoFile || this.autoBoData.length > 0) : this.boFile;
+            const hasPartnerFile = isAutoMode ? (this.autoPartnerFile || this.autoPartnerData.length > 0) : this.partnerFile;
+            
+            if (hasBoFile && hasPartnerFile) {
+                this.updateEstimatedTime();
+            }
+            
+        } catch (error) {
+            console.error('❌ Erreur lors du traitement du fichier Excel très volumineux:', error);
+            this.isProcessingLargeFile = false;
+            this.processingProgress = 0;
+            this.processingMessage = '';
+            this.errorMessage = `Erreur lors du traitement du fichier Excel (${fileSizeMB.toFixed(1)} MB): ${error instanceof Error ? error.message : String(error)}`;
+            this.cd.detectChanges();
+        }
+    }
+
+    /**
+     * Calcule un range limité pour éviter de charger trop de données d'un coup
+     */
+    private calculateLimitedRange(originalRange: string, maxRows: number): string {
+        // Format: "A1:Z1000" -> "A1:Z100000"
+        if (!originalRange) return 'A1:Z1000'; // Range par défaut
+        
+        const match = originalRange.match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/);
+        if (!match) {
+            // Essayer un format alternatif
+            const altMatch = originalRange.match(/^([A-Z]+\d+):([A-Z]+\d+)$/);
+            if (altMatch) {
+                const start = altMatch[1].match(/([A-Z]+)(\d+)/);
+                const end = altMatch[2].match(/([A-Z]+)(\d+)/);
+                if (start && end) {
+                    const startRow = parseInt(start[2]);
+                    const endRow = Math.min(parseInt(end[2]), startRow + maxRows - 1);
+                    return `${start[1]}${startRow}:${end[1]}${endRow}`;
+                }
+            }
+            return 'A1:Z1000'; // Range par défaut en cas d'échec
+        }
+        
+        const startCol = match[1];
+        const startRow = parseInt(match[2]);
+        const endCol = match[3];
+        const originalEndRow = parseInt(match[4]);
+        const endRow = Math.min(originalEndRow, startRow + maxRows - 1);
+        
+        return `${startCol}${startRow}:${endCol}${endRow}`;
+    }
+
+    /**
+     * Traitement ultra-optimisé par chunks pour fichiers > 50MB
+     * Utilise des chunks plus petits et plus de pauses
+     */
+    private async processExcelDataByChunksUltraOptimized(jsonData: any[][], isBo: boolean, fileName: string): Promise<void> {
+        const CHUNK_SIZE = 50000; // Chunks plus petits pour très gros fichiers
+        const headerDetection = this.detectExcelHeadersImproved(jsonData);
+        const headers = headerDetection.headerRow;
+        const headerRowIndex = headerDetection.headerRowIndex;
+        
+        const allProcessedData: Record<string, string>[] = [];
+        
+        // Traiter par chunks très petits avec pauses fréquentes
+        for (let i = headerRowIndex + 1; i < jsonData.length; i += CHUNK_SIZE) {
+            const chunk = jsonData.slice(i, i + CHUNK_SIZE);
+            const chunkData = this.processExcelRows(chunk, headers, 0);
+            
+            // Ajouter par sous-lots pour éviter le dépassement de pile
+            if (chunkData.length > 10000) {
+                const subChunkSize = 10000;
+                for (let j = 0; j < chunkData.length; j += subChunkSize) {
+                    const subChunk = chunkData.slice(j, j + subChunkSize);
+                    allProcessedData.push(...subChunk);
+                    
+                    // Pause toutes les 10k lignes
+                    if (j % (subChunkSize * 2) === 0) {
+                        await new Promise(resolve => setTimeout(resolve, 10));
+                        this.cd.detectChanges();
+                    }
+                }
+            } else {
+                allProcessedData.push(...chunkData);
+            }
+            
+            const progress = Math.min(85, 50 + ((i - headerRowIndex) / (jsonData.length - headerRowIndex)) * 35);
+            this.processingProgress = Math.round(progress);
+            this.processingMessage = `Traitement: ${allProcessedData.length.toLocaleString()} lignes traitées sur ${(jsonData.length - headerRowIndex).toLocaleString()}`;
+            
+            // Pause plus longue pour très gros fichiers
+            await new Promise(resolve => setTimeout(resolve, 50));
+            this.cd.detectChanges();
+        }
+        
+        // Post-traitement par chunks très petits
+        this.processingProgress = 85;
+        this.processingMessage = 'Post-traitement des données...';
+        this.cd.detectChanges();
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        const processChunkSize = 50000; // Chunks plus petits pour post-traitement
+        const finalData: Record<string, string>[] = [];
+        
+        for (let i = 0; i < allProcessedData.length; i += processChunkSize) {
+            const chunk = allProcessedData.slice(i, i + processChunkSize);
+            let processedChunk: Record<string, string>[];
+            
+            if (isBo) {
+                processedChunk = this.applyOrangeMoneyColumnSelection(this.normalizeData(chunk), fileName);
+            } else {
+                const convertedChunk = this.convertDebitCreditToNumber(chunk);
+                processedChunk = this.applyOrangeMoneyColumnSelection(this.normalizeData(convertedChunk), fileName);
+            }
+            
+            // Ajouter par sous-lots
+            if (processedChunk.length > 10000) {
+                const subChunkSize = 10000;
+                for (let j = 0; j < processedChunk.length; j += subChunkSize) {
+                    const subChunk = processedChunk.slice(j, j + subChunkSize);
+                    finalData.push(...subChunk);
+                }
+            } else {
+                finalData.push(...processedChunk);
+            }
+            
+            this.processingProgress = Math.min(99, 85 + (i / allProcessedData.length) * 14);
+            this.processingMessage = `Post-traitement: ${finalData.length.toLocaleString()} lignes`;
+            
+            // Pause plus longue pour post-traitement
+            await new Promise(resolve => setTimeout(resolve, 50));
+            this.cd.detectChanges();
+        }
+        
+        // Détecter si on est en mode automatique ou manuel
+        const isAutoMode = this.reconciliationMode === 'automatic';
+        
+        if (isBo) {
+            if (isAutoMode) {
+                this.autoBoData = finalData;
+            } else {
+                this.boData = finalData;
+            }
+        } else {
+            if (isAutoMode) {
+                this.autoPartnerData = finalData;
+            } else {
+                this.partnerData = finalData;
+            }
+        }
+    }
+
+    private async processExcelDataByChunks(jsonData: any[][], isBo: boolean, fileName: string): Promise<void> {
+        const CHUNK_SIZE = 100000;
+        const headerDetection = this.detectExcelHeadersImproved(jsonData);
+        const headers = headerDetection.headerRow;
+        const headerRowIndex = headerDetection.headerRowIndex;
+        
+        const allProcessedData: Record<string, string>[] = [];
+        
+        for (let i = headerRowIndex + 1; i < jsonData.length; i += CHUNK_SIZE) {
+            const chunk = jsonData.slice(i, i + CHUNK_SIZE);
+            const chunkData = this.processExcelRows(chunk, headers, 0);
+            
+            allProcessedData.push(...chunkData);
+            
+            const progress = Math.min(90, 60 + ((i - headerRowIndex) / (jsonData.length - headerRowIndex)) * 30);
+            this.processingProgress = Math.round(progress);
+            this.processingMessage = `Traitement: ${allProcessedData.length.toLocaleString()} lignes traitées`;
+            
+            await new Promise(resolve => setTimeout(resolve, 0));
+            this.cd.detectChanges();
+        }
+        
+        if (allProcessedData.length > 200000) {
+            const processChunkSize = 100000;
+            const finalData: Record<string, string>[] = [];
+            
+            for (let i = 0; i < allProcessedData.length; i += processChunkSize) {
+                const chunk = allProcessedData.slice(i, i + processChunkSize);
+                let processedChunk: Record<string, string>[];
+                
+                if (isBo) {
+                    processedChunk = this.applyOrangeMoneyColumnSelection(this.normalizeData(chunk), fileName);
+                } else {
+                    const convertedChunk = this.convertDebitCreditToNumber(chunk);
+                    processedChunk = this.applyOrangeMoneyColumnSelection(this.normalizeData(convertedChunk), fileName);
+                }
+                
+                finalData.push(...processedChunk);
+                
+                this.processingProgress = Math.min(95, 90 + (i / allProcessedData.length) * 5);
+                this.processingMessage = `Post-traitement: ${finalData.length.toLocaleString()} lignes`;
+                
+                await new Promise(resolve => setTimeout(resolve, 0));
+                this.cd.detectChanges();
+            }
+            
+            if (isBo) {
+                this.boData = finalData;
+            } else {
+                this.partnerData = finalData;
+            }
+        } else {
+            if (isBo) {
+                this.boData = this.applyOrangeMoneyColumnSelection(this.normalizeData(allProcessedData), fileName);
+            } else {
+                const convertedData = this.convertDebitCreditToNumber(allProcessedData);
+                this.partnerData = this.applyOrangeMoneyColumnSelection(this.normalizeData(convertedData), fileName);
+            }
+        }
+    }
+
+    private processExcelRows(jsonData: any[][], headers: string[], headerRowIndex: number): Record<string, string>[] {
+        const rows: Record<string, string>[] = [];
+        
+        for (let i = headerRowIndex; i < jsonData.length; i++) {
+            const rowData = jsonData[i] as any[];
+            if (!rowData || rowData.length === 0) continue;
+            
+            const row: Record<string, string> = {};
+            headers.forEach((header: string, index: number) => {
+                const value = rowData[index];
+                row[header] = value !== undefined && value !== null ? this.normalizeValue(value) : '';
+            });
+            rows.push(row);
+        }
+        
+        return rows;
     }
 
     /**
@@ -1900,9 +2479,131 @@ export class FileUploadComponent {
         this.successMessage = '';
     }
 
-    getColumnsFromData(data: any[]): string[] {
-        if (data.length === 0) return [];
-        return Object.keys(data[0]);
+    getColumnsFromData(data: Record<string, string>[]): string[] {
+        if (!data || data.length === 0) return [];
+        
+        const columns = Object.keys(data[0]);
+        if (!columns || columns.length === 0) {
+            return [];
+        }
+        
+        if (this.isTrxboColumns(columns)) {
+            const matchedOriginals = new Set<string>();
+            
+            const orderedColumns = this.trxboColumnOrder.map(label => {
+                const original = this.findTrxboColumn(columns, label);
+                if (original) {
+                    matchedOriginals.add(original);
+                }
+                return label;
+            });
+            
+            const remainingColumns = columns.filter(col => !matchedOriginals.has(col));
+            return [...orderedColumns, ...remainingColumns];
+        }
+        
+        return columns;
+    }
+
+    isTrxboData(data: Record<string, string>[]): boolean {
+        if (!data || data.length === 0) return false;
+        return this.isTrxboColumns(Object.keys(data[0]));
+    }
+
+    getPreviewValue(row: Record<string, string>, columnLabel: string): string {
+        if (!row) return '';
+        
+        if (row[columnLabel] !== undefined && row[columnLabel] !== null) {
+            return row[columnLabel].toString();
+        }
+        
+        const availableColumns = Object.keys(row);
+        const normalizedLabel = this.normalizeColumnKey(columnLabel);
+        
+        // Essayer de trouver une correspondance exacte après normalisation
+        const normalizedMatch = availableColumns.find(col => this.normalizeColumnKey(col) === normalizedLabel);
+        if (normalizedMatch && row[normalizedMatch] !== undefined && row[normalizedMatch] !== null) {
+            return row[normalizedMatch].toString();
+        }
+        
+        // Essayer via la logique TRXBO si applicable
+        if (this.isTrxboColumns(availableColumns)) {
+            const original = this.findTrxboColumn(availableColumns, columnLabel);
+            if (original && row[original] !== undefined && row[original] !== null) {
+                return row[original].toString();
+            }
+        }
+        
+        return '';
+    }
+
+    private isTrxboColumns(columns: string[]): boolean {
+        if (!columns || columns.length === 0) return false;
+        const normalized = columns.map(col => this.normalizeColumnKey(col));
+        const indicators = [
+            'idtransaction',
+            'telephone client',
+            'montant',
+            'service',
+            'moyen de paiement',
+            'type agent',
+            'pixi',
+            'grx',
+            'numero trans',
+            'gu',
+            'statut',
+            'date'
+        ];
+        const score = indicators.reduce((count, indicator) => 
+            count + (normalized.some(col => col.includes(indicator)) ? 1 : 0), 
+            0
+        );
+        return score >= 3;
+    }
+
+    private normalizeColumnKey(column: string): string {
+        return fixGarbledCharacters(column || '')
+            .toLowerCase()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+    }
+
+    private findTrxboColumn(columns: string[], target: string): string | null {
+        const normalizedTarget = this.normalizeColumnKey(target);
+        const variations = this.getTrxboColumnVariations(target).map(variation => this.normalizeColumnKey(variation));
+        const searchValues = new Set([normalizedTarget, ...variations]);
+        
+        for (const column of columns) {
+            const normalizedColumn = this.normalizeColumnKey(column);
+            if (searchValues.has(normalizedColumn)) {
+                return column;
+            }
+        }
+        
+        return null;
+    }
+
+    private getTrxboColumnVariations(columnName: string): string[] {
+        const variations: { [key: string]: string[] } = {
+            'IDTransaction': ['ID Transaction', 'idTransaction', 'id_transaction', 'transaction_id'],
+            'téléphone client': ['telephone client', 'Téléphone client', 'Telephone Client', 'phone', 'Phone'],
+            'montant': ['Montant', 'amount', 'Amount'],
+            'Service': ['service', 'SERVICE'],
+            'Moyen de Paiement': ['moyen de paiement', 'Moyen de paiement', 'moyenPaiement', 'mode de paiement'],
+            'Agence': ['agence', 'AGENCE', 'agency'],
+            'Agent': ['agent', 'AGENT'],
+            'Type agent': ['type agent', 'Type Agent', 'typeAgent', 'type_agent'],
+            'PIXI': ['pixi', 'PIXI'],
+            'Date': ['date', 'DATE', 'Date opération', 'Date Operation'],
+            'Numéro Trans': ['Numero Trans', 'Numéro Trans GU', 'Numero Trans GU', 'numero trans gu'],
+            'GU': ['gu', 'GU', 'Numéro Trans GU', 'Numero Trans GU'],
+            'GRX': ['grx', 'GRX'],
+            'Statut': ['statut', 'STATUT', 'status', 'Status']
+        };
+        
+        return variations[columnName] ? [columnName, ...variations[columnName]] : [columnName];
     }
 
     // Méthodes pour le mode automatique
@@ -2108,8 +2809,11 @@ export class FileUploadComponent {
         } else if (this.isExcelFile(fileName)) {
             // Utiliser la méthode alternative pour les très gros fichiers Excel
             if (fileSizeMB > 50) {
-                console.log(`🔄 Fichier Excel très volumineux détecté (${fileSizeMB.toFixed(1)} MB), utilisation de la méthode alternative`);
-                this.parseAutoXLSXLargeFile(file, isBo);
+                console.log(`🔄 Fichier Excel très volumineux détecté (${fileSizeMB.toFixed(1)} MB), utilisation de la méthode ultra-optimisée`);
+                this.parseXLSXVeryLargeFile(file, isBo).catch(error => {
+                    console.error('Erreur avec méthode ultra-optimisée, tentative avec méthode alternative:', error);
+                    this.parseAutoXLSXLargeFile(file, isBo);
+                });
             } else {
                 this.parseAutoXLSX(file, isBo);
             }

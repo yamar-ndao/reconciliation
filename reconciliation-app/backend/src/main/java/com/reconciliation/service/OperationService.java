@@ -2215,16 +2215,22 @@ public class OperationService {
             String typeOperationBancaire = "";
             switch (operation.getTypeOperation()) {
                 case "Compense_client":
-                    typeOperationBancaire = "Compensation Client";
+                    typeOperationBancaire = "COMPENSE CLIENT";
+                    break;
+                case "Compense_fournisseur":
+                    typeOperationBancaire = "COMPENSE FOURNISSEUR";
                     break;
                 case "Appro_client":
-                    typeOperationBancaire = "Approvisionnement";
+                    typeOperationBancaire = "APPRO CLIENT";
+                    break;
+                case "Appro_fournisseur":
+                    typeOperationBancaire = "APPRO FOURNISSEUR";
                     break;
                 case "nivellement":
-                    typeOperationBancaire = "Nivellement";
+                    typeOperationBancaire = "NIVELLEMENT";
                     break;
                 case "régularisation_solde":
-                    typeOperationBancaire = "Régularisation Solde";
+                    typeOperationBancaire = "RÉGULARISATION SOLDE";
                     break;
                 default:
                     typeOperationBancaire = operation.getTypeOperation();

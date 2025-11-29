@@ -1644,7 +1644,8 @@ export class TraitementComponent implements OnInit, AfterViewInit {
   async previewCsvData(csvContent: string, delimiter: string): Promise<{ columns: string[], data: any[], hasHeader: boolean }> {
     return new Promise((resolve, reject) => {
       // Détecter si c'est un fichier Orange Money AVANT le parsing
-      const orangeMoneyDetection = this.detectOrangeMoneyFile(csvContent, delimiter);
+      const currentFileName = this.csvFileToProcess?.name || this.selectedFiles[0]?.name;
+      const orangeMoneyDetection = this.detectOrangeMoneyFile(csvContent, delimiter, currentFileName);
       this.isOrangeMoneyFile = orangeMoneyDetection.isOrangeMoney;
       this.orangeMoneyHeaderRowIndex = orangeMoneyDetection.headerRowIndex;
       
@@ -1759,7 +1760,7 @@ export class TraitementComponent implements OnInit, AfterViewInit {
           console.log('Séparateur CSV détecté:', this.detectedDelimiter);
           
           // Détecter si c'est un fichier Orange Money AVANT la prévisualisation
-          const orangeMoneyDetection = this.detectOrangeMoneyFile(csv, this.detectedDelimiter);
+          const orangeMoneyDetection = this.detectOrangeMoneyFile(csv, this.detectedDelimiter, file.name);
           this.isOrangeMoneyFile = orangeMoneyDetection.isOrangeMoney;
           this.orangeMoneyHeaderRowIndex = orangeMoneyDetection.headerRowIndex;
           
@@ -4808,7 +4809,15 @@ export class TraitementComponent implements OnInit, AfterViewInit {
   }
 
   // Méthode pour détecter les fichiers Orange Money et trouver la ligne d'en-tête
-  private detectOrangeMoneyFile(csvContent: string, delimiter: string): { isOrangeMoney: boolean; headerRowIndex: number; headerRow: string[] } {
+  private detectOrangeMoneyFile(csvContent: string, delimiter: string, fileName?: string): { isOrangeMoney: boolean; headerRowIndex: number; headerRow: string[] } {
+    const effectiveFileName = fileName || this.csvFileToProcess?.name || this.selectedFiles[0]?.name || '';
+    const isEligibleFile = !!effectiveFileName && this.orangeMoneyUtilsService.isOrangeMoneyFile(effectiveFileName);
+    
+    if (!isEligibleFile) {
+      console.log('⚠️ Fichier non éligible (ne commence pas par CIOM/COOM/PMOM) - désactivation de la logique Orange Money');
+      return { isOrangeMoney: false, headerRowIndex: -1, headerRow: [] };
+    }
+    
     const lines = csvContent.split('\n').filter((line: string) => line.trim());
     let headerRowIndex = -1;
     let headerRow: string[] = [];
@@ -5131,13 +5140,18 @@ export class TraitementComponent implements OnInit, AfterViewInit {
     
     // Définir l'ordre spécifique des colonnes pour Orange Money
     const orangeMoneyColumnOrder = [
+      'Date',
+      'Heure',
       'Référence',
-      'Débit', 
-      'Crédit',
-      'N° de Compte',
-      'DATE',
       'Service',
-      'Statut'
+      'Paiement',
+      'Statut',
+      'Mode',
+      'N° de Compte',
+      'Wallet',
+      'N° Pseudo',
+      'Débit',
+      'Crédit'
     ];
     
     // Chercher les colonnes correspondantes dans les données disponibles
@@ -5153,13 +5167,18 @@ export class TraitementComponent implements OnInit, AfterViewInit {
         if (col === targetColumn) return true;
         
         // Correspondance partielle pour les colonnes spécifiques
+        if (targetColumn === 'Date' && colLower.includes('date')) return true;
+        if (targetColumn === 'Heure' && colLower.includes('heure')) return true;
         if (targetColumn === 'Référence' && colLower.includes('référence')) return true;
+        if (targetColumn === 'Service' && colLower.includes('service')) return true;
+        if (targetColumn === 'Paiement' && colLower.includes('paiement')) return true;
+        if (targetColumn === 'Statut' && (colLower.includes('statut') || colLower.includes('status'))) return true;
+        if (targetColumn === 'Mode' && colLower.includes('mode')) return true;
+        if (targetColumn === 'N° de Compte' && (colLower.includes('n°') && colLower.includes('compte'))) return true;
+        if (targetColumn === 'Wallet' && colLower.includes('wallet')) return true;
+        if (targetColumn === 'N° Pseudo' && (colLower.includes('pseudo') || (colLower.includes('n°') && colLower.includes('pseudo')))) return true;
         if (targetColumn === 'Débit' && colLower.includes('débit')) return true;
         if (targetColumn === 'Crédit' && colLower.includes('crédit')) return true;
-        if (targetColumn === 'N° de Compte' && (colLower.includes('n°') && colLower.includes('compte'))) return true;
-        if (targetColumn === 'DATE' && colLower.includes('date')) return true;
-        if (targetColumn === 'Service' && colLower.includes('service')) return true;
-        if (targetColumn === 'Statut' && (colLower.includes('statut') || colLower.includes('status'))) return true;
         
         return false;
       });

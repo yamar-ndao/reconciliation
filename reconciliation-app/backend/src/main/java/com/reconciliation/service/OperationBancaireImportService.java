@@ -200,7 +200,7 @@ public class OperationBancaireImportService {
         ex.createCell(2).setCellValue("Octobre 2025");
         ex.createCell(3).setCellValue("2025-10-01");
         ex.createCell(4).setCellValue("AG001");
-        ex.createCell(5).setCellValue("Compensation Client");
+        ex.createCell(5).setCellValue("COMPENSE CLIENT");
         ex.createCell(6).setCellValue("John Doe");
         ex.createCell(7).setCellValue("000123456789");
         ex.createCell(8).setCellValue(100000);

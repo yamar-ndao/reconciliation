@@ -36,6 +36,7 @@ public class DataNormalizationService {
         COLUMN_MAPPING.put("Pays provenance", "Pays");
         COLUMN_MAPPING.put("PAYS PROVENANCE", "Pays");
         COLUMN_MAPPING.put("paysProvenance", "Pays");
+        COLUMN_MAPPING.put("GRX", "Pays");
         COLUMN_MAPPING.put("TELEPHONE", "Téléphone");
         COLUMN_MAPPING.put("PHONE", "Téléphone");
         COLUMN_MAPPING.put("NUMERO", "Numéro");
@@ -74,7 +75,7 @@ public class DataNormalizationService {
         COLUMN_MAPPING.put("PARTENAIRE", "Partenaire");
         COLUMN_MAPPING.put("PARTNER", "Partenaire");
         COLUMN_MAPPING.put("PIXI", "PIXI");
-        COLUMN_MAPPING.put("GRX", "GRX");
+        COLUMN_MAPPING.put("GRX", "Pays");
         COLUMN_MAPPING.put("CLIENT", "Client");
         COLUMN_MAPPING.put("CUSTOMER", "Client");
         COLUMN_MAPPING.put("COMPTE", "Compte");

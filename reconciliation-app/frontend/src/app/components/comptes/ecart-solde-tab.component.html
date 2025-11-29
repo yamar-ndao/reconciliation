@@ -117,7 +117,7 @@
             </td>
             <td class="id-cell">{{ row.data.idTransaction }}</td>
             <td class="phone-cell">{{ row.data.telephoneClient || '-' }}</td>
-            <td class="amount-cell">{{ formatMontant(row.data.montant) }}</td>
+            <td class="amount-cell">{{ formatMontant(getSignedMontant(row.data)) }}</td>
             <td class="service-cell">{{ row.data.service || '-' }}</td>
             <td class="agence-cell">{{ row.data.agence || '-' }}</td>
             <td class="date-cell">{{ formatDate(row.data.dateTransaction) }}</td>

@@ -36,6 +36,7 @@ import { ComptesComponent } from './components/comptes/comptes.component';
 import { OperationsComponent } from './components/operations/operations.component';
 import { FraisComponent } from './components/frais/frais.component';
 import { CommissionComponent } from './components/commission/commission.component';
+import { ChargeComponent } from './components/charge/charge.component';
 import { AutocompleteInputComponent } from './components/shared/autocomplete-input.component';
 import { UsersComponent } from './components/users/users.component';
 import { RankingComponent } from './components/ranking/ranking.component';
@@ -82,6 +83,9 @@ import { TwoFactorAuthComponent } from './components/two-factor-auth/two-factor-
 import { User2FADialogComponent } from './components/users/user-2fa-dialog.component';
 import { UserProfileComponent } from './components/user-profile/user-profile.component';
 import { ServiceReferencesComponent } from './components/service-references/service-references.component';
+import { CorrespondancesComponent } from './components/correspondances/correspondances.component';
+import { EcartBoComponent } from './components/ecart-bo/ecart-bo.component';
+import { EcartPartenaireComponent } from './components/ecart-partenaire/ecart-partenaire.component';
 
 @NgModule({
     declarations: [
@@ -95,6 +99,7 @@ import { ServiceReferencesComponent } from './components/service-references/serv
         OperationsComponent,
         FraisComponent,
         CommissionComponent,
+        ChargeComponent,
         SidebarComponent,
         AutocompleteInputComponent,
         UsersComponent,
@@ -130,7 +135,10 @@ import { ServiceReferencesComponent } from './components/service-references/serv
                 TwoFactorAuthComponent,
                 User2FADialogComponent,
                 UserProfileComponent,
-                ServiceReferencesComponent
+                ServiceReferencesComponent,
+                CorrespondancesComponent,
+                EcartBoComponent,
+                EcartPartenaireComponent
     ],
     imports: [
         BrowserModule,

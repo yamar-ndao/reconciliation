@@ -1048,21 +1048,47 @@
               <td>{{ operation.modePaiement }}</td>
               <td>{{ operation.reference }}</td>
               <td class="glpi-cell">
-                <button 
-                  *ngIf="!operation.idGlpi || operation.idGlpi.trim() === ''" 
-                  class="btn-glpi-create"
-                  (click)="openGlpiCreate()"
-                  title="Créer un ticket GLPI">
-                  <i class="fas fa-plus-circle"></i> Créer
-                </button>
-                <a 
-                  *ngIf="operation.idGlpi && operation.idGlpi.trim() !== ''"
-                  [href]="getGlpiTicketUrl(operation.idGlpi)"
-                  target="_blank"
-                  class="glpi-link"
-                  title="Ouvrir le ticket GLPI {{ operation.idGlpi }}">
-                  <i class="fas fa-ticket-alt"></i> {{ operation.idGlpi }}
-                </a>
+                <ng-container *ngIf="isGlpiInputVisible(operation); else glpiLinkView">
+                  <div class="glpi-input-container">
+                    <input
+                      [(ngModel)]="operation.idGlpi"
+                      class="glpi-input"
+                      placeholder="ID TICKET"
+                      (ngModelChange)="onOperationGlpiInputChange(operation, $event)"
+                      (blur)="onOperationGlpiInputBlur(operation)"
+                      (keyup.enter)="onOperationGlpiInputEnter(operation)"
+                    />
+                    <button 
+                      class="btn-glpi-create"
+                      (click)="openGlpiCreate()"
+                      title="Créer un ticket GLPI">
+                      <i class="fas fa-plus-circle"></i> Créer
+                    </button>
+                    <button 
+                      *ngIf="operation.idGlpi && operation.idGlpi.trim() !== ''"
+                      class="btn-glpi-cancel"
+                      (click)="cancelGlpiEdit(operation)"
+                      title="Annuler la modification">
+                      ✖
+                    </button>
+                  </div>
+                </ng-container>
+                <ng-template #glpiLinkView>
+                  <div class="glpi-link-wrapper">
+                    <span 
+                      class="glpi-link"
+                      (click)="showTicketOptionsPopup(operation.idGlpi!)"
+                      title="Choisir comment ouvrir le ticket {{ operation.idGlpi }}">
+                      <i class="fas fa-ticket-alt"></i> {{ operation.idGlpi }}
+                    </span>
+                    <button 
+                      class="btn-glpi-edit"
+                      (click)="startEditGlpi(operation)"
+                      title="Modifier l'ID TICKET">
+                      ✏️
+                    </button>
+                  </div>
+                </ng-template>
               </td>
               <td>{{ operation.bo }}</td>
               <td>
@@ -1201,12 +1227,12 @@
           <div class="detail-item">
             <label><i class="fas fa-ticket-alt"></i> ID TICKET</label>
             <span>
-              <a *ngIf="selectedOperation.idGlpi && selectedOperation.idGlpi.trim() !== ''" 
-                 [href]="getGlpiTicketUrl(selectedOperation.idGlpi)"
-                 target="_blank"
-                 class="glpi-link-small">
+              <span *ngIf="selectedOperation.idGlpi && selectedOperation.idGlpi.trim() !== ''" 
+                 class="glpi-link-small"
+                 (click)="showTicketOptionsPopup(selectedOperation.idGlpi)"
+                 title="Choisir comment ouvrir le ticket">
                 {{ selectedOperation.idGlpi }}
-              </a>
+              </span>
               <span *ngIf="!selectedOperation.idGlpi || selectedOperation.idGlpi.trim() === ''">Non renseigné</span>
             </span>
           </div>

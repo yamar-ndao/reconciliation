@@ -220,21 +220,30 @@ export interface ReconciliationReportData {
                             <div class="card-value">{{averageMatchRate}}%</div>
                         </div>
                     </div>
-                    <div class="summary-card">
+                    <div class="summary-card clickable-card" 
+                         [class.active]="activeCardFilter === 'inProgress'"
+                         (click)="filterByInProgress()"
+                         title="Cliquer pour filtrer les écarts en cours">
                         <div class="card-icon">⏳</div>
                         <div class="card-content">
                             <div class="card-title">Écarts en cours</div>
                             <div class="card-value">{{inProgressDiscrepancies | number}}</div>
                         </div>
                     </div>
-                    <div class="summary-card">
+                    <div class="summary-card clickable-card" 
+                         [class.active]="activeCardFilter === 'treated'"
+                         (click)="filterByTreated()"
+                         title="Cliquer pour filtrer les écarts traités">
                         <div class="card-icon">✅</div>
                         <div class="card-content">
                             <div class="card-title">Écarts traités</div>
                             <div class="card-value">{{treatedDiscrepancies | number}}</div>
                         </div>
                     </div>
-                    <div class="summary-card">
+                    <div class="summary-card clickable-card" 
+                         [class.active]="activeCardFilter === 'ticketsToCreate'"
+                         (click)="filterByTicketsToCreate()"
+                         title="Cliquer pour filtrer les tickets à créer">
                         <div class="card-icon">🎫</div>
                         <div class="card-content">
                             <div class="card-title">Tickets à créer</div>
@@ -842,6 +851,23 @@ export interface ReconciliationReportData {
             align-items: center;
             gap: 12px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .summary-card.clickable-card {
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .summary-card.clickable-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+            background: #f8f9fa;
+        }
+
+        .summary-card.clickable-card.active {
+            background: #e3f2fd;
+            border: 2px solid #2196f3;
+            box-shadow: 0 4px 12px rgba(33, 150, 243, 0.3);
         }
 
         .card-icon {
@@ -1487,6 +1513,7 @@ export class ReconciliationReportComponent implements OnInit, OnDestroy {
     selectedDateFin: string = '';
     selectedStatus: string = '';
     selectedTraitement: string = '';
+    activeCardFilter: 'inProgress' | 'treated' | 'ticketsToCreate' | null = null;
 
     uniqueAgencies: string[] = [];
     uniqueServices: string[] = [];
@@ -1620,7 +1647,10 @@ export class ReconciliationReportComponent implements OnInit, OnDestroy {
                         this.enforceDefaultStatusForReportData();
 
                         // Appliquer la règle métier de recalcul sur les lignes issues du résumé
-                        this.reportData.forEach(item => this.recalculateMatchRate(item));
+                        this.reportData.forEach(item => {
+                            this.recalculateMatchRate(item);
+                            this.syncCommentWithValues(item);
+                        });
                     } else {
                         // Pas de résumé → construire à partir des données en cours
                     this.generateReportData();
@@ -1861,7 +1891,10 @@ export class ReconciliationReportComponent implements OnInit, OnDestroy {
         this.enforceDefaultStatusForReportData();
 
         // Appliquer la règle de recalcul (transactions / écarts / correspondances)
-        this.reportData.forEach(item => this.recalculateMatchRate(item));
+        this.reportData.forEach(item => {
+            this.recalculateMatchRate(item);
+            this.syncCommentWithValues(item);
+        });
         
         // Trier par date décroissante (les plus récentes en premier)
         this.reportData.sort((a, b) => {
@@ -2159,7 +2192,10 @@ export class ReconciliationReportComponent implements OnInit, OnDestroy {
         this.enforceDefaultStatusForReportData();
 
         // Appliquer la règle métier de recalcul sur chaque ligne
-        this.reportData.forEach(item => this.recalculateMatchRate(item));
+        this.reportData.forEach(item => {
+            this.recalculateMatchRate(item);
+            this.syncCommentWithValues(item);
+        });
         
         // Trier par date décroissante (les plus récentes en premier)
         this.reportData.sort((a, b) => {
@@ -2429,6 +2465,36 @@ export class ReconciliationReportComponent implements OnInit, OnDestroy {
         this.filterReport();
     }
 
+    filterByInProgress(): void {
+        if (this.activeCardFilter === 'inProgress') {
+            // Si déjà actif, désactiver le filtre
+            this.activeCardFilter = null;
+        } else {
+            this.activeCardFilter = 'inProgress';
+        }
+        this.filterReport();
+    }
+
+    filterByTreated(): void {
+        if (this.activeCardFilter === 'treated') {
+            // Si déjà actif, désactiver le filtre
+            this.activeCardFilter = null;
+        } else {
+            this.activeCardFilter = 'treated';
+        }
+        this.filterReport();
+    }
+
+    filterByTicketsToCreate(): void {
+        if (this.activeCardFilter === 'ticketsToCreate') {
+            // Si déjà actif, désactiver le filtre
+            this.activeCardFilter = null;
+        } else {
+            this.activeCardFilter = 'ticketsToCreate';
+        }
+        this.filterReport();
+    }
+
     filterReport() {
         this.filteredReportData = this.reportData.filter(item => {
             // Filtrage par pays autorisés (cloisonnement)
@@ -2463,7 +2529,42 @@ export class ReconciliationReportComponent implements OnInit, OnDestroy {
                 }
             }
             
-            return agencyMatch && serviceMatch && countryFilterMatch && dateMatch && statusMatch && traitementMatch;
+            const baseMatch = agencyMatch && serviceMatch && countryFilterMatch && dateMatch && statusMatch && traitementMatch;
+            
+            // Appliquer le filtre de card actif si défini
+            if (this.activeCardFilter === 'inProgress') {
+                // Filtrer les items avec des écarts en cours (partnerOnly > 0)
+                return baseMatch && (item.partnerOnly || 0) > 0;
+            } else if (this.activeCardFilter === 'treated') {
+                // Filtrer les items avec des écarts traités : statut OK et au moins un écart BO ou Partenaire
+                const status = (item.status || '').trim().toUpperCase();
+                const isOk = status === 'OK';
+                const hasEcartsBO = (item.boOnly || 0) > 0;
+                const hasEcartsPartenaire = (item.partnerOnly || 0) > 0;
+                const hasEcarts = hasEcartsBO || hasEcartsPartenaire;
+                return baseMatch && isOk && hasEcarts;
+            } else if (this.activeCardFilter === 'ticketsToCreate') {
+                // Filtrer selon la même logique que ticketsACreer
+                const idGlpiStr = (item.glpiId || '').trim();
+                const idGlpiLower = idGlpiStr.toLowerCase();
+                const status = (item.status || '').toUpperCase();
+                
+                // Exclure les tickets qui contiennent "modifier"
+                if (idGlpiLower.includes('modifier')) {
+                    return false;
+                }
+                
+                // Compter les tickets qui nécessitent une création
+                const hasNoIdGlpi = idGlpiStr === '';
+                const containsCreer = idGlpiLower.includes('créer');
+                const isNok = status === 'NOK';
+                const isEnAttenteOuEnCours = status.includes('EN COURS') || status.includes('EN ATTENTE');
+                
+                const needsTicket = (hasNoIdGlpi && isNok) || (containsCreer && isEnAttenteOuEnCours);
+                return baseMatch && needsTicket;
+            }
+            
+            return baseMatch;
         });
         
         // Recalculer le traitement pour chaque ligne filtrée selon les écarts réels
@@ -2532,17 +2633,16 @@ export class ReconciliationReportComponent implements OnInit, OnDestroy {
     }
 
     private buildCommentForCounts(matches: number, boOnly: number, partnerOnly: number, mismatches: number): string {
+        // Si pas d'écarts, retourner le commentaire par défaut
+        if (boOnly === 0 && partnerOnly === 0 && mismatches === 0) {
+            return "PAS D'ECARTS CONSTATES";
+        }
+
+        // Afficher les valeurs réelles dans le commentaire (sans soustraction)
         const parts: string[] = [];
-
-        // Appliquer la règle de recouvrement BO / Partenaire pour l'affichage
-        const effectivePartnerOnly =
-            boOnly > 0 && partnerOnly > 0
-                ? Math.max(0, partnerOnly - Math.min(boOnly, partnerOnly))
-                : partnerOnly;
-
         parts.push(`${matches} correspondances`);
         if (boOnly > 0) parts.push(`${boOnly} écart(s) BO`);
-        if (effectivePartnerOnly > 0) parts.push(`${effectivePartnerOnly} écart(s) Partenaire`);
+        if (partnerOnly > 0) parts.push(`${partnerOnly} écart(s) Partenaire`);
         if (mismatches > 0) parts.push(`${mismatches} incohérence(s)`);
         return parts.join(' • ');
     }
@@ -2565,6 +2665,37 @@ export class ReconciliationReportComponent implements OnInit, OnDestroy {
         if (!this.shouldAutoUpdateComment(item, options)) {
             return;
         }
+        item.comment = this.buildCommentForCounts(matches, boOnly, partnerOnly, mismatches);
+    }
+
+    /**
+     * Synchronise le commentaire avec les valeurs réelles de l'item.
+     * Cette méthode est appelée après le chargement des données pour s'assurer
+     * que le commentaire correspond toujours aux valeurs affichées.
+     * Ne modifie pas le commentaire si le statut est "OK".
+     */
+    private syncCommentWithValues(item: ReconciliationReportData): void {
+        if (!item) {
+            return;
+        }
+        
+        const matches = this.normalizeNumericValue(item.matches);
+        const boOnly = this.normalizeNumericValue(item.boOnly);
+        const partnerOnly = this.normalizeNumericValue(item.partnerOnly);
+        const mismatches = this.normalizeNumericValue(item.mismatches);
+        
+        // Si le statut est "OK" mais qu'il y a des écarts, ne pas modifier le commentaire
+        // Si le statut est "OK" et qu'il n'y a pas d'écarts, corriger le commentaire
+        if (item.status === 'OK') {
+            // Si tous les écarts sont à 0, mettre à jour le commentaire pour refléter la réalité
+            if (boOnly === 0 && partnerOnly === 0 && mismatches === 0) {
+                item.comment = this.buildCommentForCounts(matches, boOnly, partnerOnly, mismatches);
+            }
+            // Sinon, préserver le commentaire existant
+            return;
+        }
+        
+        // Recalculer le commentaire pour qu'il corresponde aux valeurs réelles
         item.comment = this.buildCommentForCounts(matches, boOnly, partnerOnly, mismatches);
     }
 
@@ -2638,6 +2769,15 @@ export class ReconciliationReportComponent implements OnInit, OnDestroy {
             recalculated.matchRate = effectiveTotalTransactions > 0 ? 
                 (recalculated.matches / effectiveTotalTransactions) * 100 : 0;
             
+            // Pour le statut "OK", les écarts sont à 0, donc mettre à jour le commentaire
+            // pour refléter la réalité (pas d'écarts)
+            recalculated.comment = this.buildCommentForCounts(
+                recalculated.matches,
+                recalculated.boOnly,
+                recalculated.partnerOnly,
+                recalculated.mismatches
+            );
+            
             console.log('🔄 Recalcul pour statut OK:', {
                 apres: {
                     matches: recalculated.matches,
@@ -2655,10 +2795,15 @@ export class ReconciliationReportComponent implements OnInit, OnDestroy {
             recalculated.matchRate = effectiveTotalTransactions > 0 ? 
                 (recalculated.matches / effectiveTotalTransactions) * 100 : 0;
             
+            // Mettre à jour le commentaire pour refléter les valeurs réelles
+            recalculated.comment = this.buildCommentForCounts(
+                recalculated.matches,
+                recalculated.boOnly,
+                recalculated.partnerOnly,
+                recalculated.mismatches
+            );
         }
-
-        recalculated.comment = previousComment;
-
+        
         return recalculated;
     }
 
@@ -2679,8 +2824,15 @@ export class ReconciliationReportComponent implements OnInit, OnDestroy {
     get treatedDiscrepancies(): number {
         if (!this.filteredReportData) return 0;
         return this.filteredReportData
-            .filter(item => !(item.status || '').toUpperCase().includes('EN COURS'))
-            .reduce((sum, item) => sum + (item.boOnly || 0) + (item.partnerOnly || 0) + (item.mismatches || 0), 0);
+            .filter(item => {
+                // Compter uniquement les lignes avec statut OK et au moins un écart BO ou Partenaire
+                const status = (item.status || '').trim().toUpperCase();
+                const isOk = status === 'OK';
+                const hasEcartsBO = (item.boOnly || 0) > 0;
+                const hasEcartsPartenaire = (item.partnerOnly || 0) > 0;
+                return isOk && (hasEcartsBO || hasEcartsPartenaire);
+            })
+            .reduce((sum, item) => sum + (item.boOnly || 0) + (item.partnerOnly || 0), 0);
     }
 
     // Compteur des tickets à créer
@@ -3326,6 +3478,47 @@ export class ReconciliationReportComponent implements OnInit, OnDestroy {
                         }
                     }
                     
+                    // Initialiser le commentaire
+                    let comment = r.comment || '';
+                    
+                    // Si le statut est "OK" mais qu'il y a des écarts, ne pas modifier le commentaire
+                    // Si le statut est "OK" et qu'il n'y a pas d'écarts, corriger le commentaire
+                    if (r.status === 'OK') {
+                        // Si tous les écarts sont à 0, mettre à jour le commentaire pour refléter la réalité
+                        if (boOnly === 0 && partnerOnly === 0 && mismatches === 0) {
+                            comment = this.buildCommentForCounts(
+                                r.matches || 0,
+                                boOnly,
+                                partnerOnly,
+                                mismatches
+                            );
+                        }
+                        // Sinon, préserver le commentaire existant
+                    } else {
+                        // Recalculer le commentaire pour qu'il corresponde aux valeurs réelles
+                        if (!comment || comment.trim() === '') {
+                            // Si le commentaire est vide, le générer
+                            if (totalEcarts === 0) {
+                                comment = "PAS D'ECARTS CONSTATES";
+                            } else {
+                                comment = this.buildCommentForCounts(
+                                    r.matches || 0,
+                                    boOnly,
+                                    partnerOnly,
+                                    mismatches
+                                );
+                            }
+                        } else {
+                            // Si le commentaire existe, le recalculer pour qu'il corresponde aux valeurs
+                            comment = this.buildCommentForCounts(
+                                r.matches || 0,
+                                boOnly,
+                                partnerOnly,
+                                mismatches
+                            );
+                        }
+                    }
+                    
                     return {
                         id: r.id,
                         date: r.date,
@@ -3341,14 +3534,18 @@ export class ReconciliationReportComponent implements OnInit, OnDestroy {
                         mismatches: mismatches,
                         matchRate: r.matchRate || 0,
                         status: r.status || '',
-                        comment: r.comment || '',
+                        comment: comment,
                         traitement: traitement
                     };
                 });
                 this.enforceDefaultStatusForReportData();
 
                 // Appliquer la logique de recalcul sur les données chargées depuis la base
-                this.reportData.forEach(item => this.recalculateMatchRate(item));
+                this.reportData.forEach(item => {
+                    this.recalculateMatchRate(item);
+                    // Synchroniser le commentaire avec les valeurs réelles
+                    this.syncCommentWithValues(item);
+                });
                 
                 this.syncLastSavedGlpiValues(this.reportData);
                 
@@ -3871,9 +4068,12 @@ export class ReconciliationReportComponent implements OnInit, OnDestroy {
 
         if (totalTransactions > 0) {
             // Calculer l'écart Partenaire effectif en tenant compte des écarts BO déjà pris en compte
+            // Si les deux types d'écarts existent et que partnerOnly > boOnly, 
+            // on soustrait boOnly de partnerOnly pour obtenir les écarts partenaires excédentaires
+            // Sinon, on affiche les deux séparément car ils représentent des écarts différents
             const effectivePartnerOnly =
-                boOnly > 0 && partnerOnly > 0
-                    ? Math.max(0, partnerOnly - Math.min(boOnly, partnerOnly))
+                boOnly > 0 && partnerOnly > 0 && partnerOnly > boOnly
+                    ? partnerOnly - boOnly
                     : partnerOnly;
 
             const totalEcarts = boOnly + effectivePartnerOnly + mismatches;
@@ -3930,7 +4130,7 @@ export class ReconciliationReportComponent implements OnInit, OnDestroy {
         // Calculer l'écart Partenaire effectif en tenant compte des écarts BO déjà pris en compte
         const effectivePartnerOnly =
             boOnly > 0 && partnerOnly > 0
-                ? Math.max(0, partnerOnly - Math.min(boOnly, partnerOnly))
+                ? (partnerOnly > boOnly ? partnerOnly - boOnly : partnerOnly)
                 : partnerOnly;
 
         const totalEcarts = boOnly + effectivePartnerOnly + mismatches;
@@ -4065,7 +4265,7 @@ export class ReconciliationReportComponent implements OnInit, OnDestroy {
             mismatches: 0,
             matchRate: 0,
             status: this.DEFAULT_STATUS,
-            comment: '',
+            comment: "PAS D'ECARTS CONSTATES",
             traitement: undefined
         };
 

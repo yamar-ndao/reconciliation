@@ -949,70 +949,128 @@ export class ReconciliationService implements OnInit, OnDestroy {
 
     /**
      * Réconciliation par chunks avec le backend (utilise l'endpoint classique)
+     * Nouvelle approche : compare 100k lignes BO avec 100k lignes Partner
+     * Les correspondances trouvées sont retirées des deux côtés pour les chunks suivants
      */
     private reconcileWithBackendChunks(request: ReconciliationRequest): Observable<ReconciliationResponse> {
-        console.log('🔄 Démarrage de la réconciliation par chunks backend optimisée');
+        console.log('🔄 Démarrage de la réconciliation par chunks backend optimisée (nouvelle approche)');
         
         return new Observable(observer => {
-            // Réduire la taille des chunks pour améliorer le transfert réseau
-            // Chunks plus petits = transfert plus rapide et moins de timeout
-            const chunkSize = 50000; // 50k lignes par chunk (réduit de 100k pour améliorer le transfert)
+            // Configuration de la taille des chunks pour les gros fichiers
+            const chunkSize = 100000; // 100k lignes par chunk
             
             // Activer automatiquement le mode optimisé pour les chunks
             request.lightweightResponse = true;
             console.log('⚡ Mode optimisé activé pour les chunks - Réponse allégée');
             
-            // Diviser seulement les données BO en chunks
+            // Diviser les données BO et Partner en chunks
             const boChunks = this.createChunks(request.boFileContent || [], chunkSize);
-            const allPartnerData = request.partnerFileContent || [];
+            const partnerChunks = this.createChunks(request.partnerFileContent || [], chunkSize);
             
-            console.log(`📊 Données divisées: ${boChunks.length} chunks BO (${chunkSize} lignes/chunk), ${allPartnerData.length} lignes Partner complètes`);
+            console.log(`📊 Données divisées: ${boChunks.length} chunks BO (${chunkSize} lignes/chunk), ${partnerChunks.length} chunks Partner (${chunkSize} lignes/chunk)`);
             
-            // Traiter chaque chunk BO avec TOUTES les lignes Partner
-            this.processOptimizedChunks(request, boChunks, allPartnerData, [], observer);
+            // Traiter les chunks BO et Partner par paires
+            this.processOptimizedChunks(request, boChunks, partnerChunks, [], observer);
         });
     }
 
     /**
-     * Traite les chunks BO de manière optimisée avec toutes les lignes Partner
+     * Traite les chunks BO et Partner par paires (nouvelle approche)
+     * Compare 100k lignes BO avec 100k lignes Partner
+     * Les correspondances trouvées sont retirées des deux côtés pour les chunks suivants
      */
     private processOptimizedChunks(
         originalRequest: ReconciliationRequest, 
         boChunks: any[][], 
-        allPartnerData: any[], 
+        partnerChunks: any[][], 
         accumulatedResults: any[], 
         observer: any
     ): void {
         
         let currentBoIndex = 0;
-        let remainingPartnerData = [...allPartnerData]; // Copie des données Partner restantes
+        let currentPartnerIndex = 0;
+        let remainingBoData: any[] = []; // Données BO restantes après retrait des matches
+        let remainingPartnerData: any[] = []; // Données Partner restantes après retrait des matches
         let allMatches: any[] = [];
         let allBoOnly: any[] = [];
+        let allPartnerOnly: any[] = [];
         
-        const processNextBoChunk = () => {
-            if (currentBoIndex >= boChunks.length) {
-                console.log('✅ Tous les chunks BO traités, finalisation des résultats...');
-                console.log(`📊 Résumé final avant finalisation:`, {
-                    totalMatches: allMatches.length,
-                    totalBoOnly: allBoOnly.length,
-                    totalPartnerOnly: remainingPartnerData.length,
-                    chunksProcessed: currentBoIndex
-                });
-                this.finalizeOptimizedResults(allMatches, allBoOnly, remainingPartnerData, observer);
+        const processNextChunkPair = () => {
+            // Vérifier si on a terminé tous les chunks BO et Partner
+            const hasMoreBoChunks = currentBoIndex < boChunks.length;
+            const hasMorePartnerChunks = currentPartnerIndex < partnerChunks.length;
+            
+            if (!hasMoreBoChunks && !hasMorePartnerChunks) {
+                // Tous les chunks initiaux sont traités, maintenant on compare les données restantes entre elles
+                // jusqu'à ce qu'il n'y ait plus de nouvelles correspondances
+                if (remainingBoData.length > 0 && remainingPartnerData.length > 0) {
+                    console.log(`🔄 Tous les chunks initiaux traités. Comparaison itérative des données restantes: ${remainingBoData.length} BO, ${remainingPartnerData.length} Partner`);
+                    this.processRemainingDataIteratively(originalRequest, remainingBoData, remainingPartnerData, allMatches, allBoOnly, allPartnerOnly, observer);
+                } else {
+                    // Plus de données à comparer, finaliser
+                    if (remainingBoData.length > 0) {
+                        this.pushInBatches(allBoOnly, remainingBoData);
+                    }
+                    if (remainingPartnerData.length > 0) {
+                        this.pushInBatches(allPartnerOnly, remainingPartnerData);
+                    }
+                    
+                    console.log('✅ Tous les chunks traités, finalisation des résultats...');
+                    console.log(`📊 Résumé final avant finalisation:`, {
+                        totalMatches: allMatches.length,
+                        totalBoOnly: allBoOnly.length,
+                        totalPartnerOnly: allPartnerOnly.length,
+                        boChunksProcessed: currentBoIndex,
+                        partnerChunksProcessed: currentPartnerIndex
+                    });
+                    this.finalizeOptimizedResults(allMatches, allBoOnly, allPartnerOnly, observer);
+                }
                 return;
             }
             
-            const boChunk = boChunks[currentBoIndex];
-            currentBoIndex++;
+            // Préparer les chunks à comparer
+            let boChunk: any[] = [];
+            let partnerChunk: any[] = [];
             
-            console.log(`🔄 Traitement chunk BO ${currentBoIndex}/${boChunks.length} avec ${remainingPartnerData.length} lignes Partner restantes`);
+            // Prendre le prochain chunk BO (ou utiliser les données restantes)
+            if (hasMoreBoChunks) {
+                boChunk = [...boChunks[currentBoIndex]];
+                currentBoIndex++;
+            } else if (remainingBoData.length > 0) {
+                // Utiliser les données BO restantes pour comparaison avec les prochains chunks Partner
+                boChunk = [...remainingBoData];
+                remainingBoData = [];
+            }
+            
+            // Prendre le prochain chunk Partner (ou utiliser les données restantes)
+            if (hasMorePartnerChunks) {
+                partnerChunk = [...partnerChunks[currentPartnerIndex]];
+                currentPartnerIndex++;
+            } else if (remainingPartnerData.length > 0) {
+                // Utiliser les données Partner restantes pour comparaison avec les prochains chunks BO
+                partnerChunk = [...remainingPartnerData];
+                remainingPartnerData = [];
+            }
+            
+            // Si les deux chunks sont vides, passer au suivant
+            if (boChunk.length === 0 && partnerChunk.length === 0) {
+                processNextChunkPair();
+                return;
+            }
+            
+            // Si un seul chunk est vide, on peut quand même comparer avec un chunk vide
+            // (le backend retournera les données comme non matchées)
+            
+            console.log(`🔄 Traitement chunk BO ${currentBoIndex}/${boChunks.length} (${boChunk.length} lignes) avec chunk Partner ${currentPartnerIndex}/${partnerChunks.length} (${partnerChunk.length} lignes)`);
             
             // Mettre à jour la progression avec les informations détaillées
+            const totalChunks = Math.max(boChunks.length, partnerChunks.length);
+            const currentChunk = Math.max(currentBoIndex, currentPartnerIndex);
             this.progressSubject.next({
-                percentage: Math.min(95, (currentBoIndex / boChunks.length) * 90), // 90% max pour laisser de la place à la finalisation
-                processed: currentBoIndex,
-                total: boChunks.length,
-                step: `Traitement chunk BO ${currentBoIndex}/${boChunks.length}`,
+                percentage: Math.min(95, (currentChunk / totalChunks) * 90),
+                processed: currentChunk,
+                total: totalChunks,
+                step: `Traitement chunk ${currentChunk}/${totalChunks}`,
                 currentBoChunk: currentBoIndex,
                 totalBoChunks: boChunks.length,
                 matchesCount: allMatches.length,
@@ -1023,10 +1081,10 @@ export class ReconciliationService implements OnInit, OnDestroy {
             const chunkRequest: ReconciliationRequest = {
                 ...originalRequest,
                 boFileContent: boChunk,
-                partnerFileContent: remainingPartnerData
+                partnerFileContent: partnerChunk
             };
             
-            // Timeout de 30 minutes pour chaque chunk (au cas où un chunk serait très volumineux)
+            // Timeout de 30 minutes pour chaque chunk
             const RECONCILIATION_TIMEOUT = 1800000; // 30 minutes
             
             this.http.post<ReconciliationResponse>(`${this.apiUrl}/reconcile`, chunkRequest, {
@@ -1039,67 +1097,38 @@ export class ReconciliationService implements OnInit, OnDestroy {
                 next: (response: ReconciliationResponse) => {
                     try {
                         const matchesCount = response.matches?.length || 0;
-                        console.log(`✅ Chunk BO ${currentBoIndex} traité: ${matchesCount} matches`);
+                        console.log(`✅ Chunk ${currentChunk} traité: ${matchesCount} matches`);
                         console.log(`📊 Réponse reçue - Matches: ${matchesCount}, BoOnly: ${response.boOnly?.length || 0}, PartnerOnly: ${response.partnerOnly?.length || 0}`);
                         
-                        // Ajouter les matches trouvés avec gestion d'erreur
+                        // Ajouter les matches trouvés (ces lignes ne seront plus prises en compte)
                         if (response.matches && response.matches.length > 0) {
-                            console.log(`📊 Ajout de ${response.matches.length} matches...`);
-                            
-                            // Vérifier si on est en mode optimisé (premier match pour tester)
-                            const isOptimized = response.matches.length > 0 && 
-                                (!response.matches[0].partnerData || 
-                                 Object.keys(response.matches[0].partnerData || {}).length <= 5);
-                            
-                            if (isOptimized) {
-                                console.log('⚡ Mode optimisé détecté - Utilisation de match.key pour les clés');
-                            }
-                            
-                            allMatches.push(...response.matches);
-                            
-                            // Retirer les lignes Partner qui ont matché (optimisé)
-                            // Utiliser match.key si disponible (mode optimisé), sinon extraire de partnerData
-                            const matchedPartnerKeys = new Set(response.matches.map(match => {
-                                // En mode optimisé, utiliser directement la clé du match
-                                if (match.key) {
-                                    return match.key;
-                                }
-                                // Sinon, extraire de partnerData (mode normal)
-                                if (match.partnerData && match.partnerData[originalRequest.partnerKeyColumn]) {
-                                    return match.partnerData[originalRequest.partnerKeyColumn];
-                                }
-                                // Fallback : essayer de trouver la clé dans les données
-                                return match.partnerData?.[originalRequest.partnerKeyColumn] || 
-                                       match.boData?.[originalRequest.boKeyColumn] || 
-                                       '';
-                            }).filter(key => key !== '' && key !== null && key !== undefined));
-                            
-                            const beforeCount = remainingPartnerData.length;
-                            remainingPartnerData = remainingPartnerData.filter(partnerRow => {
-                                const partnerKey = partnerRow[originalRequest.partnerKeyColumn];
-                                return !matchedPartnerKeys.has(partnerKey);
-                            });
-                            
-                            console.log(`📊 ${beforeCount - remainingPartnerData.length} lignes Partner retirées, ${remainingPartnerData.length} restantes`);
-                            console.log(`🔑 Clés matchées extraites: ${matchedPartnerKeys.size} clés uniques`);
+                            console.log(`📊 Ajout de ${response.matches.length} matches (ces lignes sont retirées des prochains chunks)...`);
+                            this.pushInBatches(allMatches, response.matches);
                         }
                         
-                        // Ajouter les lignes BO sans correspondance
+                        // Les lignes BO sans correspondance dans ce chunk seront comparées avec les prochains chunks Partner
                         if (response.boOnly && response.boOnly.length > 0) {
-                            console.log(`📊 Ajout de ${response.boOnly.length} lignes BO sans correspondance...`);
-                            allBoOnly.push(...response.boOnly);
+                            console.log(`📊 ${response.boOnly.length} lignes BO sans correspondance ajoutées pour comparaison avec les prochains chunks Partner...`);
+                            this.pushInBatches(remainingBoData, response.boOnly);
+                        }
+                        
+                        // Les lignes Partner sans correspondance dans ce chunk seront comparées avec les prochains chunks BO
+                        if (response.partnerOnly && response.partnerOnly.length > 0) {
+                            console.log(`📊 ${response.partnerOnly.length} lignes Partner sans correspondance ajoutées pour comparaison avec les prochains chunks BO...`);
+                            this.pushInBatches(remainingPartnerData, response.partnerOnly);
                         }
                         
                         // Vérifier la mémoire
-                        console.log(`💾 État mémoire: ${allMatches.length} matches, ${allBoOnly.length} bo-only, ${remainingPartnerData.length} partner restantes`);
+                        console.log(`💾 État mémoire: ${allMatches.length} matches, ${allBoOnly.length} bo-only, ${allPartnerOnly.length} partner-only`);
+                        console.log(`💾 Données restantes: ${remainingBoData.length} BO, ${remainingPartnerData.length} Partner`);
                         
-                        // Mettre à jour la progression avec les informations détaillées
-                        const progressPercentage = Math.min(95, (currentBoIndex / boChunks.length) * 90);
+                        // Mettre à jour la progression
+                        const progressPercentage = Math.min(95, (currentChunk / totalChunks) * 90);
                         this.progressSubject.next({
                             percentage: progressPercentage,
-                            processed: currentBoIndex,
-                            total: boChunks.length,
-                            step: `Chunk BO ${currentBoIndex}/${boChunks.length} traité`,
+                            processed: currentChunk,
+                            total: totalChunks,
+                            step: `Chunk ${currentChunk}/${totalChunks} traité`,
                             currentBoChunk: currentBoIndex,
                             totalBoChunks: boChunks.length,
                             matchesCount: allMatches.length,
@@ -1107,22 +1136,245 @@ export class ReconciliationService implements OnInit, OnDestroy {
                             partnerRemaining: remainingPartnerData.length
                         });
                         
-                        console.log(`🔄 Passage au chunk suivant (${currentBoIndex + 1}/${boChunks.length})...`);
-                        processNextBoChunk();
+                        console.log(`🔄 Passage au chunk suivant...`);
+                        processNextChunkPair();
                     } catch (error) {
-                        console.error(`❌ Erreur lors du traitement des résultats du chunk BO ${currentBoIndex}:`, error);
-                        processNextBoChunk();
+                        console.error(`❌ Erreur lors du traitement des résultats du chunk ${currentChunk}:`, error);
+                        processNextChunkPair();
                     }
                 },
                 error: (error) => {
-                    console.error(`❌ Erreur lors du traitement du chunk BO ${currentBoIndex}:`, error);
+                    console.error(`❌ Erreur lors du traitement du chunk ${currentChunk}:`, error);
                     // Continuer avec le chunk suivant
-                    processNextBoChunk();
+                    processNextChunkPair();
                 }
             });
         };
         
-        processNextBoChunk();
+        processNextChunkPair();
+    }
+    
+    /**
+     * Ajoute un grand tableau à un autre tableau par lots pour éviter le dépassement de pile
+     */
+    private pushInBatches<T>(target: T[], source: T[], batchSize: number = 10000): void {
+        if (source.length === 0) return;
+        
+        // Pour les petits tableaux, utiliser push normal
+        if (source.length <= batchSize) {
+            target.push(...source);
+            return;
+        }
+        
+        // Pour les grands tableaux, ajouter par lots
+        for (let i = 0; i < source.length; i += batchSize) {
+            const batch = source.slice(i, i + batchSize);
+            target.push(...batch);
+        }
+    }
+
+    /**
+     * Compare itérativement les données restantes entre elles jusqu'à ce qu'il n'y ait plus de correspondances
+     */
+    private processRemainingDataIteratively(
+        originalRequest: ReconciliationRequest,
+        remainingBoData: any[],
+        remainingPartnerData: any[],
+        allMatches: any[],
+        allBoOnly: any[],
+        allPartnerOnly: any[],
+        observer: any
+    ): void {
+        const chunkSize = 100000; // 100k lignes par chunk
+        let iteration = 0;
+        let currentBoData = [...remainingBoData];
+        let currentPartnerData = [...remainingPartnerData];
+        
+        const processNextIteration = () => {
+            iteration++;
+            console.log(`🔄 Itération ${iteration} de réconciliation des données restantes: ${currentBoData.length} BO, ${currentPartnerData.length} Partner`);
+            
+            // Si l'un des deux tableaux est vide, on arrête
+            if (currentBoData.length === 0 || currentPartnerData.length === 0) {
+                console.log(`✅ Plus de données à comparer. Finalisation...`);
+                if (currentBoData.length > 0) {
+                    this.pushInBatches(allBoOnly, currentBoData);
+                }
+                if (currentPartnerData.length > 0) {
+                    this.pushInBatches(allPartnerOnly, currentPartnerData);
+                }
+                this.finalizeOptimizedResults(allMatches, allBoOnly, allPartnerOnly, observer);
+                return;
+            }
+            
+            // Diviser les données restantes en chunks pour la comparaison
+            const boChunks = this.createChunks(currentBoData, chunkSize);
+            const partnerChunks = this.createChunks(currentPartnerData, chunkSize);
+            
+            console.log(`📊 Données divisées en ${boChunks.length} chunks BO et ${partnerChunks.length} chunks Partner pour l'itération ${iteration}`);
+            
+            // Pour chaque itération, comparer chaque chunk BO avec TOUS les chunks Partner restants
+            let boChunkIndex = 0;
+            let remainingPartnerChunks = partnerChunks.map(chunk => [...chunk]); // Copie des chunks Partner
+            let newMatchesThisIteration = 0;
+            let newBoData: any[] = [];
+            let newPartnerData: any[] = [];
+            
+            const processNextBoChunk = () => {
+                // Vérifier si on a terminé tous les chunks BO
+                if (boChunkIndex >= boChunks.length) {
+                    // Cette itération est terminée
+                    // Ajouter les chunks Partner restants qui n'ont pas été matchés
+                    remainingPartnerChunks.forEach(chunk => {
+                        if (chunk.length > 0) {
+                            this.pushInBatches(newPartnerData, chunk);
+                        }
+                    });
+                    
+                    console.log(`✅ Itération ${iteration} terminée: ${newMatchesThisIteration} nouvelles correspondances trouvées`);
+                    console.log(`📊 Données restantes après itération ${iteration}: ${newBoData.length} BO, ${newPartnerData.length} Partner`);
+                    
+                    // Si on a trouvé de nouvelles correspondances, continuer avec une nouvelle itération
+                    if (newMatchesThisIteration > 0 && (newBoData.length > 0 && newPartnerData.length > 0)) {
+                        // Mettre à jour la progression
+                        this.progressSubject.next({
+                            percentage: Math.min(98, 90 + (iteration * 2)),
+                            processed: iteration,
+                            total: 100,
+                            step: `Itération ${iteration} terminée, ${newBoData.length} BO et ${newPartnerData.length} Partner restants`,
+                            matchesCount: allMatches.length,
+                            boOnlyCount: allBoOnly.length,
+                            partnerRemaining: newPartnerData.length
+                        });
+                        
+                        currentBoData = newBoData;
+                        currentPartnerData = newPartnerData;
+                        // Continuer avec la prochaine itération
+                        setTimeout(() => processNextIteration(), 100);
+                    } else {
+                        // Plus de nouvelles correspondances, finaliser
+                        if (newBoData.length > 0) {
+                            this.pushInBatches(allBoOnly, newBoData);
+                        }
+                        if (newPartnerData.length > 0) {
+                            this.pushInBatches(allPartnerOnly, newPartnerData);
+                        }
+                        console.log('✅ Plus de nouvelles correspondances trouvées. Finalisation...');
+                        this.finalizeOptimizedResults(allMatches, allBoOnly, allPartnerOnly, observer);
+                    }
+                    return;
+                }
+                
+                let currentBoChunk = [...boChunks[boChunkIndex]];
+                const boChunkIndexForLog = boChunkIndex + 1;
+                boChunkIndex++;
+                let partnerChunkIndex = 0;
+                
+                console.log(`🔄 Itération ${iteration} - Traitement chunk BO ${boChunkIndexForLog}/${boChunks.length} (${currentBoChunk.length} lignes) avec ${remainingPartnerChunks.length} chunks Partner restants`);
+                
+                const processNextPartnerChunk = () => {
+                    // Vérifier si on a terminé tous les chunks Partner pour ce chunk BO
+                    if (partnerChunkIndex >= remainingPartnerChunks.length) {
+                        // Tous les chunks Partner ont été comparés avec ce chunk BO
+                        // Ajouter les lignes BO restantes (non matchées) à newBoData
+                        if (currentBoChunk.length > 0) {
+                            this.pushInBatches(newBoData, currentBoChunk);
+                        }
+                        // Passer au chunk BO suivant
+                        processNextBoChunk();
+                        return;
+                    }
+                    
+                    const partnerChunk = remainingPartnerChunks[partnerChunkIndex];
+                    
+                    // Si le chunk Partner est vide (toutes les lignes ont été matchées), passer au suivant
+                    if (partnerChunk.length === 0) {
+                        partnerChunkIndex++;
+                        processNextPartnerChunk();
+                        return;
+                    }
+                    
+                    // Si le chunk BO est vide (toutes les lignes ont été matchées), passer au chunk BO suivant
+                    if (currentBoChunk.length === 0) {
+                        processNextBoChunk();
+                        return;
+                    }
+                    
+                    const chunkRequest: ReconciliationRequest = {
+                        ...originalRequest,
+                        boFileContent: currentBoChunk,
+                        partnerFileContent: partnerChunk
+                    };
+                    
+                    const RECONCILIATION_TIMEOUT = 1800000; // 30 minutes
+                    
+                    this.http.post<ReconciliationResponse>(`${this.apiUrl}/reconcile`, chunkRequest, {
+                        headers: new HttpHeaders({
+                            'Content-Type': 'application/json'
+                        })
+                    }).pipe(
+                        timeout(RECONCILIATION_TIMEOUT)
+                    ).subscribe({
+                        next: (response: ReconciliationResponse) => {
+                            try {
+                                const matchesCount = response.matches?.length || 0;
+                                if (matchesCount > 0) {
+                                    newMatchesThisIteration += matchesCount;
+                                    console.log(`✅ Itération ${iteration} - ${matchesCount} nouvelles correspondances trouvées (chunk BO ${boChunkIndexForLog}/${boChunks.length} avec chunk Partner ${partnerChunkIndex + 1}/${remainingPartnerChunks.length})`);
+                                    this.pushInBatches(allMatches, response.matches);
+                                    
+                                    // Retirer les lignes BO qui ont matché du chunk BO
+                                    if (response.matches.length > 0) {
+                                        const matchedBoKeys = new Set<string>();
+                                        response.matches.forEach(match => {
+                                            const key = match.key || match.boData?.[originalRequest.boKeyColumn];
+                                            if (key) matchedBoKeys.add(key);
+                                        });
+                                        
+                                        currentBoChunk = currentBoChunk.filter(boRow => {
+                                            const boKey = boRow[originalRequest.boKeyColumn];
+                                            return !matchedBoKeys.has(boKey);
+                                        });
+                                    }
+                                    
+                                    // Retirer les lignes Partner qui ont matché du chunk Partner
+                                    if (response.matches.length > 0) {
+                                        const matchedPartnerKeys = new Set<string>();
+                                        response.matches.forEach(match => {
+                                            const key = match.key || match.partnerData?.[originalRequest.partnerKeyColumn];
+                                            if (key) matchedPartnerKeys.add(key);
+                                        });
+                                        
+                                        remainingPartnerChunks[partnerChunkIndex] = partnerChunk.filter(partnerRow => {
+                                            const partnerKey = partnerRow[originalRequest.partnerKeyColumn];
+                                            return !matchedPartnerKeys.has(partnerKey);
+                                        });
+                                    }
+                                }
+                                
+                                partnerChunkIndex++;
+                                processNextPartnerChunk();
+                            } catch (error) {
+                                console.error(`❌ Erreur lors du traitement du chunk dans l'itération ${iteration}:`, error);
+                                partnerChunkIndex++;
+                                processNextPartnerChunk();
+                            }
+                        },
+                        error: (error) => {
+                            console.error(`❌ Erreur lors du traitement du chunk dans l'itération ${iteration}:`, error);
+                            partnerChunkIndex++;
+                            processNextPartnerChunk();
+                        }
+                    });
+                };
+                
+                processNextPartnerChunk();
+            };
+            
+            processNextBoChunk();
+        };
+        
+        processNextIteration();
     }
 
     /**
@@ -1131,30 +1383,30 @@ export class ReconciliationService implements OnInit, OnDestroy {
     private finalizeOptimizedResults(
         allMatches: any[], 
         allBoOnly: any[], 
-        remainingPartnerData: any[], 
+        allPartnerOnly: any[], 
         observer: any
     ): void {
         try {
             console.log('📊 Finalisation des résultats optimisés:', {
                 totalMatches: allMatches.length,
                 totalBoOnly: allBoOnly.length,
-                totalPartnerOnly: remainingPartnerData.length
+                totalPartnerOnly: allPartnerOnly.length
             });
             
             // Créer le résultat final avec gestion d'erreur
             const finalResult: ReconciliationResponse = {
                 matches: allMatches,
                 boOnly: allBoOnly,
-                partnerOnly: remainingPartnerData,
+                partnerOnly: allPartnerOnly,
                 mismatches: [],
                 totalBoRecords: allMatches.length + allBoOnly.length,
-                totalPartnerRecords: allMatches.length + remainingPartnerData.length,
+                totalPartnerRecords: allMatches.length + allPartnerOnly.length,
                 totalMatches: allMatches.length,
                 totalMismatches: 0,
                 totalBoOnly: allBoOnly.length,
-                totalPartnerOnly: remainingPartnerData.length,
+                totalPartnerOnly: allPartnerOnly.length,
                 executionTimeMs: Date.now(),
-                processedRecords: allMatches.length + allBoOnly.length + remainingPartnerData.length,
+                processedRecords: allMatches.length + allBoOnly.length + allPartnerOnly.length,
                 progressPercentage: 100
             };
             

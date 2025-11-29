@@ -261,6 +261,18 @@ export class EcartSoldeTabComponent implements OnInit, OnDestroy, OnChanges {
     }).format(montant) + ' F CFA';
   }
 
+  getSignedMontant(ecart: EcartSolde): number {
+    if (!ecart) {
+      return 0;
+    }
+    const montant = ecart.montant || 0;
+    const service = ecart.service?.toUpperCase() || '';
+    if (montant > 0 && (service.includes('CASHIN') || service.includes('AIRTIME'))) {
+      return -Math.abs(montant);
+    }
+    return montant;
+  }
+
   formatDate(date: string): string {
     if (!date) return '';
     return new Date(date).toLocaleDateString('fr-FR');
@@ -291,33 +303,12 @@ export class EcartSoldeTabComponent implements OnInit, OnDestroy, OnChanges {
   }
 
   calculateTotalEcart(): number {
-    let totalEcart = 0;
-    
-    // Calculer le total des écarts de solde
-    this.filteredEcartSoldes.forEach(ecart => {
-      const montant = ecart.montant || 0;
+    // Le total correspond au montant net de chaque écart (montant - frais)
+    return this.filteredEcartSoldes.reduce((total, ecart) => {
+      const montant = this.getSignedMontant(ecart);
       const frais = ecart.fraisAssocie?.montant || 0;
-      const service = ecart.service?.toUpperCase() || '';
-      
-      if (service.includes('CASHIN')) {
-        // Pour CASHIN : montant + frais
-        totalEcart += montant + frais;
-      } else if (service.includes('PAIEMENT')) {
-        // Pour PAIEMENT : montant - frais
-        totalEcart += montant - frais;
-      } else {
-        // Pour les autres services : montant seulement
-        totalEcart += montant;
-      }
-    });
-    
-    // Soustraire les montants ecartFrais des lignes de revenu journalier
-    this.revenuJournalierRows.forEach(revenu => {
-      const ecartFrais = revenu.ecartFrais || 0;
-      totalEcart -= ecartFrais;
-    });
-    
-    return totalEcart;
+      return total + (montant - frais);
+    }, 0);
   }
 
   formatTotalEcart(): string {
@@ -335,7 +326,7 @@ export class EcartSoldeTabComponent implements OnInit, OnDestroy, OnChanges {
     }
 
     const confirmed = await this.popupService.showConfirmDialog(
-      `Êtes-vous sûr de vouloir valider cet écart de solde ?\n\nID Transaction: ${ecart.idTransaction}\nMontant: ${this.formatMontant(ecart.montant)}\nService: ${ecart.service || 'N/A'}`,
+      `Êtes-vous sûr de vouloir valider cet écart de solde ?\n\nID Transaction: ${ecart.idTransaction}\nMontant: ${this.formatMontant(this.getSignedMontant(ecart))}\nService: ${ecart.service || 'N/A'}`,
       'Confirmation de validation'
     );
 
@@ -463,7 +454,7 @@ export class EcartSoldeTabComponent implements OnInit, OnDestroy, OnChanges {
     const exportData: any[] = this.filteredEcartSoldes.map(ecart => ({
       'ID Transaction': ecart.idTransaction,
       'Téléphone Client': ecart.telephoneClient || '',
-      'Montant': ecart.montant,
+      'Montant': this.getSignedMontant(ecart),
       'Service': ecart.service || '',
       'Agence': ecart.agence || '',
       'Date Transaction': ecart.dateTransaction ? new Date(ecart.dateTransaction).toLocaleDateString('fr-FR') : '',

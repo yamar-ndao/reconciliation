@@ -503,6 +503,13 @@
                 <div class="columns-list">
                     <span class="column-tag" *ngFor="let column of getColumnsFromData(boData)">{{ column }}</span>
                 </div>
+                <div class="columns-list data-preview" *ngIf="isTrxboData(boData)">
+                    <h5>🧾 Aperçu TRXBO (1ère ligne)</h5>
+                    <div class="preview-row" *ngFor="let column of getColumnsFromData(boData)">
+                        <span class="column-tag">{{ column }}</span>
+                        <span class="column-value">{{ getPreviewValue(boData[0], column) || '—' }}</span>
+                    </div>
+                </div>
             </div>
             
             <!-- Colonnes Partenaire -->
@@ -543,6 +550,46 @@
             <button class="btn stats-btn" (click)="goToStats()">
                 📊 Statistiques
             </button>
+        </div>
+    </div>
+
+    <!-- Affichage de l'évolution des chunks en bas de la page -->
+    <div class="chunk-progress-panel" *ngIf="showChunkProgress && chunkProgress">
+        <div class="chunk-progress-header">
+            <h4>📊 Évolution du Traitement par Chunks</h4>
+        </div>
+        <div class="chunk-progress-content">
+            <div class="chunk-progress-item" *ngIf="chunkProgress.currentBoChunk !== undefined && chunkProgress.totalBoChunks !== undefined">
+                <span class="chunk-label">Chunk BO:</span>
+                <span class="chunk-value">
+                    {{ chunkProgress.currentBoChunk }} / {{ chunkProgress.totalBoChunks }}
+                </span>
+                <div class="chunk-progress-bar">
+                    <div class="chunk-progress-fill" 
+                         [style.width.%]="(chunkProgress.currentBoChunk! / chunkProgress.totalBoChunks!) * 100">
+                    </div>
+                </div>
+            </div>
+            <div class="chunk-progress-item" *ngIf="chunkProgress.matchesCount !== undefined">
+                <span class="chunk-label">Matches trouvés:</span>
+                <span class="chunk-value matches">{{ chunkProgress.matchesCount | number }}</span>
+            </div>
+            <div class="chunk-progress-item" *ngIf="chunkProgress.boOnlyCount !== undefined">
+                <span class="chunk-label">Lignes BO sans correspondance:</span>
+                <span class="chunk-value bo-only">{{ chunkProgress.boOnlyCount | number }}</span>
+            </div>
+            <div class="chunk-progress-item" *ngIf="chunkProgress.partnerRemaining !== undefined">
+                <span class="chunk-label">Lignes Partner restantes:</span>
+                <span class="chunk-value partner-remaining">{{ chunkProgress.partnerRemaining | number }}</span>
+            </div>
+            <div class="chunk-progress-item" *ngIf="chunkProgress.step">
+                <span class="chunk-label">Étape:</span>
+                <span class="chunk-value step">{{ chunkProgress.step }}</span>
+            </div>
+            <div class="chunk-progress-item" *ngIf="chunkProgress.percentage !== undefined">
+                <span class="chunk-label">Progression globale:</span>
+                <span class="chunk-value percentage">{{ chunkProgress.percentage | number:'1.0-0' }}%</span>
+            </div>
         </div>
     </div>
 </div>
